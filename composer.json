@@ -1,12 +1,23 @@
 {
-    "name": "therealmkadmi\Laravel-citadel",
-    "description": "A passive survaillance package for laravel to protect your public facing endpoints",
+    "name": "therealmkadmi/laravel-citadel",
+    "description": "A passive survaillance and firewall package for laravel to protect your public facing endpoints.",
     "keywords": [
         "TheRealMkadmi",
         "laravel",
-        "laravel-citadel"
+        "laravel-citadel",
+        "firewall",
+        "spam",
+        "security",
+        "protection",
+        "surveillance",
+        "monitoring",
+        "malicious",
+        "attack",
+        "malicious-traffic",
+        "malicious-requests",
+        "malicious-activity"
     ],
-    "homepage": "https://github.com/therealmkadmi\Laravel-citadel",
+    "homepage": "https://github.com/therealmkadmi/laravel-citadel",
     "license": "MIT",
     "authors": [
         {
@@ -35,14 +46,12 @@
     },
     "autoload": {
         "psr-4": {
-            "TheRealMkadmi\LaravelCitadel\\LaravelCitadel\\": "src/",
-            "TheRealMkadmi\LaravelCitadel\\LaravelCitadel\\Database\\Factories\\": "database/factories/"
+            "TheRealMkadmi\\Citadel\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "TheRealMkadmi\LaravelCitadel\\LaravelCitadel\\Tests\\": "tests/",
-            "Workbench\\App\\": "workbench/app/"
+            "TheRealMkadmi\\Citadel\\Tests\\": "tests/"
         }
     },
     "scripts": {
@@ -63,10 +72,10 @@
     "extra": {
         "laravel": {
             "providers": [
-                "TheRealMkadmi\LaravelCitadel\\LaravelCitadel\\LaravelCitadelServiceProvider"
+                "TheRealMkadmi\\Citadel\\CitadelServiceProvider"
             ],
             "aliases": {
-                "LaravelCitadel": "TheRealMkadmi\LaravelCitadel\\LaravelCitadel\\Facades\\LaravelCitadel"
+                "Citadel": "TheRealMkadmi\\Citadel\\Facades\\Citadel"
             }
         }
     },

@@ -1,10 +1,10 @@
 <?php
 
-namespace TheRealMkadmi\LaravelCitadel\Tests;
+namespace TheRealMkadmi\Citadel\Tests;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Orchestra\Testbench\TestCase as Orchestra;
-use TheRealMkadmi\LaravelCitadel\LaravelCitadelServiceProvider;
+use TheRealMkadmi\Citadel\CitadelServiceProvider;
 
 class TestCase extends Orchestra
 {
@@ -13,14 +13,14 @@ class TestCase extends Orchestra
         parent::setUp();
 
         Factory::guessFactoryNamesUsing(
-            fn (string $modelName) => 'TheRealMkadmi\LaravelCitadel\\LaravelCitadel\\Database\\Factories\\'.class_basename($modelName).'Factory'
+            fn (string $modelName) => 'TheRealMkadmi\\Citadel\\Database\\Factories\\'.class_basename($modelName).'Factory'
         );
     }
 
     protected function getPackageProviders($app)
     {
         return [
-            LaravelCitadelServiceProvider::class,
+            CitadelServiceProvider::class,
         ];
     }
 

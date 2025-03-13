@@ -1,10 +1,10 @@
 <?php
 
-namespace TheRealMkadmi\LaravelCitadel\Commands;
+namespace TheRealMkadmi\Citadel\Commands;
 
 use Illuminate\Console\Command;
 
-class LaravelCitadelCommand extends Command
+class CitadelCommand extends Command
 {
     public $signature = 'laravel-citadel';
 

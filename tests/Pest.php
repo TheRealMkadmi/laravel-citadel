@@ -1,5 +1,5 @@
 <?php
 
-use TheRealMkadmi\LaravelCitadel\Tests\TestCase;
+use TheRealMkadmi\Citadel\Tests\TestCase;
 
 uses(TestCase::class)->in(__DIR__);

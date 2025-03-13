@@ -12,12 +12,10 @@
           document.head.appendChild(script);
         });
       };
-
       // Wait for the Persistence API to become available
       const waitForPersistenceAPI = (timeout = 5000) => {
         return new Promise((resolve) => {
           if (window.Persistence?.set) return resolve(true);
-
           const timeoutId = setTimeout(() => resolve(false), timeout);
           const interval = setInterval(() => {
             if (window.Persistence?.set) {
@@ -28,19 +26,16 @@
           }, 100);
         });
       };
-
       // Main fingerprint workflow
       async function initFingerprint() {
         // First, dynamically load the persistence library
         try {
-          await loadScript("{{ asset('js/persisntence.js') }}");
+          await loadScript("{{ asset('vendor/citadel/js/persistence.js') }}");
           const isApiAvailable = await waitForPersistenceAPI();
-
           if (!isApiAvailable) {
             console.warn('Persistence API not available after loading');
             return;
           }
-
           // Check for existing fingerprint
           let existingFingerprint = null;
           try {
@@ -55,19 +50,16 @@
           } catch (error) {
             console.error('Error retrieving fingerprint:', error);
           }
-
           // Generate new fingerprint
           const worker = new Worker("{{ asset('vendor/citadel/js/fingerprint-worker.js') }}");
           worker.onmessage = async function(e) {
             const visitorId = e.data.visitorId;
-
             // Persist the fingerprint
             try {
               await window.Persistence.set('visitor_id', visitorId);
             } catch (error) {
               console.error('Failed to persist fingerprint:', error);
             }
-
             // Make globally available and dispatch event
             window.citadelFingerprint = visitorId;
             window.dispatchEvent(new CustomEvent('fingerprintReady', {
@@ -77,14 +69,12 @@
                 changed: existingFingerprint && existingFingerprint !== visitorId
               }
             }));
-
             worker.terminate();
           };
         } catch (err) {
           console.error('Error in fingerprint initialization:', err);
         }
       }
-
       // Start the fingerprint workflow
       initFingerprint();
     }, { timeout: 10000 });

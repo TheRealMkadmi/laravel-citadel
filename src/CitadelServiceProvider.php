@@ -1,15 +1,15 @@
 <?php
 
-namespace TheRealMkadmi\LaravelCitadel;
+namespace TheRealMkadmi\Citadel;
 
 use Illuminate\Http\Request;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
-use TheRealMkadmi\LaravelCitadel\Commands\LaravelCitadelCommand;
-use TheRealMkadmi\LaravelCitadel\Components\Fingerprint;
+use TheRealMkadmi\Citadel\Commands\CitadelCommand;
+use TheRealMkadmi\Citadel\Components\Fingerprint;
 use Spatie\LaravelPackageTools\Commands\InstallCommand;
 
-class LaravelCitadelServiceProvider extends PackageServiceProvider
+class CitadelServiceProvider extends PackageServiceProvider
 {
     public function configurePackage(Package $package): void
     {
@@ -21,10 +21,10 @@ class LaravelCitadelServiceProvider extends PackageServiceProvider
         $package
             ->name('laravel-citadel')
             ->hasConfigFile()
-            ->hasAssets()
+            ->hasViews()
             ->hasViewComponents('citadel', Fingerprint::class)
-            ->hasCommand(LaravelCitadelCommand::class)
-            ->publishesServiceProvider(LaravelCitadelServiceProvider::class)
+            ->hasAssets()
+            ->hasCommand(CitadelCommand::class)
             ->hasInstallCommand(function (InstallCommand $command) {
                 $command
                     ->startWith(function (InstallCommand $command) {
@@ -32,12 +32,13 @@ class LaravelCitadelServiceProvider extends PackageServiceProvider
                     })
                     ->publishConfigFile()
                     ->publishAssets()
-                    ->publishMigrations()
-                    ->askToRunMigrations()
-                    ->copyAndRegisterServiceProviderInApp()
                     ->askToStarRepoOnGitHub('therealmkadmi/laravel-citadel')
                     ->endWith(function (InstallCommand $command) {
-                        $command->info('Laravel Citadel installed successfully!');
+                        $command->info('Laravel Citadel has been installed successfully!');
+                        $command->info('You can now use the Citadel fingerprinting in your application.');
+                        $command->info('Add the fingerprint script to your layout using either:');
+                        $command->info('  1. @fingerprintScript directive');
+                        $command->info('  2. <x-citadel::fingerprint /> component');
                     });
             });
     }
@@ -51,7 +52,7 @@ class LaravelCitadelServiceProvider extends PackageServiceProvider
     {
         // Register the getFingerprint macro on the Request class
         Request::macro('getFingerprint', function () {
-            return app(LaravelCitadel::class)->getFingerprint($this);
+            return app(Citadel::class)->getFingerprint($this);
         });
     }
 }

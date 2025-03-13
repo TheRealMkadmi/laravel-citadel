@@ -1,7 +1,5 @@
 <?php
-
-namespace TheRealMkadmi\LaravelCitadel\Components;
-
+namespace TheRealMkadmi\Citadel\Components;
 use Illuminate\View\Component;
 
 class Fingerprint extends Component
@@ -23,6 +21,6 @@ class Fingerprint extends Component
      */
     public function render()
     {
-        return view('laravel-citadel::fingerprint');
+        return view('citadel::fingerprint');
     }
 }
