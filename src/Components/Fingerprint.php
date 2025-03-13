@@ -1,5 +1,7 @@
 <?php
+
 namespace TheRealMkadmi\Citadel\Components;
+
 use Illuminate\View\Component;
 
 class Fingerprint extends Component
