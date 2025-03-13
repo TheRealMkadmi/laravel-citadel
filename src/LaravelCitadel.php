@@ -2,7 +2,8 @@
 
 namespace TheRealMkadmi\LaravelCitadel;
 
-class LaravelCitadel {
+class LaravelCitadel
+{
     /**
      * The key name for the fingerprint cookie.
      *
@@ -20,7 +21,7 @@ class LaravelCitadel {
     /**
      * Get the fingerprint from the request.
      *
-     * @param \Illuminate\Http\Request $request
+     * @param  \Illuminate\Http\Request  $request
      * @return string|null
      */
     public function getFingerprint($request)
@@ -29,7 +30,7 @@ class LaravelCitadel {
         $fingerprint = $request->header($this->headerName);
 
         // If not found in headers, check cookies
-        if (!$fingerprint) {
+        if (! $fingerprint) {
             $fingerprint = $request->cookie($this->cookieName);
         }
 

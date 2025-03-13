@@ -3,11 +3,11 @@
 namespace TheRealMkadmi\LaravelCitadel;
 
 use Illuminate\Http\Request;
+use Spatie\LaravelPackageTools\Commands\InstallCommand;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 use TheRealMkadmi\LaravelCitadel\Commands\LaravelCitadelCommand;
 use TheRealMkadmi\LaravelCitadel\Components\Fingerprint;
-use Spatie\LaravelPackageTools\Commands\InstallCommand;
 
 class LaravelCitadelServiceProvider extends PackageServiceProvider
 {
