@@ -1,4 +1,3 @@
-```markdown
 # A Passive Surveillance Package for Laravel to Protect Your Public Facing Endpoints
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/therealmkadmi/Laravel-citadel.svg?style=flat-square)](https://packagist.org/packages/therealmkadmi/Laravel-citadel)
