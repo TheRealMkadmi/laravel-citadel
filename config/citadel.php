@@ -1,4 +1,5 @@
 <?php
+
 // config for TheRealMkadmi\Citadel
 return [
     /*
