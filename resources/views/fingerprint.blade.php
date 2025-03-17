@@ -1,82 +1,129 @@
 <script defer>
-  document.addEventListener('DOMContentLoaded', () => {
-    // Use idle callback for all fingerprint operations
-    window.requestIdleCallback(() => {
-      // Helper function to dynamically load script
-      const loadScript = (src) => {
-        return new Promise((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = src;
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error(`Failed to load ${src}`));
-          document.head.appendChild(script);
-        });
-      };
-      // Wait for the Persistence API to become available
-      const waitForPersistenceAPI = (timeout = 5000) => {
-        return new Promise((resolve) => {
-          if (window.Persistence?.set) return resolve(true);
-          const timeoutId = setTimeout(() => resolve(false), timeout);
-          const interval = setInterval(() => {
-            if (window.Persistence?.set) {
-              clearInterval(interval);
-              clearTimeout(timeoutId);
-              resolve(true);
-            }
-          }, 100);
-        });
-      };
-      // Main fingerprint workflow
-      async function initFingerprint() {
-        // First, dynamically load the persistence library
+  (function() {
+    const FINGERPRINT_STORAGE_KEY = 'visitor_id';
+    
+    function loadScript(src, type = '') {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        if (type) script.type = type;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.body.appendChild(script);
+      });
+    }
+
+    async function doFingerprinting() {
+      try {
+        await loadScript("{{ asset('vendor/citadel/js/persistence.js') }}");
+        let cachedId;
         try {
-          await loadScript("{{ asset('vendor/citadel/js/persistence.js') }}");
-          const isApiAvailable = await waitForPersistenceAPI();
-          if (!isApiAvailable) {
-            console.warn('Persistence API not available after loading');
-            return;
-          }
-          // Check for existing fingerprint
-          let existingFingerprint = null;
-          try {
-            existingFingerprint = await window.Persistence.get('visitor_id');
-            if (existingFingerprint) {
-              console.log('Retrieved existing fingerprint');
-              window.citadelFingerprint = existingFingerprint;
-              window.dispatchEvent(new CustomEvent('fingerprintReady', {
-                detail: { visitorId: existingFingerprint, fromCache: true }
-              }));
-            }
-          } catch (error) {
-            console.error('Error retrieving fingerprint:', error);
-          }
-          // Generate new fingerprint
-          const worker = new Worker("{{ asset('vendor/citadel/js/fingerprint-worker.js') }}");
-          worker.onmessage = async function(e) {
-            const visitorId = e.data.visitorId;
-            // Persist the fingerprint
-            try {
-              await window.Persistence.set('visitor_id', visitorId);
-            } catch (error) {
-              console.error('Failed to persist fingerprint:', error);
-            }
-            // Make globally available and dispatch event
-            window.citadelFingerprint = visitorId;
-            window.dispatchEvent(new CustomEvent('fingerprintReady', {
-              detail: {
-                visitorId,
-                fromCache: false,
-                changed: existingFingerprint && existingFingerprint !== visitorId
-              }
-            }));
-            worker.terminate();
-          };
-        } catch (err) {
-          console.error('Error in fingerprint initialization:', err);
+          cachedId = await window.Persistence.get(FINGERPRINT_STORAGE_KEY);
+        } catch (error) {
+          console.error('Error retrieving cached fingerprint:', error);
         }
+        if (cachedId) {
+          handleFingerprint(cachedId, true);
+        } else {
+          await loadFingerprintJS();
+        }
+      } catch(error) {
+        console.error('Error loading persistence script:', error);
       }
-      // Start the fingerprint workflow
-      initFingerprint();
-    }, { timeout: 10000 });
-  });
+    }
+
+    async function loadFingerprintJS() {
+      try {
+        const fpModule = await import("{{ asset('vendor/citadel/js/fp.min.js') }}");
+        window.FingerprintJS = fpModule.default;
+        const fp = await window.FingerprintJS.load();
+        const result = await fp.get();
+        window.fpJs = result;
+        console.log('FingerprintJS loaded:', result);
+        const visitorId = result.visitorId;
+        console.log('Generated fingerprint:', visitorId);
+        if (window.Persistence && visitorId) {
+          try {
+            await window.Persistence.set(FINGERPRINT_STORAGE_KEY, visitorId);
+          } catch (error) {
+            console.error('Error storing fingerprint:', error);
+          }
+        }
+        handleFingerprint(visitorId, false);
+      } catch(error) {
+        console.error('Error loading FingerprintJS:', error);
+      }
+    }
+
+    function handleFingerprint(visitorId, fromCache) {
+      window.citadelFingerprint = visitorId;
+      window.dispatchEvent(new CustomEvent('fingerprintReady', {
+        detail: {
+          visitorId: visitorId,
+          fromCache: fromCache
+        }
+      }));
+    }
+
+    function initFingerprinting() {
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(doFingerprinting, { timeout: 2000 });
+      } else {
+        setTimeout(doFingerprinting, 50);
+      }
+    }
+
+    // Debug mode utility functions
+    @if(config('app.debug'))
+    async function cleanCitadelTrace() {
+      console.log('Clearing Citadel fingerprint traces...');
+      try {
+        // Ensure persistence script is loaded
+        if (!window.Persistence) {
+          await loadScript("{{ asset('vendor/citadel/js/persistence.js') }}");
+        }
+        
+        // Clear fingerprint from all storage mechanisms
+        await window.Persistence.set(FINGERPRINT_STORAGE_KEY, null);
+        
+        // Clear window objects
+        window.citadelFingerprint = null;
+        window.fpJs = null;
+        
+        console.log('Citadel fingerprint traces cleared successfully');
+        return true;
+      } catch (error) {
+        console.error('Error clearing Citadel fingerprint:', error);
+        return false;
+      }
+    }
+
+    async function refreshFingerprint() {
+      console.log('Refreshing Citadel fingerprint...');
+      try {
+        // First clean all traces
+        await cleanCitadelTrace();
+        
+        // Generate new fingerprint
+        await loadFingerprintJS();
+        
+        console.log('Citadel fingerprint refreshed successfully');
+        return true;
+      } catch (error) {
+        console.error('Error refreshing Citadel fingerprint:', error);
+        return false;
+      }
+    }
+
+    // Expose debug functions globally
+    window.cleanCitadelTrace = cleanCitadelTrace;
+    window.refreshFingerprint = refreshFingerprint;
+    @endif
+
+    if (document.readyState === 'complete') {
+      initFingerprinting();
+    } else {
+      window.addEventListener('load', initFingerprinting);
+    }
+  })();
 </script>

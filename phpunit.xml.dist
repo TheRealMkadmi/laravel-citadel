@@ -16,7 +16,7 @@
     backupStaticProperties="false"
 >
     <testsuites>
-        <testsuite name="TheRealMkadmi\LaravelCitadel Test Suite">
+        <testsuite name="TheRealMkadmi\Citadel Test Suite">
             <directory>tests</directory>
         </testsuite>
     </testsuites>
