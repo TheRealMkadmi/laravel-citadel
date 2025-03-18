@@ -1,8 +1,8 @@
 <script defer>
   (function () {
-    const FINGERPRINT_STORAGE_KEY = 'visitor_id';
-    const FINGERPRINT_HEADER = 'X-Citadel-Fingerprint';
-    const FINGERPRINT_COOKIE = 'citadel_fingerprint';
+    const FINGERPRINT_STORAGE_KEY = 'persistentFingerprint_visitor_id';
+    const FINGERPRINT_HEADER = 'X-Fingerprint';
+    const FINGERPRINT_COOKIE = 'persistentFingerprint_visitor_id';
 
     function loadScript(src, type = '') {
       return new Promise((resolve, reject) => {
