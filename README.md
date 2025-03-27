@@ -1,8 +1,6 @@
 # A Passive Surveillance Package for Laravel to Protect Your Public Facing Endpoints
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/therealmkadmi/Laravel-citadel.svg?style=flat-square)](https://packagist.org/packages/therealmkadmi/Laravel-citadel)
-[![GitHub Tests Action Status](https://img.shields.io/github/actions/workflow/status/therealmkadmi/Laravel-citadel/run-tests.yml?branch=main&label=tests&style=flat-square)](https://github.com/therealmkadmi/Laravel-citadel/actions?query=workflow%3Arun-tests+branch%3Amain)
-[![GitHub Code Style Action Status](https://img.shields.io/github/actions/workflow/status/therealmkadmi/Laravel-citadel/fix-php-code-style-issues.yml?branch=main&label=code%20style&style=flat-square)](https://github.com/therealmkadmi/Laravel-citadel/actions?query=workflow%3A"Fix+PHP+code+style+issues"+branch%3Amain)
 [![Total Downloads](https://img.shields.io/packagist/dt/therealmkadmi/Laravel-citadel.svg?style=flat-square)](https://packagist.org/packages/therealmkadmi/Laravel-citadel)
 
 Laravel Citadel is an advanced, real-time firewall package for Laravel designed to protect your public-facing endpoints—especially those handling critical actions such as order placement. Using Redis and Laravel Octane's in-memory caching, Laravel Citadel performs multi-faceted analysis including rate limiting, payload integrity checks, failure tracking, device fingerprint verification, and referrer validation. Its weighted scoring system dynamically flags suspicious activity, enabling you to stop malicious human or automated abuse before it reaches your business logic.
@@ -198,19 +196,9 @@ Laravel Citadel performs a series of checks on each incoming request:
    - Compares the cumulative score against a configurable threshold.
    - Blocks the request if the threshold is exceeded, logging the event for further analysis.
 
-## Testing
+## Gotchas
 
-You can run the tests via Composer:
-
-```bash
-composer test
-```
-
-Simulate various scenarios:
-- **Normal Traffic**: Ensure legitimate orders (with proper payloads and mobile devices) pass.
-- **High-Frequency Abuse**: Simulate a rapid succession of orders to trigger rate limiting.
-- **Payload Tampering**: Send malformed payloads to test anomaly detection.
-- **Device & Referrer Variations**: Use different User-Agents and referers to verify proper scoring.
+1) Ensure the cookies (available in config) are excluded from Laravel's cookie encryption. This will eventually be fixed in the package somehow. 
 
 ## Contributing
 
