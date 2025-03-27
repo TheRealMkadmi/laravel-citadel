@@ -101,13 +101,23 @@ return [
     |--------------------------------------------------------------------------
     |
     | Configure the device analyzer scoring parameters.
+    | Negative scores indicate favorable devices (less likely to be threats)
+    | Positive scores indicate suspicious devices (more likely to be threats)
+    |
+    | - smartphone_score: Score to add when a smartphone is detected (negative = favorable)
+    | - tablet_score: Score to add when a tablet is detected
     | - desktop_score: Score to add when a desktop device is detected
     | - bot_score: Score to add when a known bot/automated tool is detected
+    | - unknown_score: Score to add when device type cannot be determined
+    | - bot_patterns: Array of patterns to detect bots in user agent strings
     |
     */
     'device' => [
-        'desktop_score' => env('CITADEL_DEVICE_DESKTOP_SCORE', 15.0),
-        'bot_score' => env('CITADEL_DEVICE_BOT_SCORE', 30.0),
+        'smartphone_score' => env('CITADEL_DEVICE_SMARTPHONE_SCORE', 0.0),
+        'tablet_score' => env('CITADEL_DEVICE_TABLET_SCORE', 0.0),
+        'desktop_score' => env('CITADEL_DEVICE_DESKTOP_SCORE', 10.0),
+        'bot_score' => env('CITADEL_DEVICE_BOT_SCORE', 100.0),
+        'unknown_score' => env('CITADEL_DEVICE_UNKNOWN_SCORE', 20.0),
     ],
 
     /*
@@ -132,5 +142,13 @@ return [
         'prefer_redis' => env('CITADEL_CACHE_PREFER_REDIS', true),
         'default_ttl' => env('CITADEL_CACHE_TTL', 3600), // Default TTL in seconds
         'use_forever' => env('CITADEL_CACHE_USE_FOREVER', false), // Whether to store values indefinitely by default
+        
+        // Specific TTLs for different cache types
+        'device_detection_ttl' => env('CITADEL_DEVICE_DETECTION_TTL', 86400), // 24 hours
+        'fingerprint_ttl' => env('CITADEL_FINGERPRINT_TTL', 604800), // 7 days
+        'burst_analysis_ttl' => env('CITADEL_BURST_ANALYSIS_TTL', 3600), // 1 hour
+        
+        // Prefix for all cache keys to avoid collisions
+        'key_prefix' => env('CITADEL_CACHE_PREFIX', 'citadel:'),
     ],
 ];

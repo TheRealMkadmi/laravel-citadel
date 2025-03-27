@@ -1,67 +1,105 @@
 <?php
 
+declare(strict_types=1);
+
 namespace TheRealMkadmi\Citadel;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use TheRealMkadmi\Citadel\Contracts\DataStore;
 
 class Citadel
 {
     /**
-     * Get the fingerprint from the request.
+     * The shared data store instance.
      *
-     * @param  \Illuminate\Http\Request  $request
+     * @var \TheRealMkadmi\Citadel\Contracts\DataStore
      */
-    public function getFingerprint($request): ?string
+    protected DataStore $dataStore;
+
+    /**
+     * Create a new Citadel instance.
+     *
+     * @param \TheRealMkadmi\Citadel\Contracts\DataStore $dataStore
+     */
+    public function __construct(DataStore $dataStore)
     {
-        // First check if the fingerprint is provided in headers
-        $fingerprint = $request->header($this->getHeaderName());
+        $this->dataStore = $dataStore;
+    }
 
-        // If not found in headers, check cookies
-        if (! $fingerprint) {
-            $fingerprint = $request->cookie($this->getCookieName());
+    /**
+     * Get the fingerprint from the request.
+     * This uses the browser-provided fingerprint without generating a new one.
+     *
+     * @param Request $request
+     * @return string|null
+     */
+    public function getFingerprint(Request $request): ?string
+    {
+        // Check for fingerprint in header first (priority)
+        $fingerprint = $request->header(config('citadel.header.name'));
+        
+        // If not in header, check for cookie
+        if (!$fingerprint) {
+            $fingerprint = $request->cookie(config('citadel.cookie.name'));
         }
-
+        
+        // Track the fingerprint if we have one
+        if ($fingerprint) {
+            $this->trackFingerprint($fingerprint);
+        } else {
+            Log::debug('Citadel: No fingerprint found in request', [
+                'ip' => $request->ip(),
+                'url' => $request->fullUrl(),
+                'user_agent' => $request->userAgent(),
+            ]);
+        }
+        
         return $fingerprint;
     }
 
     /**
-     * Get the fingerprint cookie name.
+     * Track a fingerprint in the data store for analytics.
+     *
+     * @param string $fingerprint
+     * @return void
      */
-    public function getCookieName(): string
+    protected function trackFingerprint(string $fingerprint): void
     {
-        return Config::get('citadel.cookie.name', 'persistentFingerprint_visitor_id');
-    }
-
-    /**
-     * Get the fingerprint header name.
-     */
-    public function getHeaderName(): string
-    {
-        return Config::get('citadel.header.name', 'X-Fingerprint');
-    }
-
-    /**
-     * Get the fingerprint cookie expiration in minutes.
-     */
-    public function getCookieExpiration(): int
-    {
-        return Config::get('citadel.cookie.expiration', 60 * 24 * 30);
-    }
-
-    /**
-     * Check if IP address collection is enabled.
-     */
-    public function shouldCollectIp(): bool
-    {
-        return Config::get('citadel.features.collect_ip', true);
-    }
-
-    /**
-     * Check if user agent collection is enabled.
-     */
-    public function shouldCollectUserAgent(): bool
-    {
-        return Config::get('citadel.features.collect_user_agent', true);
+        $cacheKey = Str::start(
+            'fingerprint:' . $fingerprint, 
+            config('citadel.cache.key_prefix', 'citadel:')
+        );
+        
+        $ttl = config('citadel.cache.fingerprint_ttl');
+        
+        // Only update or create fingerprint entry if needed
+        if (!$this->dataStore->hasValue($cacheKey)) {
+            // First time we've seen this fingerprint
+            $this->dataStore->setValue($cacheKey, [
+                'first_seen_at' => now()->timestamp,
+                'last_seen_at' => now()->timestamp,
+                'visits' => 1,
+            ], $ttl);
+        } else {
+            // Update existing fingerprint data
+            $data = $this->dataStore->getValue($cacheKey);
+            
+            // If data is not an array, reset it (handle legacy data)
+            if (!is_array($data)) {
+                $data = [
+                    'first_seen_at' => now()->timestamp,
+                    'visits' => 1,
+                ];
+            } else {
+                $data['visits'] = ($data['visits'] ?? 0) + 1;
+            }
+            
+            $data['last_seen_at'] = now()->timestamp;
+            
+            // Update the record with extended TTL
+            $this->dataStore->setValue($cacheKey, $data, $ttl);
+        }
     }
 }

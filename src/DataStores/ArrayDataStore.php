@@ -17,16 +17,51 @@ class ArrayDataStore extends AbstractDataStore
     }
 
     /**
+     * Get a value from the cache store with proper key prefixing.
+     *
+     * @param string $key
+     * @param mixed $default
+     * @return mixed
+     */
+    public function getValue(string $key, $default = null)
+    {
+        $prefixedKey = config('citadel.cache.key_prefix') . $key;
+        return $this->cacheStore->get($prefixedKey, $default);
+    }
+
+    /**
+     * Store a value in the cache store with proper key prefixing.
+     *
+     * @param string $key
+     * @param mixed $value
+     * @param int|\DateTimeInterface|\DateInterval|null $ttl
+     * @return void
+     */
+    public function setValue(string $key, $value, $ttl = null): void
+    {
+        $prefixedKey = config('citadel.cache.key_prefix') . $key;
+        $ttl = $ttl ?? config('citadel.cache.default_ttl', 3600);
+
+        if (config('citadel.cache.use_forever', false)) {
+            $this->cacheStore->forever($prefixedKey, $value);
+        } else {
+            $this->cacheStore->put($prefixedKey, $value, $ttl);
+        }
+    }
+
+    /**
      * Add a member with score to a sorted set.
      *
-     * @param string $key The key of the sorted set
-     * @param float|int $score The score for the member
-     * @param mixed $member The member to add
-     * @param int|null $ttl Optional TTL in seconds
+     * @param string $key
+     * @param float|int $score
+     * @param mixed $member
+     * @param int|null $ttl
      * @return bool|int
      */
     public function zAdd(string $key, float|int $score, mixed $member, ?int $ttl = null)
     {
+        $prefixedKey = config('citadel.cache.key_prefix') . $key;
+        
         // Get or create the sorted set
         $zset = $this->getValue($key, []);
         $zset[$member] = $score;
@@ -34,9 +69,11 @@ class ArrayDataStore extends AbstractDataStore
         // Sort the array by score
         asort($zset);
         
+        // Store with configured TTL
+        $ttl = $ttl ?? config('citadel.cache.default_ttl', 3600);
         $this->setValue($key, $zset, $ttl);
         
-        return 1;
+        return true;
     }
     
     /**

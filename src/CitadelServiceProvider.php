@@ -75,24 +75,23 @@ class CitadelServiceProvider extends PackageServiceProvider
      *
      * @return void
      */
-    public function packageRegistered()
+    public function register(): void
     {
-        // Register the DataStore contract and implementation
+        $this->mergeConfigFrom(__DIR__.'/../config/citadel.php', 'citadel');
+
+        // Register the DataStore singleton first since other components depend on it
         $this->registerDataStore();
         
-        // Register the main Citadel class
-        $this->app->singleton(Citadel::class, fn($app) => new Citadel());
+        // Register the main Citadel service
+        $this->app->singleton(Citadel::class, function ($app) {
+            return new Citadel($app->make(DataStore::class));
+        });
         
-        // Register all analyzers and the middleware
+        // Register analyzers and middleware
         $this->registerAnalyzers();
         $this->registerMiddleware();
     }
-    
-    /**
-     * Register the DataStore contract and implementation.
-     *
-     * @return void
-     */
+
     protected function registerDataStore()
     {
         $this->app->singleton(DataStore::class, function ($app) {
@@ -103,17 +102,11 @@ class CitadelServiceProvider extends PackageServiceProvider
                 return $this->resolveDataStoreByDriver($driver);
             }
             
-            // Auto-detect the best available driver based on configuration preferences
+            // Auto-detect the best available driver
             return $this->resolveAutoDataStore($app);
         });
     }
-    
-    /**
-     * Resolve the appropriate DataStore for auto mode based on environment and preferences.
-     * 
-     * @param \Illuminate\Contracts\Foundation\Application $app
-     * @return \TheRealMkadmi\Citadel\Contracts\DataStore
-     */
+
     protected function resolveAutoDataStore($app): DataStore
     {
         // Get preference configuration
@@ -130,17 +123,10 @@ class CitadelServiceProvider extends PackageServiceProvider
             return new RedisDataStore();
         }
         
-        // Fall back to the default cache store defined in cache.php
-        $defaultDriver = config('cache.default', 'array');
-        return $this->resolveDataStoreByDriver($defaultDriver);
+        // Fall back to array store
+        return new ArrayDataStore();
     }
-    
-    /**
-     * Resolve a DataStore implementation by driver name.
-     *
-     * @param string $driver
-     * @return \TheRealMkadmi\Citadel\Contracts\DataStore
-     */
+
     protected function resolveDataStoreByDriver(string $driver): DataStore
     {
         return match ($driver) {
@@ -149,30 +135,20 @@ class CitadelServiceProvider extends PackageServiceProvider
             default => new ArrayDataStore(),
         };
     }
-    
-    /**
-     * Check if Redis is available and configured.
-     *
-     * @return bool
-     */
+
     protected function isRedisAvailable(): bool
     {
         return class_exists('Redis') && 
                config('database.redis.client', null) !== null &&
                !empty(config('database.redis.default', []));
     }
-    
-    /**
-     * Register the request analyzers.
-     *
-     * @return void
-     */
+
     protected function registerAnalyzers()
     {
         // Discover all classes that implement IRequestAnalyzer
         $analyzers = $this->discoverAnalyzers();
         
-        // Bind each analyzer class to the container
+        // Register each analyzer with DataStore dependency automatically injected
         foreach ($analyzers as $analyzer) {
             $this->app->singleton($analyzer);
         }
@@ -186,11 +162,17 @@ class CitadelServiceProvider extends PackageServiceProvider
     protected function registerMiddleware()
     {
         $this->app->singleton(ProtectRouteMiddleware::class, function ($app) {
-            // Resolve all analyzer instances from the container
-            $analyzers = $this->discoverAnalyzers()->map(fn($class) => $app->make($class))->toArray();
+            // Get the analyzer class names
+            $analyzerClasses = $this->discoverAnalyzers();
             
-            // Create and return the middleware with all analyzers injected
-            return new ProtectRouteMiddleware($analyzers);
+            // Resolve all analyzer instances from the container
+            $analyzers = $analyzerClasses->map(fn($class) => $app->make($class))->toArray();
+            
+            // Create and return the middleware with all analyzers and DataStore injected
+            return new ProtectRouteMiddleware(
+                $analyzers,
+                $app->make(DataStore::class)
+            );
         });
     }
     

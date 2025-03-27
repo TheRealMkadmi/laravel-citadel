@@ -18,6 +18,39 @@ class RedisDataStore extends AbstractDataStore
     }
 
     /**
+     * Get a value from the cache store with proper key prefixing.
+     *
+     * @param string $key
+     * @param mixed $default
+     * @return mixed
+     */
+    public function getValue(string $key, $default = null)
+    {
+        $prefixedKey = config('citadel.cache.key_prefix') . $key;
+        return $this->cacheStore->get($prefixedKey, $default);
+    }
+
+    /**
+     * Store a value in the cache store with proper key prefixing.
+     *
+     * @param string $key
+     * @param mixed $value
+     * @param int|\DateTimeInterface|\DateInterval|null $ttl
+     * @return void
+     */
+    public function setValue(string $key, $value, $ttl = null): void
+    {
+        $prefixedKey = config('citadel.cache.key_prefix') . $key;
+        $ttl = $ttl ?? config('citadel.cache.default_ttl', 3600);
+
+        if (config('citadel.cache.use_forever', false)) {
+            $this->cacheStore->forever($prefixedKey, $value);
+        } else {
+            $this->cacheStore->put($prefixedKey, $value, $ttl);
+        }
+    }
+
+    /**
      * Add a member with score to a sorted set.
      *
      * @param string $key The key of the sorted set
@@ -28,11 +61,12 @@ class RedisDataStore extends AbstractDataStore
      */
     public function zAdd(string $key, float|int $score, mixed $member, ?int $ttl = null)
     {
-        $result = Redis::zadd($key, $score, $member);
+        $prefixedKey = config('citadel.cache.key_prefix') . $key;
+        $result = Redis::zadd($prefixedKey, $score, $member);
         
-        // Set expiry if TTL is provided
-        if ($ttl !== null) {
-            Redis::expire($key, $ttl);
+        if ($ttl !== null || !config('citadel.cache.use_forever', false)) {
+            $ttl = $ttl ?? config('citadel.cache.default_ttl', 3600);
+            Redis::expire($prefixedKey, $ttl);
         }
         
         return $result;

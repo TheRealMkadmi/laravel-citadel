@@ -5,10 +5,34 @@ declare(strict_types=1);
 namespace TheRealMkadmi\Citadel\Analyzers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Str;
+use Reefki\DeviceDetector\Device;
+use TheRealMkadmi\Citadel\Contracts\DataStore;
 
 class DeviceAnalyzer implements IRequestAnalyzer
 {
+    /**
+     * The data store for caching results.
+     *
+     * @var \TheRealMkadmi\Citadel\Contracts\DataStore
+     */
+    protected DataStore $dataStore;
+
+    /**
+     * The score to add for smartphone devices
+     *
+     * @var float
+     */
+    protected float $smartphoneScore;
+
+    /**
+     * The score to add for tablet devices
+     *
+     * @var float
+     */
+    protected float $tabletScore;
+
     /**
      * The score to add for desktop devices
      *
@@ -24,19 +48,35 @@ class DeviceAnalyzer implements IRequestAnalyzer
     protected float $botScore;
 
     /**
-     * Static cache for user agents to avoid repeated parsing
+     * The score to add for unknown devices
      *
-     * @var array
+     * @var float
      */
-    protected static array $uaCache = [];
+    protected float $unknownScore;
+
+    /**
+     * Cache TTL in seconds
+     * 
+     * @var int
+     */
+    protected int $cacheTtl;
 
     /**
      * Constructor.
+     * 
+     * @param \TheRealMkadmi\Citadel\Contracts\DataStore $dataStore
      */
-    public function __construct()
+    public function __construct(DataStore $dataStore)
     {
-        $this->desktopScore = (float) config('citadel.device.desktop_score', 15.0);
-        $this->botScore = (float) config('citadel.device.bot_score', 30.0);
+        $this->dataStore = $dataStore;
+        
+        // Load all configuration values using Laravel's config helper
+        $this->smartphoneScore = (float) config('citadel.device.smartphone_score', 0.0);
+        $this->tabletScore = (float) config('citadel.device.tablet_score', 0.0);
+        $this->desktopScore = (float) config('citadel.device.desktop_score', 10.0);
+        $this->botScore = (float) config('citadel.device.bot_score', 100.0);
+        $this->unknownScore = (float) config('citadel.device.unknown_score', 20.0);
+        $this->cacheTtl = (int) config('citadel.cache.device_detection_ttl', 86400);
     }
 
     /**
@@ -49,100 +89,49 @@ class DeviceAnalyzer implements IRequestAnalyzer
     {
         $userAgent = $request->userAgent() ?? '';
         
-        // Use cached result if we've seen this UA before
-        if (isset(static::$uaCache[$userAgent])) {
-            return static::$uaCache[$userAgent];
+        // Create a cache key with proper prefix
+        $cacheKey = Str::start(
+            'device:' . md5($userAgent), 
+            config('citadel.cache.key_prefix', 'citadel:')
+        );
+        
+        // Try to get cached result first
+        $cachedScore = $this->dataStore->getValue($cacheKey);
+        if ($cachedScore !== null) {
+            return (float) $cachedScore;
         }
         
-        $score = 0.0;
-        $deviceType = $this->detectDeviceType($userAgent);
+        // Calculate the score if not in cache
+        $score = $this->calculateScore($userAgent, $request);
         
-        // Check for desktop devices
-        if ($deviceType === 'desktop') {
-            $score += $this->desktopScore;
-        }
-        
-        // Check for known bot/tool user agents
-        if ($this->isAutomatedTool($userAgent)) {
-            $score += $this->botScore;
-        }
-        
-        // Cache the result
-        static::$uaCache[$userAgent] = $score;
+        // Cache the result using configured TTL
+        $this->dataStore->setValue($cacheKey, $score, $this->cacheTtl);
         
         return $score;
     }
     
     /**
-     * Detect the type of device based on User-Agent
+     * Calculate the device score based on user agent.
      * 
      * @param string $userAgent
-     * @return string 'mobile', 'desktop', or 'unknown'
+     * @param Request $request
+     * @return float
      */
-    protected function detectDeviceType(string $userAgent): string
+    protected function calculateScore(string $userAgent, Request $request): float
     {
-        // Common mobile device indicators in user agents
-        $mobileKeywords = [
-            'Android', 'webOS', 'iPhone', 'iPad', 'iPod', 'BlackBerry', 'IEMobile',
-            'Opera Mini', 'Mobile', 'mobile', 'Windows Phone'
-        ];
+        $score = 0.0;
         
-        // Check for mobile indicators
-        foreach ($mobileKeywords as $keyword) {
-            if (stripos($userAgent, $keyword) !== false) {
-                return 'mobile';
-            }
-        }
+        $device = Device::detect($userAgent, $request->server());
         
-        // Common desktop OS indicators
-        $desktopKeywords = [
-            'Windows NT', 'Macintosh', 'Mac OS X', 'Linux'
-        ];
-        
-        // Check for desktop indicators
-        foreach ($desktopKeywords as $keyword) {
-            if (stripos($userAgent, $keyword) !== false && 
-                !$this->containsAny($userAgent, ['Mobile', 'Android'])) {
-                return 'desktop';
-            }
-        }
-        
-        // Default to unknown if we can't determine
-        return 'unknown';
-    }
-    
-    /**
-     * Check if the user agent is likely an automated tool
-     * 
-     * @param string $userAgent
-     * @return bool
-     */
-    protected function isAutomatedTool(string $userAgent): bool
-    {
-        $botPatterns = [
-            'curl', 'wget', 'bot', 'crawl', 'spider', 'scrape',
-            'HttpClient', 'Postman', 'Thunder Client', 'python-requests',
-            'Lynx', 'Googlebot', 'YandexBot', 'BingBot'
-        ];
-        
-        return $this->containsAny($userAgent, $botPatterns);
-    }
-    
-    /**
-     * Helper to check if a string contains any of the given patterns
-     * 
-     * @param string $haystack
-     * @param array $needles
-     * @return bool
-     */
-    protected function containsAny(string $haystack, array $needles): bool
-    {
-        foreach ($needles as $needle) {
-            if (stripos($haystack, $needle) !== false) {
-                return true;
-            }
-        }
-        
-        return false;
+        // Use match expression for more idiomatic Laravel code
+        $score += match (true) {
+            $device->isSmartphone() => $this->smartphoneScore,
+            $device->isTablet() => $this->tabletScore,
+            $device->isDesktop() => $this->desktopScore,
+            $device->isBot() => $this->botScore,
+            default => $this->unknownScore,
+        };
+
+        return $score;
     }
 }
