@@ -30,3 +30,7 @@ phpstan.neon
 testbench.yaml
 /docs
 /coverage
+
+# every .md file except readme.md
+*.md
+!readme.md
