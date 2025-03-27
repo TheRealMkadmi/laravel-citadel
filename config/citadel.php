@@ -59,18 +59,40 @@ return [
     | Burstiness Analyzer Settings
     |--------------------------------------------------------------------------
     |
-    | Configure the timing parameters for the burstiness detection.
-    | - min_interval: Minimum time (in milliseconds) between requests
-    | - window_size: Time window (in milliseconds) for analyzing request patterns
+    | Configure the timing parameters and scoring rules for burstiness detection.
     |
     */
     'burstiness' => [
+        // Basic window and interval settings
         'min_interval' => env('CITADEL_BURSTINESS_MIN_INTERVAL', 5000), // milliseconds
         'window_size' => env('CITADEL_BURSTINESS_WINDOW_SIZE', 60000), // milliseconds (60 seconds)
         'max_requests_per_window' => env('CITADEL_MAX_REQUESTS_PER_WINDOW', 5),
+        
+        // Scoring parameters
         'excess_request_score' => env('CITADEL_EXCESS_REQUEST_SCORE', 10),
         'burst_penalty_score' => env('CITADEL_BURST_PENALTY_SCORE', 20),
         'max_frequency_score' => env('CITADEL_MAX_FREQUENCY_SCORE', 100),
+        
+        // Pattern detection parameters
+        'min_samples_for_pattern' => env('CITADEL_MIN_SAMPLES_FOR_PATTERN', 3),
+        'pattern_history_size' => env('CITADEL_PATTERN_HISTORY_SIZE', 5),
+        'very_regular_threshold' => env('CITADEL_VERY_REGULAR_THRESHOLD', 0.1),
+        'somewhat_regular_threshold' => env('CITADEL_SOMEWHAT_REGULAR_THRESHOLD', 0.25),
+        'very_regular_score' => env('CITADEL_VERY_REGULAR_SCORE', 30),
+        'somewhat_regular_score' => env('CITADEL_SOMEWHAT_REGULAR_SCORE', 15),
+        'pattern_multiplier' => env('CITADEL_PATTERN_MULTIPLIER', 5),
+        'max_pattern_score' => env('CITADEL_MAX_PATTERN_SCORE', 20),
+        
+        // History tracking parameters
+        'history_ttl_multiplier' => env('CITADEL_HISTORY_TTL_MULTIPLIER', 6),
+        'min_violations_for_penalty' => env('CITADEL_MIN_VIOLATIONS_FOR_PENALTY', 1),
+        'max_violation_score' => env('CITADEL_MAX_VIOLATION_SCORE', 50),
+        'severe_excess_threshold' => env('CITADEL_SEVERE_EXCESS_THRESHOLD', 10),
+        'max_excess_score' => env('CITADEL_MAX_EXCESS_SCORE', 30),
+        'excess_multiplier' => env('CITADEL_EXCESS_MULTIPLIER', 2),
+        
+        // TTL and key management
+        'ttl_buffer_multiplier' => env('CITADEL_TTL_BUFFER_MULTIPLIER', 2),
     ],
 
     /*

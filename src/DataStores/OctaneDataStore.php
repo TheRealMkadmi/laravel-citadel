@@ -2,150 +2,18 @@
 
 declare(strict_types=1);
 
-namespace TheRealMkadmi\Citadel\Drivers;
+namespace TheRealMkadmi\Citadel\DataStores;
 
-use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Redis;
-use Laravel\Octane\Server;
 
-class DataStore
+class OctaneDataStore extends AbstractDataStore
 {
     /**
-     * The cache repository instance.
-     *
-     * @var \Illuminate\Contracts\Cache\Repository
-     */
-    protected Repository $cacheStore;
-
-    /**
-     * Create a new data store instance.
+     * Create a new Octane data store instance.
      */
     public function __construct()
     {
-        $this->cacheStore = $this->resolveCacheStore();
-    }
-
-    /**
-     * Resolve the appropriate cache store based on configuration and environment.
-     *
-     * @return \Illuminate\Contracts\Cache\Repository
-     */
-    protected function resolveCacheStore(): Repository
-    {
-        $driver = config('citadel.cache.driver', 'auto');
-
-        return match ($driver) {
-            'auto' => $this->resolveAutoCacheStore(),
-            default => Cache::store($driver),
-        };
-    }
-
-    /**
-     * Automatically determine the best cache store based on the environment.
-     *
-     * @return \Illuminate\Contracts\Cache\Repository
-     */
-    protected function resolveAutoCacheStore(): Repository
-    {
-        // If Octane is available, use it as it's optimized for Octane environments
-        if (app()->bound(Server::class) && config('citadel.cache.prefer_octane', true)) {
-            return Cache::store('octane');
-        }
-        
-        // If Redis is configured and available, use it for persistence
-        if ($this->isRedisAvailable() && config('citadel.cache.prefer_redis', true)) {
-            return Cache::store('redis');
-        }
-
-        // Fall back to the default cache store defined in cache.php
-        return Cache::store(config('cache.default', 'array'));
-    }
-
-    /**
-     * Check if Redis is available and configured.
-     *
-     * @return bool
-     */
-    protected function isRedisAvailable(): bool
-    {
-        return class_exists('Redis') && 
-               config('database.redis.client', null) !== null &&
-               !empty(config('database.redis.default', []));
-    }
-
-    /**
-     * Get a value from the cache store.
-     *
-     * @param  string  $key
-     * @param  mixed  $default
-     * @return mixed
-     */
-    public function getValue(string $key, $default = null)
-    {
-        return $this->cacheStore->get($key, $default);
-    }
-
-    /**
-     * Store a value in the cache store.
-     *
-     * @param  string  $key
-     * @param  mixed  $value
-     * @param  int|\DateTimeInterface|\DateInterval|null  $ttl
-     * @return void
-     */
-    public function setValue(string $key, $value, $ttl = null): void
-    {
-        if ($ttl === null && config('citadel.cache.use_forever', false)) {
-            $this->cacheStore->forever($key, $value);
-        } else {
-            $ttl = $ttl ?? config('citadel.cache.default_ttl', 3600);
-            $this->cacheStore->put($key, $value, $ttl);
-        }
-    }
-
-    /**
-     * Remove a value from the cache store.
-     *
-     * @param  string  $key
-     * @return bool
-     */
-    public function removeValue(string $key): bool
-    {
-        return $this->cacheStore->forget($key);
-    }
-
-    /**
-     * Increment a value in the cache store.
-     *
-     * @param  string  $key
-     * @param  int  $amount
-     * @return int|bool
-     */
-    public function increment(string $key, int $amount = 1)
-    {
-        return $this->cacheStore->increment($key, $amount);
-    }
-
-    /**
-     * Check if a key exists in the cache store.
-     *
-     * @param  string  $key
-     * @return bool
-     */
-    public function hasValue(string $key): bool
-    {
-        return $this->cacheStore->has($key);
-    }
-
-    /**
-     * Get the cache store instance.
-     *
-     * @return \Illuminate\Contracts\Cache\Repository
-     */
-    public function getCacheStore(): Repository
-    {
-        return $this->cacheStore;
+        $this->cacheStore = Cache::store('octane');
     }
 
     /**
@@ -159,26 +27,11 @@ class DataStore
      */
     public function zAdd(string $key, float|int $score, mixed $member, ?int $ttl = null)
     {
-        // Only Redis supports sorted sets natively
-        if ($this->isRedisAvailable()) {
-            $result = Redis::zadd($key, $score, $member);
-            
-            // Set expiry if TTL is provided
-            if ($ttl !== null) {
-                Redis::expire($key, $ttl);
-            }
-            
-            return $result;
-        }
-        
-        // Fallback implementation for non-Redis stores
-        // Use an array to simulate a sorted set
+        // Get or create the sorted set
         $zset = $this->getValue($key, []);
         $zset[$member] = $score;
         
-        // Sort the array by score
-        asort($zset);
-        
+        // Store the updated set
         $this->setValue($key, $zset, $ttl);
         
         return 1;
@@ -194,11 +47,6 @@ class DataStore
      */
     public function zRemRangeByScore(string $key, float|int|string $min, float|int|string $max): int
     {
-        if ($this->isRedisAvailable()) {
-            return Redis::zremrangebyscore($key, $min, $max);
-        }
-        
-        // Fallback implementation for non-Redis stores
         $zset = $this->getValue($key, []);
         $count = 0;
         
@@ -212,7 +60,10 @@ class DataStore
             }
         }
         
-        $this->setValue($key, $zset);
+        if ($count > 0) {
+            $this->setValue($key, $zset);
+        }
+        
         return $count;
     }
     
@@ -224,11 +75,6 @@ class DataStore
      */
     public function zCard(string $key): int
     {
-        if ($this->isRedisAvailable()) {
-            return Redis::zcard($key);
-        }
-        
-        // Fallback implementation for non-Redis stores
         $zset = $this->getValue($key, []);
         return count($zset);
     }
@@ -244,12 +90,10 @@ class DataStore
      */
     public function zRange(string $key, int $start, int $stop, bool $withScores = false): array
     {
-        if ($this->isRedisAvailable()) {
-            return Redis::zrange($key, $start, $stop, $withScores);
-        }
-        
-        // Fallback implementation for non-Redis stores
         $zset = $this->getValue($key, []);
+        
+        // Sort by score (value)
+        asort($zset);
         $members = array_keys($zset);
         
         if (empty($members)) {
@@ -292,11 +136,7 @@ class DataStore
      */
     public function pipeline(callable $callback): array
     {
-        if ($this->isRedisAvailable()) {
-            return Redis::pipeline($callback);
-        }
-        
-        // Create a simple pipeline simulator for non-Redis stores
+        // Create a simple pipeline simulator
         $pipeline = new class($this) {
             private $dataStore;
             private $commands = [];
@@ -352,7 +192,7 @@ class DataStore
                     $results[] = $this->zRemRangeByScore(...$args);
                     break;
                 case 'expire':
-                    // Handle expiry along with the value operations
+                    // Handle expiry along with value operations in zAdd
                     $results[] = true;
                     break;
                 case 'zcard':
@@ -376,11 +216,7 @@ class DataStore
      */
     public function expire(string $key, int $ttl): bool
     {
-        if ($this->isRedisAvailable()) {
-            return Redis::expire($key, $ttl);
-        }
-        
-        // For non-Redis stores, we use the TTL of the underlying cache system
+        // For the Octane store, we use the TTL of the underlying cache system
         if ($this->hasValue($key)) {
             $value = $this->getValue($key);
             $this->setValue($key, $value, $ttl);
