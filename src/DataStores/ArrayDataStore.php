@@ -19,27 +19,25 @@ class ArrayDataStore extends AbstractDataStore
     /**
      * Get a value from the cache store with proper key prefixing.
      *
-     * @param string $key
-     * @param mixed $default
+     * @param  mixed  $default
      * @return mixed
      */
     public function getValue(string $key, $default = null)
     {
-        $prefixedKey = config('citadel.cache.key_prefix') . $key;
+        $prefixedKey = config('citadel.cache.key_prefix').$key;
+
         return $this->cacheStore->get($prefixedKey, $default);
     }
 
     /**
      * Store a value in the cache store with proper key prefixing.
      *
-     * @param string $key
-     * @param mixed $value
-     * @param int|\DateTimeInterface|\DateInterval|null $ttl
-     * @return void
+     * @param  mixed  $value
+     * @param  int|\DateTimeInterface|\DateInterval|null  $ttl
      */
     public function setValue(string $key, $value, $ttl = null): void
     {
-        $prefixedKey = config('citadel.cache.key_prefix') . $key;
+        $prefixedKey = config('citadel.cache.key_prefix').$key;
         $ttl = $ttl ?? config('citadel.cache.default_ttl', 3600);
 
         if (config('citadel.cache.use_forever', false)) {
@@ -52,93 +50,88 @@ class ArrayDataStore extends AbstractDataStore
     /**
      * Add a member with score to a sorted set.
      *
-     * @param string $key
-     * @param float|int $score
-     * @param mixed $member
-     * @param int|null $ttl
      * @return bool|int
      */
     public function zAdd(string $key, float|int $score, mixed $member, ?int $ttl = null)
     {
-        $prefixedKey = config('citadel.cache.key_prefix') . $key;
-        
+        $prefixedKey = config('citadel.cache.key_prefix').$key;
+
         // Get or create the sorted set
         $zset = $this->getValue($key, []);
         $zset[$member] = $score;
-        
+
         // Sort the array by score
         asort($zset);
-        
+
         // Store with configured TTL
         $ttl = $ttl ?? config('citadel.cache.default_ttl', 3600);
         $this->setValue($key, $zset, $ttl);
-        
+
         return true;
     }
-    
+
     /**
      * Remove members with scores in the given range from a sorted set.
      *
-     * @param string $key The key of the sorted set
-     * @param float|int|string $min The minimum score (or '-inf')
-     * @param float|int|string $max The maximum score (or '+inf')
+     * @param  string  $key  The key of the sorted set
+     * @param  float|int|string  $min  The minimum score (or '-inf')
+     * @param  float|int|string  $max  The maximum score (or '+inf')
      * @return int The number of members removed
      */
     public function zRemRangeByScore(string $key, float|int|string $min, float|int|string $max): int
     {
         $zset = $this->getValue($key, []);
         $count = 0;
-        
+
         foreach ($zset as $member => $score) {
-            $checkMin = $min === '-inf' || $score >= (float)$min;
-            $checkMax = $max === '+inf' || $score <= (float)$max;
-            
+            $checkMin = $min === '-inf' || $score >= (float) $min;
+            $checkMax = $max === '+inf' || $score <= (float) $max;
+
             if ($checkMin && $checkMax) {
                 unset($zset[$member]);
                 $count++;
             }
         }
-        
+
         if ($count > 0) {
             $this->setValue($key, $zset);
         }
-        
+
         return $count;
     }
-    
+
     /**
      * Get the number of members in a sorted set.
      *
-     * @param string $key The key of the sorted set
-     * @return int
+     * @param  string  $key  The key of the sorted set
      */
     public function zCard(string $key): int
     {
         $zset = $this->getValue($key, []);
+
         return count($zset);
     }
-    
+
     /**
      * Get a range of members from a sorted set by index.
      *
-     * @param string $key The key of the sorted set
-     * @param int $start The start index
-     * @param int $stop The stop index
-     * @param bool $withScores Whether to return scores along with members
-     * @return array
+     * @param  string  $key  The key of the sorted set
+     * @param  int  $start  The start index
+     * @param  int  $stop  The stop index
+     * @param  bool  $withScores  Whether to return scores along with members
      */
     public function zRange(string $key, int $start, int $stop, bool $withScores = false): array
     {
         $zset = $this->getValue($key, []);
-        
+
         // Sort by score (value)
         asort($zset);
         $members = array_keys($zset);
-        
+
         if (empty($members)) {
             return [];
         }
-        
+
         // Handle negative indices (count from the end)
         if ($start < 0) {
             $start = count($members) + $start;
@@ -146,15 +139,15 @@ class ArrayDataStore extends AbstractDataStore
         if ($stop < 0) {
             $stop = count($members) + $stop;
         }
-        
+
         // Ensure indices are within bounds
         $start = max(0, $start);
         $stop = min(count($members) - 1, $stop);
-        
+
         $result = [];
         if ($start <= $stop) {
             $slice = array_slice($members, $start, $stop - $start + 1);
-            
+
             if ($withScores) {
                 foreach ($slice as $member) {
                     $result[$member] = $zset[$member];
@@ -163,66 +156,80 @@ class ArrayDataStore extends AbstractDataStore
                 $result = $slice;
             }
         }
-        
+
         return $result;
     }
-    
+
     /**
      * Execute multiple commands in a pipeline.
      *
-     * @param callable $callback The function that will receive the pipeline object
+     * @param  callable  $callback  The function that will receive the pipeline object
      * @return array The results of the commands
      */
     public function pipeline(callable $callback): array
     {
         // Create a simple pipeline simulator
-        $pipeline = new class($this) {
+        $pipeline = new class($this)
+        {
             private $dataStore;
+
             private $commands = [];
-            
-            public function __construct($dataStore) {
+
+            public function __construct($dataStore)
+            {
                 $this->dataStore = $dataStore;
             }
-            
-            public function zadd($key, $score, $member) {
+
+            public function zadd($key, $score, $member)
+            {
                 $this->commands[] = ['zadd', $key, $score, $member];
+
                 return $this;
             }
-            
-            public function zremrangebyscore($key, $min, $max) {
+
+            public function zremrangebyscore($key, $min, $max)
+            {
                 $this->commands[] = ['zremrangebyscore', $key, $min, $max];
+
                 return $this;
             }
-            
-            public function expire($key, $ttl) {
+
+            public function expire($key, $ttl)
+            {
                 $this->commands[] = ['expire', $key, $ttl];
+
                 return $this;
             }
-            
-            public function zcard($key) {
+
+            public function zcard($key)
+            {
                 $this->commands[] = ['zcard', $key];
+
                 return $this;
             }
-            
-            public function zrange($key, $start, $stop, $withScores = false) {
+
+            public function zrange($key, $start, $stop, $withScores = false)
+            {
                 $this->commands[] = ['zrange', $key, $start, $stop, $withScores];
+
                 return $this;
             }
-            
-            public function getCommands() {
+
+            public function getCommands()
+            {
                 return $this->commands;
             }
         };
-        
+
         $callback($pipeline);
         $commands = $pipeline->getCommands();
         $results = [];
-        
+
         // Execute each command in sequence
         foreach ($commands as $command) {
             $method = $command[0];
             $args = array_slice($command, 1);
-            
+
             switch ($method) {
                 case 'zadd':
                     $results[] = $this->zAdd(...$args);
@@ -242,16 +249,15 @@ class ArrayDataStore extends AbstractDataStore
                     break;
             }
         }
-        
+
         return $results;
     }
-    
+
     /**
      * Set the TTL on a key.
      *
-     * @param string $key The key to set the TTL on
-     * @param int $ttl The TTL in seconds
-     * @return bool
+     * @param  string  $key  The key to set the TTL on
+     * @param  int  $ttl  The TTL in seconds
      */
     public function expire(string $key, int $ttl): bool
     {
@@ -259,9 +265,10 @@ class ArrayDataStore extends AbstractDataStore
         if ($this->hasValue($key)) {
             $value = $this->getValue($key);
             $this->setValue($key, $value, $ttl);
+
             return true;
         }
-        
+
         return false;
     }
 }

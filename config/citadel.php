@@ -67,12 +67,12 @@ return [
         'min_interval' => env('CITADEL_BURSTINESS_MIN_INTERVAL', 5000), // milliseconds
         'window_size' => env('CITADEL_BURSTINESS_WINDOW_SIZE', 60000), // milliseconds (60 seconds)
         'max_requests_per_window' => env('CITADEL_MAX_REQUESTS_PER_WINDOW', 5),
-        
+
         // Scoring parameters
         'excess_request_score' => env('CITADEL_EXCESS_REQUEST_SCORE', 10),
         'burst_penalty_score' => env('CITADEL_BURST_PENALTY_SCORE', 20),
         'max_frequency_score' => env('CITADEL_MAX_FREQUENCY_SCORE', 100),
-        
+
         // Pattern detection parameters
         'min_samples_for_pattern' => env('CITADEL_MIN_SAMPLES_FOR_PATTERN', 3),
         'pattern_history_size' => env('CITADEL_PATTERN_HISTORY_SIZE', 5),
@@ -82,7 +82,7 @@ return [
         'somewhat_regular_score' => env('CITADEL_SOMEWHAT_REGULAR_SCORE', 15),
         'pattern_multiplier' => env('CITADEL_PATTERN_MULTIPLIER', 5),
         'max_pattern_score' => env('CITADEL_MAX_PATTERN_SCORE', 20),
-        
+
         // History tracking parameters
         'history_ttl_multiplier' => env('CITADEL_HISTORY_TTL_MULTIPLIER', 6),
         'min_violations_for_penalty' => env('CITADEL_MIN_VIOLATIONS_FOR_PENALTY', 1),
@@ -90,7 +90,7 @@ return [
         'severe_excess_threshold' => env('CITADEL_SEVERE_EXCESS_THRESHOLD', 10),
         'max_excess_score' => env('CITADEL_MAX_EXCESS_SCORE', 30),
         'excess_multiplier' => env('CITADEL_EXCESS_MULTIPLIER', 2),
-        
+
         // TTL and key management
         'ttl_buffer_multiplier' => env('CITADEL_TTL_BUFFER_MULTIPLIER', 2),
     ],
@@ -142,12 +142,12 @@ return [
         'prefer_redis' => env('CITADEL_CACHE_PREFER_REDIS', true),
         'default_ttl' => env('CITADEL_CACHE_TTL', 3600), // Default TTL in seconds
         'use_forever' => env('CITADEL_CACHE_USE_FOREVER', false), // Whether to store values indefinitely by default
-        
+
         // Specific TTLs for different cache types
         'device_detection_ttl' => env('CITADEL_DEVICE_DETECTION_TTL', 86400), // 24 hours
         'fingerprint_ttl' => env('CITADEL_FINGERPRINT_TTL', 604800), // 7 days
         'burst_analysis_ttl' => env('CITADEL_BURST_ANALYSIS_TTL', 3600), // 1 hour
-        
+
         // Prefix for all cache keys to avoid collisions
         'key_prefix' => env('CITADEL_CACHE_PREFIX', 'citadel:'),
     ],
