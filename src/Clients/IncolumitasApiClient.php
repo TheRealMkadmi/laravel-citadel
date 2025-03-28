@@ -4,132 +4,129 @@ declare(strict_types=1);
 
 namespace TheRealMkadmi\Citadel\Clients;
 
-use Exception;
-use Illuminate\Support\Arr;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
-use TheRealMkadmi\Citadel\DataStore\DataStore;
+use Illuminate\Support\Facades\Log;
+use TheRealMkadmi\Citadel\Config\CitadelConfig;
 
 class IncolumitasApiClient
 {
-    protected DataStore $dataStore;
-
     /**
-     * Cache TTL in seconds.
+     * API base URL.
      */
-    protected int $cacheTtl;
-
+    protected string $baseUrl = 'https://api.incolumitas.com/';
+    
+    /**
+     * API timeout in seconds.
+     */
+    protected int $timeout = 3;
+    
+    /**
+     * Whether to retry failed requests.
+     */
+    protected bool $retry = true;
+    
+    /**
+     * Maximum number of retries.
+     */
+    protected int $maxRetries = 1;
+    
+    /**
+     * Delay between retries in milliseconds.
+     */
+    protected int $retryDelay = 500;
+    
     /**
      * Create a new API client instance.
      */
-    public function __construct(DataStore $dataStore, int $cacheTtl = 3600)
+    public function __construct(array $config = [])
     {
-        $this->dataStore = $dataStore;
-        $this->cacheTtl = $cacheTtl;
-    }
-
-    /**
-     * Query the Incolumitas API for information about an IP.
-     *
-     *
-     * @throws Exception if the API call fails.
-     */
-    public function query(string $ip): QueryResult
-    {
-        $cacheKey = 'incolumitas:'.$ip;
-        $cached = $this->dataStore->getValue($cacheKey);
-
-        if ($cached !== null && $cached instanceof QueryResult) {
-            return $cached;
+        // Override defaults with provided configuration
+        if (isset($config['base_url'])) {
+            $this->baseUrl = $config['base_url'];
         }
-
-        $response = Http::get('https://api.incolumitas.com/', ['q' => $ip]);
-
-        if (! $response->successful()) {
-            throw new Exception("Failed to fetch information for IP: {$ip}");
+        
+        if (isset($config['timeout'])) {
+            $this->timeout = (int)$config['timeout'];
         }
-
-        $data = $response->json();
-        $queryResult = QueryResult::fromArray($data);
-
-        $this->dataStore->setValue($cacheKey, $queryResult, $this->cacheTtl);
-
-        return $queryResult;
+        
+        if (isset($config['retry'])) {
+            $this->retry = (bool)$config['retry'];
+        }
+        
+        if (isset($config['max_retries'])) {
+            $this->maxRetries = (int)$config['max_retries'];
+        }
+        
+        if (isset($config['retry_delay'])) {
+            $this->retryDelay = (int)$config['retry_delay'];
+        }
     }
-}
-
-/**
- * Strongly typed data transfer object for query results.
- */
-class QueryResult
-{
-    public string $ip;
-
-    public string $country;
-
-    public bool $isBogon;
-
-    public bool $isMobile;
-
-    public bool $isSatellite;
-
-    public bool $isCrawler;
-
-    public bool $isDatacenter;
-
-    public bool $isTor;
-
-    public bool $isProxy;
-
-    public bool $isVpn;
-
-    public bool $isAbuser;
-
+    
     /**
-     * Construct the QueryResult from an array.
+     * Check if an IP address has certain characteristics.
+     *
+     * @param string $ip The IP address to check
+     * @return array|null API response data or null on failure
      */
-    public function __construct(
-        string $ip,
-        string $country,
-        bool $isBogon,
-        bool $isMobile,
-        bool $isSatellite,
-        bool $isCrawler,
-        bool $isDatacenter,
-        bool $isTor,
-        bool $isProxy,
-        bool $isVpn,
-        bool $isAbuser
-    ) {
-        $this->ip = $ip;
-        $this->country = $country;
-        $this->isBogon = $isBogon;
-        $this->isMobile = $isMobile;
-        $this->isSatellite = $isSatellite;
-        $this->isCrawler = $isCrawler;
-        $this->isDatacenter = $isDatacenter;
-        $this->isTor = $isTor;
-        $this->isProxy = $isProxy;
-        $this->isVpn = $isVpn;
-        $this->isAbuser = $isAbuser;
-    }
-
-    /**
-     * Create a QueryResult instance from an array.
-     */
-    public static function fromArray(array $data): self
+    public function checkIp(string $ip): ?array
     {
-        return new self(
-            Arr::get($data, 'ip', ''),
-            Arr::get($data, 'location.country', ''),
-            (bool) Arr::get($data, 'is_bogon', false),
-            (bool) Arr::get($data, 'is_mobile', false),
-            (bool) Arr::get($data, 'is_satellite', false),
-            (bool) Arr::get($data, 'is_crawler', false),
-            (bool) Arr::get($data, 'is_datacenter', false),
-            (bool) Arr::get($data, 'is_tor', false),
-            (bool) Arr::get($data, 'is_proxy', false),
-            (bool) Arr::get($data, 'is_vpn', false),
-            (bool) Arr::get($data, 'is_abuser', false)
-        );
+        try {
+            $response = $this->createRequest()
+                ->get("ip/{$ip}");
+                
+            if ($response->successful()) {
+                return $response->json();
+            }
+            
+            $this->logApiError('IP check failed', $response->status(), $response->body(), ['ip' => $ip]);
+            return null;
+        } catch (ConnectionException|RequestException $e) {
+            $this->logApiException('IP check error', $e, ['ip' => $ip]);
+            return null;
+        }
+    }
+    
+    /**
+     * Create a configured HTTP client.
+     */
+    protected function createRequest(): PendingRequest
+    {
+        $request = Http::baseUrl($this->baseUrl)
+            ->timeout($this->timeout)
+            ->acceptJson()
+            ->withUserAgent('Laravel-Citadel/'.config('citadel.version', '1.1.0'));
+            
+        if ($this->retry) {
+            $request->retry($this->maxRetries, $this->retryDelay);
+        }
+        
+        return $request;
+    }
+    
+    /**
+     * Log API errors with consistent formatting.
+     */
+    protected function logApiError(string $message, int $status, string $response, array $context = []): void
+    {
+        Log::channel(config('citadel.log_channel', 'stack'))
+            ->error("Citadel API: {$message}", array_merge([
+                'status' => $status,
+                'response' => $response
+            ], $context));
+    }
+    
+    /**
+     * Log exceptions with consistent formatting.
+     */
+    protected function logApiException(string $message, \Exception $exception, array $context = []): void
+    {
+        Log::channel(config('citadel.log_channel', 'stack'))
+            ->error("Citadel API: {$message}", array_merge([
+                'exception' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString()
+            ], $context));
     }
 }

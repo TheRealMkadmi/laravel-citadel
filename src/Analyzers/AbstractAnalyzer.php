@@ -17,7 +17,7 @@ abstract class AbstractAnalyzer implements IRequestAnalyzer
     /**
      * Flag to enable or disable the analyzer.
      */
-    protected bool $enabled;
+    protected bool $enabled = true;
 
     /**
      * Indicates if this analyzer scans request payload content.
@@ -33,7 +33,7 @@ abstract class AbstractAnalyzer implements IRequestAnalyzer
     /**
      * Cache TTL in seconds.
      */
-    protected int $cacheTtl;
+    protected int $cacheTtl = 3600;
 
     /**
      * Constructor.

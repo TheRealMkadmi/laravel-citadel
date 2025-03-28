@@ -6,6 +6,7 @@ namespace TheRealMkadmi\Citadel\Analyzers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
+use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 
 class BurstinessAnalyzer extends AbstractAnalyzer
@@ -34,7 +35,7 @@ class BurstinessAnalyzer extends AbstractAnalyzer
     {
         parent::__construct($dataStore);
         $this->enabled = config('citadel.burstiness.enable_burstiness_analyzer', true);
-        $this->cacheTtl = config('citadel.cache.burst_analysis_ttl', 3600);
+        $this->cacheTtl = config(CitadelConfig::KEY_CACHE.'.burst_analysis_ttl', 3600);
     }
 
     /**
@@ -54,12 +55,12 @@ class BurstinessAnalyzer extends AbstractAnalyzer
         $score = 0;
 
         // Get configuration values
-        $windowSize = Config::get('citadel.burstiness.window_size', 60000);
-        $minInterval = Config::get('citadel.burstiness.min_interval', 5000);
-        $maxRequestsPerWindow = Config::get('citadel.burstiness.max_requests_per_window', 5);
-        $excessRequestScore = Config::get('citadel.burstiness.excess_request_score', 10);
-        $burstPenaltyScore = Config::get('citadel.burstiness.burst_penalty_score', 20);
-        $maxFrequencyScore = Config::get('citadel.burstiness.max_frequency_score', 100);
+        $windowSize = Config::get(CitadelConfig::KEY_BURSTINESS.'.window_size', 60000);
+        $minInterval = Config::get(CitadelConfig::KEY_BURSTINESS.'.min_interval', 5000);
+        $maxRequestsPerWindow = Config::get(CitadelConfig::KEY_BURSTINESS.'.max_requests_per_window', 5);
+        $excessRequestScore = Config::get(CitadelConfig::KEY_BURSTINESS.'.excess_request_score', 10);
+        $burstPenaltyScore = Config::get(CitadelConfig::KEY_BURSTINESS.'.burst_penalty_score', 20);
+        $maxFrequencyScore = Config::get(CitadelConfig::KEY_BURSTINESS.'.max_frequency_score', 100);
 
         // Current time in milliseconds
         $now = $this->getCurrentTimeInMilliseconds();
@@ -141,34 +142,28 @@ class BurstinessAnalyzer extends AbstractAnalyzer
     }
 
     /**
-     * Detect bursts (requests coming too rapidly in succession).
-     *
-     * @param  array  $timestamps  Recent request timestamps
-     * @param  int  $minInterval  Minimum acceptable interval between requests
-     * @return bool Whether a burst was detected
+     * Detect if the request timing shows a burst pattern.
      */
     protected function detectBurst(array $timestamps, int $minInterval): bool
     {
-        // Need at least 2 timestamps to detect a burst
-        if (count($timestamps) < 2) {
+        // Need at least 3 timestamps to detect a burst
+        if (count($timestamps) < 3) {
             return false;
         }
-
-        // Convert string timestamps to integers if needed
-        $numericTimestamps = array_map('intval', $timestamps);
-
-        // Sort timestamps in ascending order
-        sort($numericTimestamps);
-
-        // Check for bursts in the entire sequence
-        for ($i = 1; $i < count($numericTimestamps); $i++) {
-            $interval = $numericTimestamps[$i] - $numericTimestamps[$i - 1];
-            if ($interval < $minInterval) {
-                return true;
-            }
-        }
-
-        return false;
+        
+        // Convert to collection for easier manipulation
+        $timestamps = collect($timestamps)->sort();
+        
+        // Calculate intervals between consecutive requests
+        $intervals = $timestamps->map(function ($timestamp, $index) use ($timestamps) {
+            return $index > 0 ? $timestamp - $timestamps[$index - 1] : PHP_INT_MAX;
+        })->skip(1); // Skip the first element which is PHP_INT_MAX
+        
+        // Count how many intervals are below the minimum allowed
+        $burstCount = $intervals->filter(fn($interval) => $interval < $minInterval)->count();
+        
+        // If we have consecutive intervals below the threshold, it's a burst
+        return $burstCount >= 2;
     }
 
     /**

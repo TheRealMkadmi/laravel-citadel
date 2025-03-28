@@ -1,5 +1,8 @@
 <?php
 
+use TheRealMkadmi\Citadel\Version;
+use TheRealMkadmi\Citadel\Enums\GeofencingMode;
+
 // config for TheRealMkadmi\Citadel
 return [
     /*
@@ -10,7 +13,7 @@ return [
     | Current version of Laravel Citadel.
     |
     */
-    'version' => '1.0.0',
+    'version' => Version::VERSION,
 
     /*
     |--------------------------------------------------------------------------
@@ -25,7 +28,7 @@ return [
     */
     'geofencing' => [
         'enabled' => env('CITADEL_GEOFENCING_ENABLED', false),
-        'mode' => env('CITADEL_GEOFENCING_MODE', 'block'), // 'allow' or 'block'
+        'mode' => env('CITADEL_GEOFENCING_MODE', GeofencingMode::BLOCK->value),
         'countries' => env('CITADEL_GEOFENCING_COUNTRIES', ''), // comma-separated ISO-3166-1 alpha-2 country codes
     ],
 

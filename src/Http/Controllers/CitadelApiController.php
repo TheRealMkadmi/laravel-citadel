@@ -1,11 +1,18 @@
 <?php
 
+declare(strict_types=1);
+
 namespace TheRealMkadmi\Citadel\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
+use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
+use TheRealMkadmi\Citadel\Enums\BanType;
+use TheRealMkadmi\Citadel\Version;
 
 class CitadelApiController
 {
@@ -15,168 +22,177 @@ class CitadelApiController
     protected DataStore $dataStore;
 
     /**
-     * The prefix used for ban cache keys.
-     */
-    protected string $banKeyPrefix;
-
-    /**
-     * The API token for authentication.
-     */
-    protected string $apiToken;
-
-    /**
      * Create a new controller instance.
-     *
-     * @return void
      */
     public function __construct(DataStore $dataStore)
     {
         $this->dataStore = $dataStore;
-        $this->banKeyPrefix = config('citadel.cache.key_prefix', 'citadel:').config('citadel.ban.cache_key', 'banned');
-        $this->apiToken = config('citadel.api.token');
     }
 
     /**
-     * Authenticate the request using the API token.
-     */
-    protected function authenticate(Request $request): bool
-    {
-        $token = $request->bearerToken() ?? $request->input('token');
-
-        return $this->apiToken && hash_equals($this->apiToken, $token);
-    }
-
-    /**
-     * Ban a user by IP address or fingerprint.
+     * Ban an IP address or fingerprint.
      */
     public function ban(Request $request): JsonResponse
     {
-        // Validate authentication
-        if (! $this->authenticate($request)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthorized access',
-            ], 401);
-        }
-
-        // Validate request
-        $validated = $request->validate([
+        // Validate the request
+        $validator = Validator::make($request->all(), [
             'identifier' => 'required|string',
-            'type' => 'required|in:ip,fingerprint',
+            'type' => 'nullable|string|in:ip,fingerprint,auto',
             'duration' => 'nullable|integer|min:1',
+            'reason' => 'nullable|string',
         ]);
 
-        $identifier = $validated['identifier'];
-        $type = $validated['type'];
-        $duration = $validated['duration'] ?? null;
-
-        // Validate the identifier based on its type
-        if (! $this->validateIdentifier($identifier, $type)) {
+        if ($validator->fails()) {
             return response()->json([
-                'success' => false,
-                'message' => "Invalid {$type} format: {$identifier}",
+                'status' => 'error',
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
             ], 422);
         }
 
-        // Calculate TTL (null for permanent ban)
-        $ttl = $duration ? (int) $duration * 60 : config('citadel.ban.ban_ttl');
+        // Get validated data
+        $identifier = $request->input('identifier');
+        $typeString = $request->input('type', 'auto');
+        $duration = $request->input('duration');
+        $reason = $request->input('reason', 'Manual ban via API');
 
-        // Generate the ban key and store it
-        $banKey = $this->generateBanKey($type, $identifier);
-        $this->dataStore->setValue($banKey, true, $ttl);
+        // Resolve ban type using our enum
+        $banType = $typeString === 'auto'
+            ? BanType::tryFrom('auto', true, $identifier) // Auto-detect based on identifier
+            : BanType::tryFrom($typeString);
+            
+        // Validate the type
+        if ($banType === null) {
+            return response()->json([
+                'status' => 'error',
+                'message' => "Invalid identifier type: {$typeString}",
+                'valid_types' => BanType::getValues(),
+            ], 400);
+        }
 
-        // Log the action
-        $durationText = $ttl ? "for {$duration} minutes" : 'permanently';
-        Log::info("Citadel API: User banned by {$type}", [
-            'identifier' => $identifier,
-            'duration' => $durationText,
-            'ban_key' => $banKey,
-        ]);
+        // Generate ban key
+        $key = $this->generateBanKey($identifier, $banType->value);
 
-        return response()->json([
-            'success' => true,
-            'message' => "User {$durationText} banned by {$type}: {$identifier}",
-            'ban_key' => $banKey,
-        ]);
+        // Create ban record
+        $banData = [
+            'timestamp' => now()->timestamp,
+            'reason' => $reason,
+            'type' => $banType->value,
+            'via' => 'api',
+        ];
+
+        // Store ban record
+        if ($duration !== null) {
+            $this->dataStore->setValue($key, $banData, (int) $duration);
+            
+            return response()->json([
+                'status' => 'success',
+                'message' => "Banned {$banType->value} '{$identifier}' for {$duration} seconds",
+                'data' => [
+                    'identifier' => $identifier,
+                    'type' => $banType->value,
+                    'duration' => $duration,
+                    'reason' => $reason,
+                    'timestamp' => now()->timestamp,
+                ],
+            ]);
+        } else {
+            // Use a very long TTL for permanent ban (10 years)
+            $this->dataStore->setValue($key, $banData, 10 * 365 * 24 * 60 * 60);
+            
+            return response()->json([
+                'status' => 'success',
+                'message' => "Permanently banned {$banType->value} '{$identifier}'",
+                'data' => [
+                    'identifier' => $identifier,
+                    'type' => $banType->value,
+                    'duration' => 'permanent',
+                    'reason' => $reason,
+                    'timestamp' => now()->timestamp,
+                ],
+            ]);
+        }
     }
 
     /**
-     * Unban a user by IP address or fingerprint.
+     * Unban an IP address or fingerprint.
      */
     public function unban(Request $request): JsonResponse
     {
-        // Validate authentication
-        if (! $this->authenticate($request)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthorized access',
-            ], 401);
-        }
-
-        // Validate request
-        $validated = $request->validate([
+        // Validate the request
+        $validator = Validator::make($request->all(), [
             'identifier' => 'required|string',
-            'type' => 'required|in:ip,fingerprint',
+            'type' => 'nullable|string|in:ip,fingerprint,auto',
         ]);
 
-        $identifier = $validated['identifier'];
-        $type = $validated['type'];
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
 
-        // Generate the ban key
-        $banKey = $this->generateBanKey($type, $identifier);
+        // Get validated data
+        $identifier = $request->input('identifier');
+        $typeString = $request->input('type', 'auto');
+
+        // Resolve ban type using our enum
+        $banType = $typeString === 'auto'
+            ? BanType::tryFrom('auto', true, $identifier) // Auto-detect based on identifier
+            : BanType::tryFrom($typeString);
+            
+        // Validate the type
+        if ($banType === null) {
+            return response()->json([
+                'status' => 'error',
+                'message' => "Invalid identifier type: {$typeString}",
+                'valid_types' => BanType::getValues(),
+            ], 400);
+        }
+
+        // Generate ban key
+        $key = $this->generateBanKey($identifier, $banType->value);
 
         // Check if the ban exists
-        if (! $this->dataStore->hasValue($banKey)) {
+        $banData = $this->dataStore->getValue($key);
+        
+        if ($banData === null) {
             return response()->json([
-                'success' => false,
-                'message' => "No active ban found for {$type}: {$identifier}",
+                'status' => 'error',
+                'message' => "No active ban found for {$banType->value} '{$identifier}'",
             ], 404);
         }
 
         // Remove the ban
-        $result = $this->dataStore->removeValue($banKey);
-
-        if ($result) {
-            Log::info("Citadel API: User unbanned by {$type}", [
-                'identifier' => $identifier,
-                'ban_key' => $banKey,
-            ]);
-
+        $success = $this->dataStore->removeValue($key);
+        
+        if ($success) {
             return response()->json([
-                'success' => true,
-                'message' => "Successfully unbanned {$type}: {$identifier}",
+                'status' => 'success',
+                'message' => "Successfully unbanned {$banType->value} '{$identifier}'",
+                'data' => [
+                    'identifier' => $identifier,
+                    'type' => $banType->value,
+                    'previous_ban' => $banData,
+                ],
             ]);
         } else {
             return response()->json([
-                'success' => false,
-                'message' => "Failed to unban {$type}: {$identifier}",
+                'status' => 'error',
+                'message' => "Failed to unban {$banType->value} '{$identifier}'",
             ], 500);
         }
     }
 
     /**
-     * Validate the identifier based on its type.
+     * Generate a ban key for the identifier.
      */
-    protected function validateIdentifier(string $identifier, string $type): bool
+    protected function generateBanKey(string $identifier, string $type): string
     {
-        if ($type === 'ip') {
-            return filter_var($identifier, FILTER_VALIDATE_IP) !== false;
-        } elseif ($type === 'fingerprint') {
-            // Simple validation for fingerprint (non-empty string)
-            return ! empty(trim($identifier));
-        }
+        $safeIdentifier = Str::slug($identifier);
+        $prefix = Config::get(CitadelConfig::KEY_BAN . '.cache_key', 'ban');
 
-        return false;
-    }
-
-    /**
-     * Generate a cache key for banned items.
-     *
-     * @param  string  $type  The type of ban (ip or fingerprint)
-     * @param  string  $value  The value to check (ip address or fingerprint)
-     */
-    protected function generateBanKey(string $type, string $value): string
-    {
-        return "{$this->banKeyPrefix}:{$type}:{$value}";
+        return "{$prefix}:{$type}:{$safeIdentifier}";
     }
 }

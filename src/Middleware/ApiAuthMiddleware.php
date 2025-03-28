@@ -1,48 +1,59 @@
 <?php
 
+declare(strict_types=1);
+
 namespace TheRealMkadmi\Citadel\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Config;
+use TheRealMkadmi\Citadel\Config\CitadelConfig;
 
 class ApiAuthMiddleware
 {
     /**
      * Handle an incoming request.
-     *
-     * @return mixed
      */
-    public function handle(Request $request, Closure $next)
+    public function handle(Request $request, Closure $next): mixed
     {
-        $apiToken = config('citadel.api.token');
-
-        // If token is not set, reject all requests
-        if (empty($apiToken)) {
-            Log::warning('Citadel API access attempt without configured token');
-
-            return response()->json([
-                'success' => false,
-                'message' => 'API access is not configured',
-            ], 403);
+        // Get the API token from config
+        $configuredToken = Config::get(CitadelConfig::KEY_API_TOKEN);
+        
+        // Check if token is configured
+        if (empty($configuredToken)) {
+            return response()->json(['error' => 'API authentication not configured'], 500);
         }
 
-        // Check for token in Authorization header or as a query parameter
-        $token = $request->bearerToken() ?? $request->input('token');
-
-        // Validate token using constant-time comparison
-        if (! $token || ! hash_equals($apiToken, $token)) {
-            Log::warning('Citadel API unauthorized access attempt', [
-                'ip' => $request->ip(),
-                'path' => $request->path(),
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthorized access',
-            ], 401);
+        // Get token from request
+        $requestToken = $this->getTokenFromRequest($request);
+        
+        // Validate token
+        if ($requestToken !== $configuredToken) {
+            return response()->json(['error' => 'Unauthorized'], 401);
         }
 
+        // Token is valid, proceed with request
         return $next($request);
+    }
+
+    /**
+     * Extract token from request (header, query string, or form data).
+     */
+    protected function getTokenFromRequest(Request $request): ?string
+    {
+        // Try to get from Authorization header (Bearer token)
+        $bearerToken = $request->bearerToken();
+        if ($bearerToken) {
+            return $bearerToken;
+        }
+        
+        // Try to get from custom X-API-Token header
+        $headerToken = $request->header('X-API-Token');
+        if ($headerToken) {
+            return $headerToken;
+        }
+        
+        // Try to get from query string or form parameter
+        return $request->input('api_token');
     }
 }

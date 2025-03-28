@@ -15,6 +15,7 @@ use TheRealMkadmi\Citadel\Analyzers\IRequestAnalyzer;
 use TheRealMkadmi\Citadel\Commands\CitadelBanCommand;
 use TheRealMkadmi\Citadel\Commands\CitadelUnbanCommand;
 use TheRealMkadmi\Citadel\Components\Fingerprint;
+use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\ArrayDataStore;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 use TheRealMkadmi\Citadel\DataStore\OctaneDataStore;
@@ -152,15 +153,15 @@ class CitadelServiceProvider extends PackageServiceProvider
     protected function registerApiRoutes(): void
     {
         // Only register API routes if they're enabled in the config
-        if (! config(self::CONFIG_API_KEY.'.enabled', false)) {
+        if (! config(CitadelConfig::KEY_API_ENABLED, false)) {
             return;
         }
 
-        $prefix = config(self::CONFIG_API_KEY.'.prefix', 'api/citadel');
+        $prefix = config(CitadelConfig::KEY_API_PREFIX, 'api/citadel');
         $middlewareGroups = ['api'];
 
         // Add the API auth middleware if a token is configured
-        if (! empty(config(self::CONFIG_API_KEY.'.token'))) {
+        if (! empty(config(CitadelConfig::KEY_API_TOKEN))) {
             $middlewareGroups[] = self::MIDDLEWARE_ALIAS_API_AUTH;
         } else {
             // Log a warning if API is enabled but no token is configured
@@ -182,7 +183,7 @@ class CitadelServiceProvider extends PackageServiceProvider
                 Route::get('/status', function () {
                     return response()->json([
                         'status' => 'ok',
-                        'version' => config('citadel.version', '1.0.0'),
+                        'version' => Version::get(),
                         'timestamp' => now()->toIso8601String(),
                     ]);
                 })->name('citadel.api.status');

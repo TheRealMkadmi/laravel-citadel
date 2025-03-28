@@ -10,27 +10,11 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
+use TheRealMkadmi\Citadel\Config\CitadelConfig;
+use TheRealMkadmi\Citadel\Enums\GeofencingMode;
 
 class GeofenceMiddleware
 {
-    /**
-     * Configuration keys.
-     */
-    private const CONFIG_KEY_ENABLED = 'citadel.middleware.active_enabled';
-
-    private const CONFIG_KEY_GEOFENCING_ENABLED = 'citadel.geofencing.enabled';
-
-    private const CONFIG_KEY_GEOFENCING_MODE = 'citadel.geofencing.mode';
-
-    private const CONFIG_KEY_GEOFENCING_COUNTRIES = 'citadel.geofencing.countries';
-
-    /**
-     * Geofencing modes.
-     */
-    private const MODE_ALLOW = 'allow';
-
-    private const MODE_BLOCK = 'block';
-
     /**
      * Country header names to check.
      */
@@ -42,14 +26,12 @@ class GeofenceMiddleware
 
     /**
      * Handle an incoming request.
-     *
-     * @return mixed
      */
-    public function handle(Request $request, Closure $next)
+    public function handle(Request $request, Closure $next): mixed
     {
         // Skip geofencing if not enabled or if active middleware is disabled
-        if (! Config::get(self::CONFIG_KEY_ENABLED, true) ||
-            ! Config::get(self::CONFIG_KEY_GEOFENCING_ENABLED, false)) {
+        if (! Config::get(CitadelConfig::KEY_MIDDLEWARE_ACTIVE_ENABLED, true) ||
+            ! Config::get(CitadelConfig::KEY_GEOFENCING_ENABLED, false)) {
             return $next($request);
         }
 
@@ -73,9 +55,12 @@ class GeofenceMiddleware
 
         // Check if the country is in the configured list
         $isCountryInList = in_array($countryCode, $countriesList);
-        $firewallMode = Config::get(self::CONFIG_KEY_GEOFENCING_MODE, self::MODE_BLOCK);
+        
+        // Get the configured mode using the enum
+        $modeString = Config::get(CitadelConfig::KEY_GEOFENCING_MODE, GeofencingMode::BLOCK->value);
+        $firewallMode = GeofencingMode::fromString($modeString);
 
-        if ($firewallMode === self::MODE_ALLOW) {
+        if ($firewallMode === GeofencingMode::ALLOW) {
             // Allowlist mode: Only allow listed countries
             if (! $isCountryInList) {
                 Log::info('Citadel Geofencing: Blocked request from {country} (not in allowlist)', [
@@ -84,7 +69,7 @@ class GeofenceMiddleware
 
                 return $this->denyAccess();
             }
-        } elseif ($firewallMode === self::MODE_BLOCK) {
+        } elseif ($firewallMode === GeofencingMode::BLOCK) {
             // Blocklist mode: Block listed countries
             if ($isCountryInList) {
                 Log::info('Citadel Geofencing: Blocked request from {country} (in blocklist)', [
@@ -94,8 +79,8 @@ class GeofenceMiddleware
                 return $this->denyAccess();
             }
         } else {
-            Log::error('Invalid firewall mode: {mode}', ['mode' => $firewallMode]);
-            throw new \InvalidArgumentException("Invalid citadel firewall mode: {$firewallMode}");
+            Log::error('Invalid firewall mode: {mode}', ['mode' => $modeString]);
+            throw new \InvalidArgumentException("Invalid citadel firewall mode: {$modeString}", 500);
         }
 
         // Country passed the geofence check
@@ -131,7 +116,7 @@ class GeofenceMiddleware
      */
     protected function getCountriesList(): array
     {
-        $countries = Config::get(self::CONFIG_KEY_GEOFENCING_COUNTRIES, '');
+        $countries = Config::get(CitadelConfig::KEY_GEOFENCING_COUNTRIES, '');
 
         if (empty($countries)) {
             return [];

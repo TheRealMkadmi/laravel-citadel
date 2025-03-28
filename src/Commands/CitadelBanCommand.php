@@ -3,8 +3,11 @@
 namespace TheRealMkadmi\Citadel\Commands;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Str;
+use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
+use TheRealMkadmi\Citadel\Enums\BanType;
 
 class CitadelBanCommand extends Command
 {
@@ -13,14 +16,18 @@ class CitadelBanCommand extends Command
      *
      * @var string
      */
-    public $signature = 'citadel:ban {identifier : The IP address or fingerprint to ban} {--type=auto : The type of identifier: ip, fingerprint, or auto} {--duration= : Optional ban duration in minutes (permanent if not specified)}';
+    protected $signature = 'citadel:ban 
+                            {identifier : The IP address or fingerprint to ban}
+                            {--type=auto : Type of identifier (ip, fingerprint, or auto for autodetection)}
+                            {--duration= : Ban duration in seconds (omit for permanent)}
+                            {--reason= : Reason for the ban}';
 
     /**
      * The console command description.
      *
      * @var string
      */
-    public $description = 'Ban a user by IP address or fingerprint';
+    protected $description = 'Ban an IP address or fingerprint from accessing your application';
 
     /**
      * The data store instance.
@@ -28,21 +35,12 @@ class CitadelBanCommand extends Command
     protected DataStore $dataStore;
 
     /**
-     * The prefix used for ban cache keys.
-     */
-    protected string $banKeyPrefix;
-
-    /**
      * Create a new command instance.
-     *
-     * @return void
      */
     public function __construct(DataStore $dataStore)
     {
         parent::__construct();
-
         $this->dataStore = $dataStore;
-        $this->banKeyPrefix = config('citadel.cache.key_prefix', 'citadel:').config('citadel.ban.cache_key', 'banned');
     }
 
     /**
@@ -51,84 +49,55 @@ class CitadelBanCommand extends Command
     public function handle(): int
     {
         $identifier = $this->argument('identifier');
-        $type = $this->option('type');
+        $typeString = $this->option('type');
         $duration = $this->option('duration');
+        $reason = $this->option('reason') ?? 'Manual ban via CLI';
 
-        // Determine if the identifier is an IP or fingerprint if auto detection is enabled
-        if ($type === 'auto') {
-            $type = $this->detectIdentifierType($identifier);
+        // Resolve ban type using our enum
+        $banType = $typeString === 'auto'
+            ? BanType::tryFrom('auto', true, $identifier) // Auto-detect based on identifier
+            : BanType::tryFrom($typeString);
+        
+        // Validate the type
+        if ($banType === null) {
+            $this->error("Invalid identifier type: {$typeString}");
+            $this->line("Valid types are: " . implode(', ', BanType::getValues()));
+            return Command::FAILURE;
         }
 
-        // Validate the identifier type
-        if (! in_array($type, ['ip', 'fingerprint'])) {
-            $this->error("Invalid identifier type: {$type}. Must be 'ip', 'fingerprint', or 'auto'.");
+        // Generate ban key
+        $key = $this->generateBanKey($identifier, $banType->value);
 
-            return self::FAILURE;
+        // Create ban record
+        $banData = [
+            'timestamp' => now()->timestamp,
+            'reason' => $reason,
+            'type' => $banType->value,
+        ];
+
+        // Store ban record
+        if ($duration !== null) {
+            $this->dataStore->setValue($key, $banData, (int) $duration);
+            $this->info("Banned {$banType->value} '{$identifier}' for {$duration} seconds");
+            $this->line("Reason: {$reason}");
+        } else {
+            // Use a very long TTL for permanent ban (10 years)
+            $this->dataStore->setValue($key, $banData, 10 * 365 * 24 * 60 * 60);
+            $this->info("Permanently banned {$banType->value} '{$identifier}'");
+            $this->line("Reason: {$reason}");
         }
 
-        // Validate the identifier based on its type
-        if (! $this->validateIdentifier($identifier, $type)) {
-            $this->error("Invalid {$type} format: {$identifier}");
-
-            return self::FAILURE;
-        }
-
-        // Calculate TTL (null for permanent ban)
-        $ttl = $duration ? (int) $duration * 60 : config('citadel.ban.ban_ttl');
-
-        // Generate the ban key and store it
-        $banKey = $this->generateBanKey($type, $identifier);
-        $this->dataStore->setValue($banKey, true, $ttl);
-
-        // Log the action
-        $durationText = $ttl ? "for {$duration} minutes" : 'permanently';
-        $this->info("User {$durationText} banned by {$type}: {$identifier}");
-        Log::info("Citadel: User banned by {$type}", [
-            'identifier' => $identifier,
-            'duration' => $durationText,
-            'ban_key' => $banKey,
-        ]);
-
-        return self::SUCCESS;
+        return Command::SUCCESS;
     }
 
     /**
-     * Detect the type of identifier (IP or fingerprint).
+     * Generate a ban key for the identifier.
      */
-    protected function detectIdentifierType(string $identifier): string
+    protected function generateBanKey(string $identifier, string $type): string
     {
-        // Simple check if the identifier looks like an IP address
-        if (filter_var($identifier, FILTER_VALIDATE_IP)) {
-            return 'ip';
-        }
+        $safeIdentifier = Str::slug($identifier);
+        $prefix = Config::get(CitadelConfig::KEY_BAN . '.cache_key', 'ban');
 
-        // Otherwise assume it's a fingerprint
-        return 'fingerprint';
-    }
-
-    /**
-     * Validate the identifier based on its type.
-     */
-    protected function validateIdentifier(string $identifier, string $type): bool
-    {
-        if ($type === 'ip') {
-            return filter_var($identifier, FILTER_VALIDATE_IP) !== false;
-        } elseif ($type === 'fingerprint') {
-            // Simple validation for fingerprint (non-empty string)
-            return ! empty(trim($identifier));
-        }
-
-        return false;
-    }
-
-    /**
-     * Generate a cache key for banned items.
-     *
-     * @param  string  $type  The type of ban (ip or fingerprint)
-     * @param  string  $value  The value to check (ip address or fingerprint)
-     */
-    protected function generateBanKey(string $type, string $value): string
-    {
-        return "{$this->banKeyPrefix}:{$type}:{$value}";
+        return "{$prefix}:{$type}:{$safeIdentifier}";
     }
 }

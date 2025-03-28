@@ -5,20 +5,27 @@ declare(strict_types=1);
 namespace TheRealMkadmi\Citadel\Analyzers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Config;
 use TheRealMkadmi\Citadel\Clients\IncolumitasApiClient;
+use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 
 class IpAnalyzer extends AbstractAnalyzer
 {
     /**
-     * The API client for IP intelligence
+     * The API client for IP analysis.
      */
     protected IncolumitasApiClient $apiClient;
 
     /**
-     * The weights for different IP characteristics
+     * Weights for different IP characteristics.
      */
     protected array $weights;
+
+    /**
+     * Country-specific scoring settings.
+     */
+    protected array $countryScores;
 
     /**
      * Indicates if this analyzer scans payload content.
@@ -26,98 +33,107 @@ class IpAnalyzer extends AbstractAnalyzer
     protected bool $scansPayload = false;
 
     /**
-     * Indicates if this analyzer makes external requests.
+     * This analyzer makes external network requests.
      */
     protected bool $active = true;
 
     /**
      * Constructor.
      */
-    public function __construct(DataStore $dataStore, IncolumitasApiClient $apiClient)
+    public function __construct(DataStore $dataStore, ?IncolumitasApiClient $apiClient = null)
     {
         parent::__construct($dataStore);
-        $this->apiClient = $apiClient;
 
-        // Load all configuration values using Laravel's config helper
-        $this->enabled = (bool) config('citadel.ip.enable_ip_analyzer', true);
-        $this->cacheTtl = (int) config('citadel.cache.ip_analysis_ttl', 3600);
+        // Load configuration settings
+        $this->enabled = config('citadel.ip.enable_ip_analyzer', true);
+        $this->cacheTtl = config(CitadelConfig::KEY_CACHE.'.ip_analysis_ttl', 7200);
+        $this->weights = config(CitadelConfig::KEY_IP.'.weights', []);
+        $this->countryScores = config(CitadelConfig::KEY_IP.'.country_scores', []);
 
-        // Load weights from configuration
-        $this->weights = [
-            'bogon' => (float) config('citadel.ip.weights.bogon', 80.0),
-            'datacenter' => (float) config('citadel.ip.weights.datacenter', 30.0),
-            'tor' => (float) config('citadel.ip.weights.tor', 60.0),
-            'proxy' => (float) config('citadel.ip.weights.proxy', 50.0),
-            'vpn' => (float) config('citadel.ip.weights.vpn', 40.0),
-            'abuser' => (float) config('citadel.ip.weights.abuser', 70.0),
-            'satellite' => (float) config('citadel.ip.weights.satellite', 10.0),
-            'mobile' => (float) config('citadel.ip.weights.mobile', -10.0),
-            'crawler' => (float) config('citadel.ip.weights.crawler', 20.0),
-        ];
+        // Initialize API client
+        $this->apiClient = $apiClient ?? new IncolumitasApiClient([
+            'timeout' => 3,
+            'retry' => true,
+            'max_retries' => 1,
+            'retry_delay' => 500,
+        ]);
     }
 
     /**
-     * Analyze the IP address making the request.
+     * Analyze the IP address of the request.
      */
     public function analyze(Request $request): float
     {
-        if (! $this->enabled) {
+        if (!$this->enabled) {
             return 0.0;
         }
 
+        // Get IP address from request
         $ip = $request->ip();
+        if (!$ip) {
+            return 0.0;
+        }
 
-        // Try to get cached result
-        $cacheKey = "ip_analyzer:{$ip}";
+        // Check cache first to reduce API calls
+        $cacheKey = "ip_analysis:{$ip}";
         $cachedScore = $this->dataStore->getValue($cacheKey);
-
         if ($cachedScore !== null) {
             return (float) $cachedScore;
         }
 
-        // Calculate score based on IP intelligence
-        $score = $this->calculateScore($ip);
+        // Check if this is a private or reserved IP (not worth scoring)
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+            return 0.0;
+        }
 
-        // Cache the score
+        // Check IP characteristics through API
+        $ipData = $this->apiClient->checkIp($ip);
+        if (!$ipData) {
+            // No data available, default to 0 score
+            return 0.0;
+        }
+
+        // Calculate score based on IP characteristics
+        $score = $this->calculateScore($ipData, $ip);
+
+        // Cache the result
         $this->dataStore->setValue($cacheKey, $score, $this->cacheTtl);
 
         return $score;
     }
 
     /**
-     * Calculate the IP score based on IP intelligence.
+     * Calculate score based on IP characteristics.
      */
-    protected function calculateScore(string $ip): float
+    protected function calculateScore(array $ipData, string $ip): float
     {
-        try {
-            $result = $this->apiClient->query($ip);
+        $score = 0.0;
 
-            $score = 0.0;
+        // Score based on IP characteristics (datacenter, VPN, etc.)
+        foreach ($this->weights as $characteristic => $weight) {
+            if (isset($ipData[$characteristic]) && $ipData[$characteristic] === true) {
+                $score += (float) $weight;
+            }
+        }
 
-            $fields = [
-                'isBogon',
-                'isDatacenter',
-                'isTor',
-                'isProxy',
-                'isVpn',
-                'isAbuser',
-                'isSatellite',
-                'isMobile',
-                'isCrawler',
-            ];
+        // Score based on country
+        if (isset($ipData['country'])) {
+            $country = $ipData['country'];
 
-            foreach ($fields as $field) {
-                if (property_exists($result, $field) && isset($this->weights[$field]) && (bool) $this->weights[$field]) {
-                    $score += $this->weights[$field];
-                }
+            // Check if country is in high-risk list
+            $highRiskCountries = $this->countryScores['high_risk_countries'] ?? [];
+            if (!empty($highRiskCountries) && in_array($country, $highRiskCountries)) {
+                $score += (float) ($this->countryScores['high_risk_score'] ?? 30.0);
             }
 
-            return min(100.0, max(0.0, $score));
-
-        } catch (\Exception $e) {
-            report($e);
-
-            return 0.0; // Return no risk on error
+            // Check if country is in trusted list (can reduce score)
+            $trustedCountries = $this->countryScores['trusted_countries'] ?? [];
+            if (!empty($trustedCountries) && in_array($country, $trustedCountries)) {
+                $score += (float) ($this->countryScores['trusted_score'] ?? -15.0);
+            }
         }
+
+        // Ensure score is never negative
+        return max(0.0, $score);
     }
 }

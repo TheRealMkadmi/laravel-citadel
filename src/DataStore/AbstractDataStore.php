@@ -1,68 +1,84 @@
 <?php
 
-declare(strict_types=1);
-
 namespace TheRealMkadmi\Citadel\DataStore;
 
-use Illuminate\Contracts\Cache\Repository;
+use Illuminate\Support\Facades\Config;
 
 abstract class AbstractDataStore implements DataStore
 {
     /**
-     * The cache repository instance.
+     * Get a value from the data store.
+     * 
+     * @param string $key The cache key
+     * @return mixed The stored value or null if not found
      */
-    protected Repository $cacheStore;
+    abstract public function getValue(string $key): mixed;
 
     /**
-     * Get a value from the cache store.
-     *
-     * @param  mixed  $default
-     * @return mixed
+     * Store a value in the data store.
+     * 
+     * @param string $key The cache key
+     * @param mixed $value The value to store
+     * @param int|null $ttl Time-to-live in seconds, null for default
+     * @return bool Success indicator
      */
-    public function getValue(string $key, $default = null)
+    abstract public function setValue(string $key, mixed $value, ?int $ttl = null): bool;
+
+    /**
+     * Remove a value from the data store.
+     * 
+     * @param string $key The cache key
+     * @return bool Success indicator
+     */
+    abstract public function removeValue(string $key): bool;
+
+    /**
+     * Add a member with score to a sorted set.
+     * 
+     * @param string $key The sorted set key
+     * @param float|int $score The score
+     * @param mixed $member The member to add
+     * @param int|null $ttl Optional TTL in seconds
+     * @return bool|int Number of elements added or false on failure
+     */
+    abstract public function zAdd(string $key, float|int $score, mixed $member, ?int $ttl = null): bool|int;
+
+    /**
+     * Execute multiple commands in a pipeline.
+     * 
+     * @param callable $callback Function to define pipeline operations
+     * @return array Results of pipeline execution
+     */
+    abstract public function pipeline(callable $callback): array;
+
+    /**
+     * Get the prefixed key for storage.
+     * 
+     * @param string $key The original key
+     * @return string The prefixed key
+     */
+    protected function getPrefixedKey(string $key): string
     {
-        return $this->cacheStore->get($key, $default);
+        return Config::get('citadel.cache.key_prefix', 'citadel:') . $key;
     }
-
+    
     /**
-     * Store a value in the cache store.
-     *
-     * @param  mixed  $value
-     * @param  int|\DateTimeInterface|\DateInterval|null  $ttl
+     * Get the default TTL from configuration.
+     * 
+     * @return int Default TTL in seconds
      */
-    public function setValue(string $key, $value, $ttl = null): void
+    protected function getDefaultTtl(): int
     {
-        if ($ttl === null && config('citadel.cache.use_forever', false)) {
-            $this->cacheStore->forever($key, $value);
-        } else {
-            $ttl = $ttl ?? config('citadel.cache.default_ttl', 3600);
-            $this->cacheStore->put($key, $value, $ttl);
-        }
+        return Config::get('citadel.cache.default_ttl', 3600);
     }
-
+    
     /**
-     * Remove a value from the cache store.
+     * Check if cache should use "forever" storage.
+     * 
+     * @return bool Whether to use forever storage
      */
-    public function removeValue(string $key): bool
+    protected function shouldUseForever(): bool
     {
-        return $this->cacheStore->forget($key);
-    }
-
-    /**
-     * Increment a value in the cache store.
-     *
-     * @return int|bool
-     */
-    public function increment(string $key, int $amount = 1)
-    {
-        return $this->cacheStore->increment($key, $amount);
-    }
-
-    /**
-     * Check if a key exists in the cache store.
-     */
-    public function hasValue(string $key): bool
-    {
-        return $this->cacheStore->has($key);
+        return Config::get('citadel.cache.use_forever', false);
     }
 }

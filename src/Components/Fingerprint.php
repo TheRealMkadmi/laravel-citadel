@@ -3,25 +3,49 @@
 namespace TheRealMkadmi\Citadel\Components;
 
 use Illuminate\View\Component;
+use Illuminate\View\View;
 
 class Fingerprint extends Component
 {
     /**
-     * Create a new component instance.
-     *
-     * @return void
+     * Whether to include the automatic initialization script.
      */
-    public function __construct()
-    {
-        // Constructor can receive parameters if needed
+    public bool $autoInit;
+
+    /**
+     * The cookie expiration time in minutes.
+     */
+    public int $expiration;
+
+    /**
+     * The cookie name.
+     */
+    public string $cookieName;
+
+    /**
+     * The header name.
+     */
+    public string $headerName;
+
+    /**
+     * Create a new component instance.
+     */
+    public function __construct(
+        bool $autoInit = true,
+        ?int $expiration = null,
+        ?string $cookieName = null,
+        ?string $headerName = null
+    ) {
+        $this->autoInit = $autoInit;
+        $this->expiration = $expiration ?? config('citadel.cookie.expiration', 60 * 24 * 30); // 30 days in minutes
+        $this->cookieName = $cookieName ?? config('citadel.cookie.name', 'persistentFingerprint_visitor_id');
+        $this->headerName = $headerName ?? config('citadel.header.name', 'X-Fingerprint');
     }
 
     /**
      * Get the view / contents that represent the component.
-     *
-     * @return \Illuminate\Contracts\View\View|\Closure|string
      */
-    public function render()
+    public function render(): View
     {
         return view('citadel::fingerprint');
     }

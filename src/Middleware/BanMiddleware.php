@@ -7,19 +7,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 
 class BanMiddleware
 {
-    /**
-     * Configuration keys.
-     */
-    private const CONFIG_KEY_ACTIVE_ENABLED = 'citadel.middleware.active_enabled';
-
-    private const CONFIG_KEY_BAN_MESSAGE = 'citadel.ban.message';
-
-    private const CONFIG_KEY_BAN_RESPONSE_CODE = 'citadel.ban.response_code';
-
     /**
      * Ban key prefix.
      */
@@ -40,41 +32,49 @@ class BanMiddleware
 
     /**
      * Handle an incoming request.
-     *
-     * @return mixed
      */
-    public function handle(Request $request, Closure $next)
+    public function handle(Request $request, Closure $next): mixed
     {
-        // Skip ban check if active middleware is disabled
-        if (! Config::get(self::CONFIG_KEY_ACTIVE_ENABLED, true)) {
+        // Skip check if middleware is disabled
+        if (! Config::get(CitadelConfig::KEY_MIDDLEWARE_ACTIVE_ENABLED, true)) {
             return $next($request);
         }
 
-        // Check if the IP is banned
+        // Check if IP is banned
         $ipBanned = $this->isBanned($request->ip(), 'ip');
         if ($ipBanned) {
-            Log::info('Citadel: Access attempt from banned IP', [
+            Log::info('Banned IP: {ip} attempted to access {url}', [
                 'ip' => $request->ip(),
                 'url' => $request->fullUrl(),
             ]);
 
-            return $this->blockResponse();
+            return $this->denyAccess();
         }
 
-        // Check if the fingerprint is banned
+        // Check if fingerprint is banned
         $fingerprint = $request->getFingerprint();
-        $fingerprintBanned = $this->isBanned($fingerprint, 'fingerprint');
-        if ($fingerprintBanned) {
-            Log::info('Citadel: Access attempt from banned fingerprint', [
-                'fingerprint' => $fingerprint,
-                'ip' => $request->ip(),
-                'url' => $request->fullUrl(),
-            ]);
+        if ($fingerprint) {
+            $fingerprintBanned = $this->isBanned($fingerprint, 'fingerprint');
+            if ($fingerprintBanned) {
+                Log::info('Banned fingerprint: {fingerprint} attempted to access {url}', [
+                    'fingerprint' => $fingerprint,
+                    'ip' => $request->ip(),
+                    'url' => $request->fullUrl(),
+                ]);
 
-            return $this->blockResponse();
+                return $this->denyAccess();
+            }
         }
 
         return $next($request);
+    }
+    
+    /**
+     * Deny access for banned users.
+     */
+    protected function denyAccess()
+    {
+        return $this->blockResponse();
     }
 
     /**
@@ -104,8 +104,8 @@ class BanMiddleware
      */
     protected function blockResponse()
     {
-        $statusCode = Config::get(self::CONFIG_KEY_BAN_RESPONSE_CODE, 403);
-        $message = Config::get(self::CONFIG_KEY_BAN_MESSAGE, 'You have been banned from accessing this site.');
+        $statusCode = Config::get(CitadelConfig::KEY_BAN_RESPONSE_CODE, 403);
+        $message = Config::get(CitadelConfig::KEY_BAN_MESSAGE, 'You have been banned from accessing this site.');
 
         if (request()->expectsJson()) {
             return response()->json(['error' => $message], $statusCode);

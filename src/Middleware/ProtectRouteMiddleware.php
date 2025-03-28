@@ -7,39 +7,12 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use TheRealMkadmi\Citadel\Analyzers\IRequestAnalyzer;
+use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
+use TheRealMkadmi\Citadel\Enums\ResponseType;
 
 class ProtectRouteMiddleware
 {
-    /**
-     * Configuration keys.
-     */
-    private const CONFIG_KEY_MIDDLEWARE = 'citadel.middleware';
-
-    private const CONFIG_KEY_ACTIVE_ENABLED = 'citadel.middleware.active_enabled';
-
-    private const CONFIG_KEY_ENABLED = 'citadel.middleware.enabled';
-
-    private const CONFIG_KEY_THRESHOLD_SCORE = 'citadel.middleware.threshold_score';
-
-    private const CONFIG_KEY_WARNING_THRESHOLD = 'citadel.middleware.warning_threshold';
-
-    private const CONFIG_KEY_BAN_ENABLED = 'citadel.middleware.ban_enabled';
-
-    private const CONFIG_KEY_BAN_DURATION = 'citadel.middleware.ban_duration';
-
-    private const CONFIG_KEY_CACHE_TTL = 'citadel.middleware.cache_ttl';
-
-    private const CONFIG_KEY_BLOCK_RESPONSE = 'citadel.middleware.block_response';
-
-    private const CONFIG_KEY_RESPONSE_TYPE = 'citadel.middleware.block_response.type';
-
-    private const CONFIG_KEY_RESPONSE_CODE = 'citadel.middleware.block_response.code';
-
-    private const CONFIG_KEY_RESPONSE_MESSAGE = 'citadel.middleware.block_response.message';
-
-    private const CONFIG_KEY_RESPONSE_VIEW = 'citadel.middleware.block_response.view';
-
     /**
      * Ban key prefix.
      */
@@ -76,64 +49,63 @@ class ProtectRouteMiddleware
 
     /**
      * Handle an incoming request.
-     *
-     * @param  \Illuminate\Http\Request  $request  The HTTP request
-     * @param  \Closure  $next  The next middleware
-     * @return mixed The HTTP response
      */
-    public function handle(Request $request, Closure $next)
+    public function handle(Request $request, Closure $next): mixed
     {
-        // If middleware is disabled (globally or active specifically), just pass through
-        if (! Config::get(self::CONFIG_KEY_ENABLED, true) ||
-            ! Config::get(self::CONFIG_KEY_ACTIVE_ENABLED, true)) {
+        // Skip all checks if middleware is disabled or global protection is disabled
+        if (! Config::get(CitadelConfig::KEY_MIDDLEWARE_ENABLED, true) ||
+            ! Config::get(CitadelConfig::KEY_MIDDLEWARE_ACTIVE_ENABLED, true)) {
             return $next($request);
         }
 
-        // Get the user's fingerprint
-        $tracking = $request->getFingerprint();
-
-        // Check if the fingerprint is banned
-        if ($this->isBanned($tracking)) {
-            return $this->blockResponse($request);
+        // Get fingerprint - if not present, allow request to proceed
+        $fingerprint = $request->getFingerprint();
+        if (! $fingerprint) {
+            return $next($request);
         }
 
-        // Skip analysis if no analyzers are registered
-        if (empty($this->analyzers)) {
-            return $next($request);
+        // Check if there's a ban record for this fingerprint
+        $banKey = self::BAN_KEY_PREFIX.$fingerprint;
+        if ($this->dataStore->getValue($banKey) !== null) {
+            Log::info('Banned fingerprint {fingerprint} attempted to access {path}', [
+                'fingerprint' => $fingerprint,
+                'ip' => $request->ip(),
+                'path' => $request->path(),
+            ]);
+
+            return $this->blockRequest($request);
         }
 
         // Get applicable analyzers based on request characteristics
         $applicableAnalyzers = $this->getApplicableAnalyzers($request);
 
-        // Skip if no applicable analyzers
+        // Skip if no analyzers are applicable
         if (empty($applicableAnalyzers)) {
             return $next($request);
         }
 
-        // Run all applicable analyzers
-        $analysisResults = $this->runAnalyzers($request, $applicableAnalyzers);
-        $totalScore = $analysisResults['totalScore'];
-        $scores = $analysisResults['scores'];
+        // Run applicable analyzers and get results
+        $analysisResult = $this->runAnalyzers($request, $applicableAnalyzers);
+        $scores = collect($analysisResult['scores']);
+        $totalScore = $scores->sum();
 
-        // Check if the score exceeds the threshold
-        $thresholdScore = Config::get(self::CONFIG_KEY_THRESHOLD_SCORE, 100);
+        // Check if score is above threshold - block if yes
+        $thresholdScore = Config::get(CitadelConfig::KEY_MIDDLEWARE_THRESHOLD_SCORE, 100);
         if ($totalScore > $thresholdScore) {
-            // Ban the fingerprint if ban_enabled is true
-            if (Config::get(self::CONFIG_KEY_BAN_ENABLED, true)) {
-                $this->banFingerprint($tracking);
+            $this->logBlocking($request, $scores->toArray(), $totalScore, $thresholdScore);
+
+            // Ban if enabled
+            if (Config::get(CitadelConfig::KEY_MIDDLEWARE_BAN_ENABLED, false)) {
+                $this->banFingerprint($fingerprint);
             }
 
-            // Log the block
-            $this->logBlock($request, $tracking, $totalScore, $thresholdScore);
-
-            // Return a response that blocks the request
-            return $this->blockResponse($request);
+            return $this->blockRequest($request);
         }
 
         // Log scores for suspicious requests (even if below threshold)
-        $warningThreshold = Config::get(self::CONFIG_KEY_WARNING_THRESHOLD, 80);
+        $warningThreshold = Config::get(CitadelConfig::KEY_MIDDLEWARE_WARNING_THRESHOLD, 80);
         if ($totalScore > $warningThreshold) {
-            $this->logWarning($request, $scores, $totalScore);
+            $this->logWarning($request, $scores->toArray(), $totalScore);
         }
 
         // Request passed all checks, proceed
@@ -191,7 +163,7 @@ class ProtectRouteMiddleware
                 // Cache the score if not already cached
                 if ($cachedScore === null) {
                     // Get configurable cache TTL for analyzer results, default to 1 hour
-                    $ttl = Config::get(self::CONFIG_KEY_CACHE_TTL, 3600);
+                    $ttl = Config::get(CitadelConfig::KEY_MIDDLEWARE_CACHE_TTL, 3600);
                     $this->dataStore->setValue($cacheKey, $score, $ttl);
                 }
 
@@ -225,36 +197,28 @@ class ProtectRouteMiddleware
     }
 
     /**
-     * Check if a fingerprint is banned.
-     */
-    protected function isBanned(string $fingerprint): bool
-    {
-        $key = self::BAN_KEY_PREFIX.$fingerprint;
-
-        return $this->dataStore->getValue($key) !== null;
-    }
-
-    /**
      * Ban a fingerprint for the configured duration.
      */
     protected function banFingerprint(string $fingerprint): void
     {
         $key = self::BAN_KEY_PREFIX.$fingerprint;
-        $duration = Config::get(self::CONFIG_KEY_BAN_DURATION, 3600);
+        $duration = Config::get(CitadelConfig::KEY_MIDDLEWARE_BAN_DURATION, 3600);
         $this->dataStore->setValue($key, now()->timestamp, $duration);
     }
 
     /**
-     * Log when a request is blocked.
+     * Log when a request is blocked due to suspicion.
      */
-    protected function logBlock(Request $request, string $tracking, float $score, float $threshold): void
+    protected function logBlocking(Request $request, array $scores, float $totalScore, float $threshold): void
     {
         Log::warning('Citadel: Request blocked due to suspicious activity', [
-            'tracking_id' => $tracking,
-            'score' => $score,
+            'tracking_id' => $request->getFingerprint(),
+            'scores' => $scores,
+            'total_score' => $totalScore,
             'threshold' => $threshold,
             'ip' => $request->ip(),
             'url' => $request->fullUrl(),
+            'method' => $request->method(),
             'user_agent' => $request->userAgent(),
         ]);
     }
@@ -276,27 +240,25 @@ class ProtectRouteMiddleware
     }
 
     /**
-     * Generate a response when blocking a request.
+     * Block the request with appropriate response.
      */
-    protected function blockResponse(Request $request): mixed
+    protected function blockRequest(Request $request): mixed
     {
-        $responseType = Config::get(self::CONFIG_KEY_RESPONSE_TYPE, 'abort');
-
-        return match ($responseType) {
-            'abort' => abort(
-                Config::get(self::CONFIG_KEY_RESPONSE_CODE, 403),
-                Config::get(self::CONFIG_KEY_RESPONSE_MESSAGE, 'Forbidden')
-            ),
-            'view' => response()->view(
-                Config::get(self::CONFIG_KEY_RESPONSE_VIEW, 'errors.403'),
-                ['message' => Config::get(self::CONFIG_KEY_RESPONSE_MESSAGE, 'Forbidden')],
-                Config::get(self::CONFIG_KEY_RESPONSE_CODE, 403)
-            ),
-            'json' => response()->json(
-                ['error' => Config::get(self::CONFIG_KEY_RESPONSE_MESSAGE, 'Forbidden')],
-                Config::get(self::CONFIG_KEY_RESPONSE_CODE, 403)
-            ),
-            default => abort(403, 'Forbidden'),
+        // Get response settings from config
+        $responseCode = Config::get(CitadelConfig::KEY_RESPONSE_CODE, 403);
+        $responseMessage = Config::get(CitadelConfig::KEY_RESPONSE_MESSAGE, 'Access denied');
+        $responseView = Config::get(CitadelConfig::KEY_RESPONSE_VIEW);
+        
+        // Get response type from config, using the ResponseType enum
+        $responseTypeStr = Config::get(CitadelConfig::KEY_RESPONSE_TYPE, ResponseType::TEXT->value);
+        $responseType = ResponseType::fromString($responseTypeStr);
+        
+        // Return response based on configured type
+        return match($responseType) {
+            ResponseType::JSON => response()->json(['error' => $responseMessage], $responseCode),
+            ResponseType::VIEW => $responseView ? response()->view($responseView, ['message' => $responseMessage], $responseCode)
+                                               : response($responseMessage, $responseCode),
+            default => response($responseMessage, $responseCode),
         };
     }
 }
