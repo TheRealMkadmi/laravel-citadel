@@ -5,16 +5,16 @@ namespace TheRealMkadmi\Citadel\Tests;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Orchestra\Testbench\TestCase as Orchestra;
 use TheRealMkadmi\Citadel\CitadelServiceProvider;
+use Orchestra\Testbench\Concerns\WithWorkbench; 
 
 class TestCase extends Orchestra
 {
+    use WithWorkbench; 
+    protected $enablesPackageDiscoveries = true; 
+
     protected function setUp(): void
     {
         parent::setUp();
-
-        Factory::guessFactoryNamesUsing(
-            fn (string $modelName) => 'TheRealMkadmi\\Citadel\\Database\\Factories\\'.class_basename($modelName).'Factory'
-        );
     }
 
     protected function getPackageProviders($app)
@@ -26,12 +26,6 @@ class TestCase extends Orchestra
 
     public function getEnvironmentSetUp($app)
     {
-        config()->set('database.default', 'testing');
 
-        /*
-         foreach (\Illuminate\Support\Facades\File::allFiles(__DIR__ . '/database/migrations') as $migration) {
-            (include $migration->getRealPath())->up();
-         }
-         */
     }
 }
