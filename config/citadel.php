@@ -206,4 +206,34 @@ return [
         // Prefix for all cache keys to avoid collisions
         'key_prefix' => env('CITADEL_CACHE_PREFIX', 'citadel:'),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Payload Analyzer Settings
+    |--------------------------------------------------------------------------
+    |
+    | Configure the payload analyzer settings including pattern detection,
+    | scoring rules, and thresholds for malicious payload detection.
+    |
+    */
+    'payload' => [
+        'enable_payload_analyzer' => env('CITADEL_ENABLE_PAYLOAD_ANALYZER', true),
+        'cache_ttl' => env('CITADEL_PAYLOAD_CACHE_TTL', 3600),
+        'max_score' => env('CITADEL_PAYLOAD_MAX_SCORE', 100.0),
+        'threat_threshold' => env('CITADEL_PAYLOAD_THREAT_THRESHOLD', 40.0),
+        
+        // Request size limits
+        'max_size' => env('CITADEL_PAYLOAD_MAX_SIZE', 1048576), // 1MB
+        'max_params' => env('CITADEL_PAYLOAD_MAX_PARAMS', 100),
+        
+        // Scoring for anomaly detection
+        'large_payload_score' => env('CITADEL_PAYLOAD_LARGE_SIZE_SCORE', 20.0),
+        'many_params_score' => env('CITADEL_PAYLOAD_MANY_PARAMS_SCORE', 15.0),
+        'mismatched_content_type_score' => env('CITADEL_PAYLOAD_MISMATCHED_TYPE_SCORE', 10.0),
+        'unusual_headers_score' => env('CITADEL_PAYLOAD_UNUSUAL_HEADERS_SCORE', 15.0),
+        'inconsistent_accept_headers_score' => env('CITADEL_PAYLOAD_INCONSISTENT_ACCEPT_SCORE', 10.0),
+        'suspicious_request_method_score' => env('CITADEL_PAYLOAD_SUSPICIOUS_METHOD_SCORE', 15.0),
+        'repeated_identical_requests_score' => env('CITADEL_PAYLOAD_REPEATED_REQUESTS_SCORE', 15.0),
+        'sequential_probing_score' => env('CITADEL_PAYLOAD_SEQUENTIAL_PROBE_SCORE', 20.0),
+    ],
 ];

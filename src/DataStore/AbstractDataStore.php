@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace TheRealMkadmi\Citadel\DataStore;
 
 use Illuminate\Contracts\Cache\Repository;
-use TheRealMkadmi\Citadel\Contracts\DataStore;
+use TheRealMkadmi\Citadel\DataStore\DataStore;
 
 abstract class AbstractDataStore implements DataStore
 {

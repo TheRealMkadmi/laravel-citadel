@@ -7,7 +7,7 @@ namespace TheRealMkadmi\Citadel\Clients;
 use Exception;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
-use TheRealMkadmi\Citadel\Drivers\DataStore;
+use TheRealMkadmi\Citadel\DataStore\DataStore;
 
 class IncolumitasApiClient
 {

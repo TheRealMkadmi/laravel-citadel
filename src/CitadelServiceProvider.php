@@ -15,10 +15,11 @@ use Symfony\Component\Finder\Finder;
 use TheRealMkadmi\Citadel\Analyzers\IRequestAnalyzer;
 use TheRealMkadmi\Citadel\Commands\CitadelCommand;
 use TheRealMkadmi\Citadel\Components\Fingerprint;
-use TheRealMkadmi\Citadel\Contracts\DataStore;
+use TheRealMkadmi\Citadel\DataStore\DataStore;
 use TheRealMkadmi\Citadel\DataStore\ArrayDataStore;
 use TheRealMkadmi\Citadel\DataStore\OctaneDataStore;
 use TheRealMkadmi\Citadel\DataStore\RedisDataStore;
+use TheRealMkadmi\Citadel\Middleware\GeofenceMiddleware;
 use TheRealMkadmi\Citadel\Middleware\ProtectRouteMiddleware;
 
 class CitadelServiceProvider extends PackageServiceProvider
@@ -67,7 +68,14 @@ class CitadelServiceProvider extends PackageServiceProvider
         
         // Register middleware
         $router = $this->app->make(Router::class);
-        $router->aliasMiddleware('citadel', ProtectRouteMiddleware::class);
+        $router->middlewareGroup('citadel-protect', [
+            ProtectRouteMiddleware::class,
+            GeofenceMiddleware::class,
+        ]);
+        $router->middlewareGroup('citadel-track', [
+            ProtectRouteMiddleware::class,
+            GeofenceMiddleware::class,
+        ]);
     }
     
     /**

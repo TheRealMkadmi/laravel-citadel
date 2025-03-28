@@ -6,14 +6,14 @@ namespace TheRealMkadmi\Citadel\Analyzers;
 
 use Illuminate\Http\Request;
 use TheRealMkadmi\Citadel\Clients\IncolumitasApiClient;
-use TheRealMkadmi\Citadel\Contracts\DataStore;
+use TheRealMkadmi\Citadel\DataStore\DataStore;
 
 class IpAnalyzer implements IRequestAnalyzer
 {
     /**
      * The data store for caching results.
      *
-     * @var \TheRealMkadmi\Citadel\Contracts\DataStore
+     * @var \TheRealMkadmi\Citadel\DataStore\DataStore
      */
     protected DataStore $dataStore;
 
@@ -48,7 +48,7 @@ class IpAnalyzer implements IRequestAnalyzer
     /**
      * Constructor.
      * 
-     * @param \TheRealMkadmi\Citadel\Contracts\DataStore $dataStore
+     * @param \TheRealMkadmi\Citadel\DataStore\DataStore $dataStore
      * @param \TheRealMkadmi\Citadel\Clients\IncolumitasApiClient $apiClient
      */
     public function __construct(DataStore $dataStore, IncolumitasApiClient $apiClient)
