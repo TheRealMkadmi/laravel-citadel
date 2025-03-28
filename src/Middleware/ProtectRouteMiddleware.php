@@ -86,8 +86,11 @@ class ProtectRouteMiddleware
             ]));
         }
         
-        // Process each analyzer and collect scores
-        foreach ($this->analyzers as $analyzer) {
+        // Filter analyzers based on request method
+        $applicableAnalyzers = $this->getApplicableAnalyzers($request);
+        
+        // Process each applicable analyzer and collect scores
+        foreach ($applicableAnalyzers as $analyzer) {
             $shortName = class_basename($analyzer);
             
             try {
@@ -145,6 +148,34 @@ class ProtectRouteMiddleware
         
         // Allow the request to proceed if the score is below the threshold
         return $next($request);
+    }
+    
+    /**
+     * Get analyzers applicable to the current request based on whether it has a body
+     *
+     * @param Request $request
+     * @return array<IRequestAnalyzer>
+     */
+    protected function getApplicableAnalyzers(Request $request): array
+    {
+        return collect($this->analyzers)->filter(function ($analyzer) use ($request) {
+            // Special handling for PayloadAnalyzer and SpamminessAnalyzer:
+            // Only run them if the request has a body
+            if ($analyzer instanceof PayloadAnalyzer || 
+                $analyzer instanceof SpamminessAnalyzer) {
+                
+                // Check if request has any content
+                $hasBody = !empty($request->all()) || !empty($request->getContent());
+                
+                // Skip these analyzers for requests without a body
+                if (!$hasBody) {
+                    return false;
+                }
+            }
+            
+            // Include all other analyzers
+            return true;
+        })->values()->all();
     }
     
     /**

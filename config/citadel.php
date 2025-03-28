@@ -4,6 +4,16 @@
 return [
     /*
     |--------------------------------------------------------------------------
+    | Version
+    |--------------------------------------------------------------------------
+    |
+    | Current version of Laravel Citadel.
+    |
+    */
+    'version' => '1.0.0',
+
+    /*
+    |--------------------------------------------------------------------------
     | Geofencing Settings
     |--------------------------------------------------------------------------
     |
@@ -288,5 +298,22 @@ return [
         'cache_key' => env('CITADEL_BAN_CACHE_KEY', 'banned'),
         'message' => env('CITADEL_BAN_MESSAGE', 'You have been banned from accessing this site.'),
         'response_code' => env('CITADEL_BAN_RESPONSE_CODE', 403),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | API Settings
+    |--------------------------------------------------------------------------
+    |
+    | Configure settings for the Citadel API endpoints.
+    | - enabled: Whether API endpoints are enabled
+    | - token: Secret token for API authentication (should use a strong, random value)
+    | - prefix: Prefix for API routes
+    |
+    */
+    'api' => [
+        'enabled' => env('CITADEL_API_ENABLED', false),
+        'token' => env('CITADEL_API_TOKEN'),
+        'prefix' => env('CITADEL_API_PREFIX', 'api/citadel'),
     ],
 ];
