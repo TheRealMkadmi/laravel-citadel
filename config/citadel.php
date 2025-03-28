@@ -236,4 +236,40 @@ return [
         'repeated_identical_requests_score' => env('CITADEL_PAYLOAD_REPEATED_REQUESTS_SCORE', 15.0),
         'sequential_probing_score' => env('CITADEL_PAYLOAD_SEQUENTIAL_PROBE_SCORE', 20.0),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Spamminess Analyzer Settings
+    |--------------------------------------------------------------------------
+    |
+    | Configure the spamminess analyzer settings including scoring rules,
+    | thresholds, and text analysis parameters.
+    |
+    */
+    'spamminess' => [
+        'enable_spamminess_analyzer' => env('CITADEL_ENABLE_SPAMMINESS_ANALYZER', true),
+        'max_score' => env('CITADEL_SPAMMINESS_MAX_SCORE', 100.0),
+        
+        // Scoring weights for different types of anomalies
+        'weights' => [
+            'gibberish_text' => env('CITADEL_SPAMMINESS_GIBBERISH_WEIGHT', 25.0),
+            'repetitive_content' => env('CITADEL_SPAMMINESS_REPETITIVE_WEIGHT', 10.0),
+            'suspicious_entropy' => env('CITADEL_SPAMMINESS_ENTROPY_WEIGHT', 20.0),
+            'statistical_anomaly' => env('CITADEL_SPAMMINESS_STATISTICAL_WEIGHT', 30.0),
+        ],
+        
+        // Text analysis parameters
+        'text_analysis' => [
+            'min_entropy_threshold' => env('CITADEL_SPAMMINESS_MIN_ENTROPY', 1.0),
+            'max_entropy_threshold' => env('CITADEL_SPAMMINESS_MAX_ENTROPY', 4.0),
+            'min_field_length' => env('CITADEL_SPAMMINESS_MIN_FIELD_LENGTH', 2),
+            'max_repetition_ratio' => env('CITADEL_SPAMMINESS_MAX_REPETITION', 0.4),
+            'min_vowel_ratio' => env('CITADEL_SPAMMINESS_MIN_VOWEL_RATIO', 0.1),
+            'consonant_sequence_threshold' => env('CITADEL_SPAMMINESS_CONSONANT_SEQ', 4),
+            'character_distribution_threshold' => env('CITADEL_SPAMMINESS_CHAR_DIST', 0.7),
+            'zipf_deviation_threshold' => env('CITADEL_SPAMMINESS_ZIPF_THRESHOLD', 0.4),
+            'statistical_significance_threshold' => env('CITADEL_SPAMMINESS_STAT_THRESHOLD', 0.05),
+            'max_correlation_threshold' => env('CITADEL_SPAMMINESS_MAX_CORR', 0.8),
+        ],
+    ],
 ];
