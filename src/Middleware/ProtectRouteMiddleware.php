@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use TheRealMkadmi\Citadel\Analyzers\IRequestAnalyzer;
-use TheRealMkadmi\Citadel\Contracts\DataStore;
+use TheRealMkadmi\Citadel\DataStore\DataStore;
 
 class ProtectRouteMiddleware
 {
@@ -20,7 +20,7 @@ class ProtectRouteMiddleware
     /**
      * The data store instance.
      *
-     * @var \TheRealMkadmi\Citadel\Contracts\DataStore
+     * @var \TheRealMkadmi\Citadel\DataStore\DataStore
      */
     protected DataStore $dataStore;
 
@@ -35,7 +35,7 @@ class ProtectRouteMiddleware
      * Create a new middleware instance.
      *
      * @param array<IRequestAnalyzer> $analyzers
-     * @param \TheRealMkadmi\Citadel\Contracts\DataStore $dataStore
+     * @param \TheRealMkadmi\Citadel\DataStore\DataStore $dataStore
      */
     public function __construct(array $analyzers = [], DataStore $dataStore)
     {

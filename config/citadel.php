@@ -4,6 +4,23 @@
 return [
     /*
     |--------------------------------------------------------------------------
+    | Geofencing Settings
+    |--------------------------------------------------------------------------
+    |
+    | Configure geographical restrictions for requests.
+    | - enabled: Whether geofencing is enabled
+    | - mode: 'allow' (whitelist) or 'block' (blacklist)
+    | - countries: Comma-separated ISO-3166-1 alpha-2 country codes to allow or block
+    |
+    */
+    'geofencing' => [
+        'enabled' => env('CITADEL_GEOFENCING_ENABLED', false),
+        'mode' => env('CITADEL_GEOFENCING_MODE', 'block'), // 'allow' or 'block'
+        'countries' => env('CITADEL_GEOFENCING_COUNTRIES', ''), // comma-separated ISO-3166-1 alpha-2 country codes
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Cookie Settings
     |--------------------------------------------------------------------------
     |
@@ -53,6 +70,43 @@ return [
     |
     */
     'threshold' => env('CITADEL_THRESHOLD', 50.0),
+
+    /*
+    |--------------------------------------------------------------------------
+    | IP Analyzer Settings
+    |--------------------------------------------------------------------------
+    |
+    | Configure the IP analyzer settings including weights for different
+    | IP characteristics detected through the Incolumitas API.
+    |
+    | Higher positive values indicate more suspicious IP characteristics
+    | Negative values indicate more trusted IP characteristics
+    |
+    */
+    'ip' => [
+        'enable_ip_analyzer' => env('CITADEL_ENABLE_IP_ANALYZER', true),
+        
+        // Weights for different IP characteristics 
+        'weights' => [
+            'bogon' => env('CITADEL_IP_WEIGHT_BOGON', 80.0),
+            'datacenter' => env('CITADEL_IP_WEIGHT_DATACENTER', 30.0),
+            'tor' => env('CITADEL_IP_WEIGHT_TOR', 60.0),
+            'proxy' => env('CITADEL_IP_WEIGHT_PROXY', 50.0),
+            'vpn' => env('CITADEL_IP_WEIGHT_VPN', 40.0),
+            'abuser' => env('CITADEL_IP_WEIGHT_ABUSER', 70.0),
+            'satellite' => env('CITADEL_IP_WEIGHT_SATELLITE', 10.0),
+            'mobile' => env('CITADEL_IP_WEIGHT_MOBILE', -10.0),
+            'crawler' => env('CITADEL_IP_WEIGHT_CRAWLER', 20.0),
+        ],
+        
+        // Country-specific handling
+        'country_scores' => [
+            'high_risk_countries' => [],
+            'high_risk_score' => env('CITADEL_HIGH_RISK_COUNTRY_SCORE', 30.0),
+            'trusted_countries' => [],
+            'trusted_score' => env('CITADEL_TRUSTED_COUNTRY_SCORE', -15.0),
+        ],
+    ],
 
     /*
     |--------------------------------------------------------------------------
@@ -147,6 +201,7 @@ return [
         'device_detection_ttl' => env('CITADEL_DEVICE_DETECTION_TTL', 86400), // 24 hours
         'fingerprint_ttl' => env('CITADEL_FINGERPRINT_TTL', 604800), // 7 days
         'burst_analysis_ttl' => env('CITADEL_BURST_ANALYSIS_TTL', 3600), // 1 hour
+        'ip_analysis_ttl' => env('CITADEL_IP_ANALYSIS_TTL', 7200), // 2 hours
         
         // Prefix for all cache keys to avoid collisions
         'key_prefix' => env('CITADEL_CACHE_PREFIX', 'citadel:'),

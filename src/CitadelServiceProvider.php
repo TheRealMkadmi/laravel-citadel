@@ -16,9 +16,9 @@ use TheRealMkadmi\Citadel\Analyzers\IRequestAnalyzer;
 use TheRealMkadmi\Citadel\Commands\CitadelCommand;
 use TheRealMkadmi\Citadel\Components\Fingerprint;
 use TheRealMkadmi\Citadel\Contracts\DataStore;
-use TheRealMkadmi\Citadel\DataStores\ArrayDataStore;
-use TheRealMkadmi\Citadel\DataStores\OctaneDataStore;
-use TheRealMkadmi\Citadel\DataStores\RedisDataStore;
+use TheRealMkadmi\Citadel\DataStore\ArrayDataStore;
+use TheRealMkadmi\Citadel\DataStore\OctaneDataStore;
+use TheRealMkadmi\Citadel\DataStore\RedisDataStore;
 use TheRealMkadmi\Citadel\Middleware\ProtectRouteMiddleware;
 
 class CitadelServiceProvider extends PackageServiceProvider

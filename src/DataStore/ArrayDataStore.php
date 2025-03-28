@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace TheRealMkadmi\Citadel\DataStores;
+namespace TheRealMkadmi\Citadel\DataStore;
 
 use Illuminate\Support\Facades\Cache;
 

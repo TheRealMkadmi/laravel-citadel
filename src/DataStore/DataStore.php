@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace TheRealMkadmi\Citadel\Contracts;
+namespace TheRealMkadmi\Citadel\DataStore;
 
 interface DataStore
 {
