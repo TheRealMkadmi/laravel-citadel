@@ -1,6 +1,5 @@
 <?php
 
-use TheRealMkadmi\Citadel\Version;
 use TheRealMkadmi\Citadel\Enums\GeofencingMode;
 
 // config for TheRealMkadmi\Citadel
@@ -13,7 +12,7 @@ return [
     | Current version of Laravel Citadel.
     |
     */
-    'version' => Version::VERSION,
+    'version' => '1.1.0',
 
     /*
     |--------------------------------------------------------------------------
@@ -185,6 +184,14 @@ return [
         'desktop_score' => env('CITADEL_DEVICE_DESKTOP_SCORE', 10.0),
         'bot_score' => env('CITADEL_DEVICE_BOT_SCORE', 100.0),
         'unknown_score' => env('CITADEL_DEVICE_UNKNOWN_SCORE', 20.0),
+        
+        // Bot detection patterns
+        'bot_patterns' => [
+            'bot', 'crawl', 'spider', 'slurp', 'search', 'fetch', 'monitor',
+            'scrape', 'extract', 'scan', 'wget', 'curl', 'http', 'python', 
+            'java/', 'libwww', 'perl', 'phantomjs', 'headless', 'automation',
+            'lighthouse', 'pagespeed', 'pingdom', 'gtmetrix'
+        ],
     ],
 
     /*

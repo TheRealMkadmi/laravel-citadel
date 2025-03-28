@@ -134,6 +134,6 @@ class GeofenceMiddleware
      */
     protected function denyAccess(): Response
     {
-        return abort(Response::HTTP_FORBIDDEN, 'Access denied based on geographic location');
+        return response()->json(['error' => 'Access denied based on geographic location'], Response::HTTP_FORBIDDEN);
     }
 }

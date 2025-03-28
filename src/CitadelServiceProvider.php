@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Route;
-use Laravel\Octane\Server;
+use Laravel\Octane\Server as OctaneServer;
 use Spatie\LaravelPackageTools\Commands\InstallCommand;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
@@ -183,7 +183,7 @@ class CitadelServiceProvider extends PackageServiceProvider
                 Route::get('/status', function () {
                     return response()->json([
                         'status' => 'ok',
-                        'version' => Version::get(),
+                        'version' => config('citadel.version', '1.1.0'),
                         'timestamp' => now()->toIso8601String(),
                     ]);
                 })->name('citadel.api.status');

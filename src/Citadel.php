@@ -79,8 +79,7 @@ class Citadel
         if (Config::get(CitadelConfig::KEY_FEATURES . '.collect_ip', true)) {
             $attributes['ip'] = $request->ip() ?? 'unknown';
         }
-        
-        // Collect from user agent if enabled
+
         if (Config::get(CitadelConfig::KEY_FEATURES . '.collect_user_agent', true)) {
             $attributes['user_agent'] = $request->userAgent() ?? 'unknown';
         }

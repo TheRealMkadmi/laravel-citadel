@@ -31,7 +31,7 @@ enum BanType: string
     public static function tryFrom(string $value, bool $autoDetect = false, ?string $input = null): ?self
     {
         // Direct match
-        $directMatch = parent::tryFrom($value);
+        $directMatch = static::tryFrom($value);
         if ($directMatch !== null) {
             return $directMatch;
         }

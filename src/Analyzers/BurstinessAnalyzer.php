@@ -6,6 +6,7 @@ namespace TheRealMkadmi\Citadel\Analyzers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Str;
 use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 
@@ -14,7 +15,7 @@ class BurstinessAnalyzer extends AbstractAnalyzer
     /**
      * The key prefix for fingerprint request data.
      */
-    private const KEY_PREFIX = 'fw';
+    private const KEY_PREFIX = 'burst';
 
     /**
      * Indicates if this analyzer scans payload content.
@@ -25,6 +26,11 @@ class BurstinessAnalyzer extends AbstractAnalyzer
      * This analyzer doesn't make external requests.
      */
     protected bool $active = false;
+    
+    /**
+     * Local cache for config values to avoid repeated lookups
+     */
+    protected array $configCache = [];
 
     /**
      * Constructor.
@@ -36,6 +42,39 @@ class BurstinessAnalyzer extends AbstractAnalyzer
         parent::__construct($dataStore);
         $this->enabled = config('citadel.burstiness.enable_burstiness_analyzer', true);
         $this->cacheTtl = config(CitadelConfig::KEY_CACHE.'.burst_analysis_ttl', 3600);
+        
+        // Pre-load frequently used configuration values
+        $this->loadConfigValues();
+    }
+    
+    /**
+     * Load commonly used configuration values to reduce lookups
+     */
+    protected function loadConfigValues(): void
+    {
+        $this->configCache = [
+            'windowSize' => (int)Config::get(CitadelConfig::KEY_BURSTINESS.'.window_size', 60000),
+            'minInterval' => (int)Config::get(CitadelConfig::KEY_BURSTINESS.'.min_interval', 5000),
+            'maxRequestsPerWindow' => (int)Config::get(CitadelConfig::KEY_BURSTINESS.'.max_requests_per_window', 5),
+            'excessRequestScore' => (float)Config::get(CitadelConfig::KEY_BURSTINESS.'.excess_request_score', 10),
+            'burstPenaltyScore' => (float)Config::get(CitadelConfig::KEY_BURSTINESS.'.burst_penalty_score', 20),
+            'maxFrequencyScore' => (float)Config::get(CitadelConfig::KEY_BURSTINESS.'.max_frequency_score', 100),
+            'veryRegularThreshold' => (float)Config::get('citadel.burstiness.very_regular_threshold', 0.1),
+            'somewhatRegularThreshold' => (float)Config::get('citadel.burstiness.somewhat_regular_threshold', 0.25),
+            'veryRegularScore' => (float)Config::get('citadel.burstiness.very_regular_score', 30),
+            'somewhatRegularScore' => (float)Config::get('citadel.burstiness.somewhat_regular_score', 15),
+            'patternMultiplier' => (float)Config::get('citadel.burstiness.pattern_multiplier', 5),
+            'maxPatternScore' => (float)Config::get('citadel.burstiness.max_pattern_score', 20),
+            'minSamplesForPatternDetection' => (int)Config::get('citadel.burstiness.min_samples_for_pattern', 3),
+            'patternHistorySize' => (int)Config::get('citadel.burstiness.pattern_history_size', 5),
+            'historyTtlMultiplier' => (int)Config::get('citadel.burstiness.history_ttl_multiplier', 6),
+            'minViolationsForPenalty' => (int)Config::get('citadel.burstiness.min_violations_for_penalty', 1),
+            'maxViolationScore' => (float)Config::get('citadel.burstiness.max_violation_score', 50),
+            'severeExcessThreshold' => (int)Config::get('citadel.burstiness.severe_excess_threshold', 10),
+            'maxExcessScore' => (float)Config::get('citadel.burstiness.max_excess_score', 30),
+            'excessMultiplier' => (float)Config::get('citadel.burstiness.excess_multiplier', 2),
+            'ttlBufferMultiplier' => (int)Config::get('citadel.burstiness.ttl_buffer_multiplier', 2),
+        ];
     }
 
     /**
@@ -51,25 +90,42 @@ class BurstinessAnalyzer extends AbstractAnalyzer
      */
     public function analyze(Request $request): float
     {
+        if (!$this->enabled) {
+            return 0.0;
+        }
+
         $fingerprint = $request->getFingerprint();
+        if (empty($fingerprint)) {
+            return 0.0;
+        }
+        
+        // Generate a cache key for this fingerprint's analysis
+        $cacheKey = "burstiness:{$fingerprint}";
+        
+        // Check if we have a cached score to avoid redundant calculations
+        $cachedScore = $this->dataStore->getValue($cacheKey);
+        if ($cachedScore !== null) {
+            return (float) $cachedScore;
+        }
+
         $score = 0;
 
         // Get configuration values
-        $windowSize = Config::get(CitadelConfig::KEY_BURSTINESS.'.window_size', 60000);
-        $minInterval = Config::get(CitadelConfig::KEY_BURSTINESS.'.min_interval', 5000);
-        $maxRequestsPerWindow = Config::get(CitadelConfig::KEY_BURSTINESS.'.max_requests_per_window', 5);
-        $excessRequestScore = Config::get(CitadelConfig::KEY_BURSTINESS.'.excess_request_score', 10);
-        $burstPenaltyScore = Config::get(CitadelConfig::KEY_BURSTINESS.'.burst_penalty_score', 20);
-        $maxFrequencyScore = Config::get(CitadelConfig::KEY_BURSTINESS.'.max_frequency_score', 100);
+        $windowSize = $this->configCache['windowSize'];
+        $minInterval = $this->configCache['minInterval'];
+        $maxRequestsPerWindow = $this->configCache['maxRequestsPerWindow'];
+        $excessRequestScore = $this->configCache['excessRequestScore'];
+        $burstPenaltyScore = $this->configCache['burstPenaltyScore'];
+        $maxFrequencyScore = $this->configCache['maxFrequencyScore'];
 
         // Current time in milliseconds
         $now = $this->getCurrentTimeInMilliseconds();
 
-        // Generate keys for data storage
-        $keySuffix = $this->getKeySuffix($fingerprint);
-        $requestsKey = $this->generateKeyName($keySuffix, 'requests');
-        $patternKey = $this->generateKeyName($keySuffix, 'pattern');
-        $historyKey = $this->generateKeyName($keySuffix, 'history');
+        // Generate keys for data storage using short, efficient format
+        $keySuffix = Str::substr(md5($fingerprint), 0, 12); // Use shorter fingerprint hash
+        $requestsKey = $this->generateKeyName($keySuffix, 'req'); // Shortened key names
+        $patternKey = $this->generateKeyName($keySuffix, 'pat');
+        $historyKey = $this->generateKeyName($keySuffix, 'hist');
 
         // Calculate cutoff time for the sliding window
         $cutoff = $now - $windowSize;
@@ -77,7 +133,7 @@ class BurstinessAnalyzer extends AbstractAnalyzer
         // TTL in seconds (window size + buffer)
         $keyTTL = $this->calculateTTL($windowSize);
 
-        // Execute multiple operations atomically using the pipeline
+        // Execute multiple operations atomically using the pipeline for better performance
         $results = $this->dataStore->pipeline(function ($pipe) use ($requestsKey, $cutoff, $now, $keyTTL) {
             // Remove timestamps older than the window from the sorted set
             $pipe->zremrangebyscore($requestsKey, '-inf', $cutoff);
@@ -96,9 +152,9 @@ class BurstinessAnalyzer extends AbstractAnalyzer
             $pipe->zrange($requestsKey, -5, -1);
         });
 
-        // Extract results
+        // Extract results from pipeline with default values if missing
         $requestCount = $results[3] ?? 1; // Default to 1 if no count returned
-        $recentTimestamps = $results[4] ?? []; // Last 5 timestamps if they exist
+        $recentTimestamps = $results[4] ?? []; // Last timestamps if they exist
 
         // ===== FREQUENCY ANALYSIS =====
         // Calculate frequency score: penalize for exceeding maximum requests
@@ -118,25 +174,31 @@ class BurstinessAnalyzer extends AbstractAnalyzer
         }
 
         // ===== BURST DETECTION =====
-        // Check for rapid consecutive requests (bursts)
-        $burstDetected = $this->detectBurst($recentTimestamps, $minInterval);
-        if ($burstDetected) {
-            // Apply penalty for burst detection
-            $score += $burstPenaltyScore;
-        }
-
-        // ===== PATTERN ANALYSIS =====
-        // Check for regularity in request timing that might indicate automation
-        $minSamplesForPatternDetection = Config::get('citadel.burstiness.min_samples_for_pattern', 3);
-        if (count($recentTimestamps) >= $minSamplesForPatternDetection) {
-            $patternScore = $this->analyzeRequestPatterns($recentTimestamps, $patternKey, $keyTTL);
-            $score += $patternScore;
+        // Only check for bursts if there are enough timestamps and we haven't already maxed out the score
+        if (count($recentTimestamps) >= 3 && $score < $maxFrequencyScore) {
+            $burstDetected = $this->detectBurst($recentTimestamps, $minInterval);
+            if ($burstDetected) {
+                // Apply penalty for burst detection
+                $score += $burstPenaltyScore;
+            }
+            
+            // ===== PATTERN ANALYSIS =====
+            // Check for regularity in request timing that might indicate automation
+            if (count($recentTimestamps) >= $this->configCache['minSamplesForPatternDetection']) {
+                $patternScore = $this->analyzeRequestPatterns($recentTimestamps, $patternKey, $keyTTL);
+                $score += $patternScore;
+            }
         }
 
         // ===== HISTORICAL BEHAVIOR ANALYSIS =====
         // Apply additional penalties for repeat offenders
         $historyScore = $this->getHistoricalScore($historyKey);
         $score += $historyScore;
+        
+        // Cache the analysis result to avoid recalculating too frequently
+        // Use a short TTL since bursts detection is time-sensitive
+        $shortCacheTtl = min(60, $this->cacheTtl); // Maximum 1 minute or shorter
+        $this->dataStore->setValue($cacheKey, $score, $shortCacheTtl);
 
         return (float) $score;
     }
@@ -151,19 +213,23 @@ class BurstinessAnalyzer extends AbstractAnalyzer
             return false;
         }
         
-        // Convert to collection for easier manipulation
-        $timestamps = collect($timestamps)->sort();
+        // Convert string timestamps to integers and sort
+        $numericTimestamps = array_map('intval', $timestamps);
+        sort($numericTimestamps);
         
-        // Calculate intervals between consecutive requests
-        $intervals = $timestamps->map(function ($timestamp, $index) use ($timestamps) {
-            return $index > 0 ? $timestamp - $timestamps[$index - 1] : PHP_INT_MAX;
-        })->skip(1); // Skip the first element which is PHP_INT_MAX
+        // Calculate intervals between consecutive requests and check if any are below threshold
+        // Using a more efficient direct approach instead of collections
+        $burstCount = 0;
+        for ($i = 1; $i < count($numericTimestamps); $i++) {
+            if (($numericTimestamps[$i] - $numericTimestamps[$i-1]) < $minInterval) {
+                $burstCount++;
+                if ($burstCount >= 2) {
+                    return true;
+                }
+            }
+        }
         
-        // Count how many intervals are below the minimum allowed
-        $burstCount = $intervals->filter(fn($interval) => $interval < $minInterval)->count();
-        
-        // If we have consecutive intervals below the threshold, it's a burst
-        return $burstCount >= 2;
+        return false;
     }
 
     /**
@@ -189,22 +255,25 @@ class BurstinessAnalyzer extends AbstractAnalyzer
         sort($numericTimestamps);
 
         // Calculate intervals between consecutive requests
+        // Pre-allocate the array size for better performance
         $intervals = [];
-        for ($i = 1; $i < count($numericTimestamps); $i++) {
+        $count = count($numericTimestamps);
+        for ($i = 1; $i < $count; $i++) {
             $intervals[] = $numericTimestamps[$i] - $numericTimestamps[$i - 1];
         }
 
         // Check for regularity in intervals (standard deviation approach)
-        if (count($intervals) >= 2) {
-            // Calculate mean interval
-            $meanInterval = array_sum($intervals) / count($intervals);
+        $intervalCount = count($intervals);
+        if ($intervalCount >= 2) {
+            // Calculate mean interval - use array_sum directly for performance
+            $meanInterval = array_sum($intervals) / $intervalCount;
 
-            // Calculate variance
+            // Calculate variance with optimized approach
             $variance = 0;
             foreach ($intervals as $interval) {
-                $variance += pow($interval - $meanInterval, 2);
+                $variance += ($interval - $meanInterval) ** 2;
             }
-            $variance /= count($intervals);
+            $variance /= $intervalCount;
 
             // Calculate coefficient of variation (CV)
             // CV = (standard deviation / mean) - lower value indicates more regularity
@@ -216,55 +285,74 @@ class BurstinessAnalyzer extends AbstractAnalyzer
                 'cv_history' => [],
                 'mean_interval' => 0,
                 'detection_count' => 0,
+                'last_updated' => 0,
             ]);
+            
+            // Only update if it's a new request (checking timestamp can help avoid redundant processing)
+            $currentTime = time();
+            if ($currentTime > ($patternData['last_updated'] + 1)) {
+                // Update pattern history
+                $patternData['cv_history'][] = $cv;
+                $maxHistorySize = $this->configCache['patternHistorySize'];
+                if (count($patternData['cv_history']) > $maxHistorySize) {
+                    array_shift($patternData['cv_history']);
+                }
+                $patternData['mean_interval'] = $meanInterval;
+                $patternData['last_updated'] = $currentTime;
 
-            // Update pattern history
-            $patternData['cv_history'][] = $cv;
-            $maxHistorySize = Config::get('citadel.burstiness.pattern_history_size', 5);
-            if (count($patternData['cv_history']) > $maxHistorySize) {
-                array_shift($patternData['cv_history']);
+                // Detect if CV is consistently low (suggests regular pattern)
+                // Reuse variable names for memory efficiency
+                $cvCount = count($patternData['cv_history']);
+                $avgCV = array_sum($patternData['cv_history']) / $cvCount;
+
+                // Score based on coefficient of variation thresholds
+                $patternScore = 0;
+                
+                // Use cached config values for better performance
+                if ($avgCV < $this->configCache['veryRegularThreshold']) {
+                    // Very regular pattern - likely a bot
+                    $patternData['detection_count']++;
+                    $patternScore = $this->configCache['veryRegularScore'];
+                } elseif ($avgCV < $this->configCache['somewhatRegularThreshold']) {
+                    // Somewhat regular pattern - suspicious
+                    $patternData['detection_count']++;
+                    $patternScore = $this->configCache['somewhatRegularScore'];
+                } else {
+                    // Irregular pattern - likely human
+                    $patternData['detection_count'] = max(0, $patternData['detection_count'] - 1);
+                }
+
+                // Additional score for repeated pattern detections
+                $patternScore += min(
+                    $this->configCache['maxPatternScore'], 
+                    $patternData['detection_count'] * $this->configCache['patternMultiplier']
+                );
+
+                // Save updated pattern data
+                $this->dataStore->setValue($patternKey, $patternData, $ttl);
+
+                return (float) $patternScore;
             }
-            $patternData['mean_interval'] = $meanInterval;
-
-            // Detect if CV is consistently low (suggests regular pattern)
+            
+            // Calculate pattern score based on existing data
             $avgCV = array_sum($patternData['cv_history']) / count($patternData['cv_history']);
-
-            // Score based on coefficient of variation thresholds
-            $patternScore = 0;
-            $veryRegularThreshold = Config::get('citadel.burstiness.very_regular_threshold', 0.1);
-            $somewhatRegularThreshold = Config::get('citadel.burstiness.somewhat_regular_threshold', 0.25);
-            $veryRegularScore = Config::get('citadel.burstiness.very_regular_score', 30);
-            $somewhatRegularScore = Config::get('citadel.burstiness.somewhat_regular_score', 15);
-            $patternMultiplier = Config::get('citadel.burstiness.pattern_multiplier', 5);
-            $maxPatternScore = Config::get('citadel.burstiness.max_pattern_score', 20);
-
-            if ($avgCV < $veryRegularThreshold) {
-                // Very regular pattern - likely a bot
-                $patternData['detection_count']++;
-                $patternScore = $veryRegularScore;
-            } elseif ($avgCV < $somewhatRegularThreshold) {
-                // Somewhat regular pattern - suspicious
-                $patternData['detection_count']++;
-                $patternScore = $somewhatRegularScore;
-            } else {
-                // Irregular pattern - likely human
-                $patternData['detection_count'] = max(0, $patternData['detection_count'] - 1);
+            
+            if ($avgCV < $this->configCache['veryRegularThreshold']) {
+                return $this->configCache['veryRegularScore'] + 
+                       min($this->configCache['maxPatternScore'], 
+                           $patternData['detection_count'] * $this->configCache['patternMultiplier']);
+            } elseif ($avgCV < $this->configCache['somewhatRegularThreshold']) {
+                return $this->configCache['somewhatRegularScore'] + 
+                       min($this->configCache['maxPatternScore'], 
+                           $patternData['detection_count'] * $this->configCache['patternMultiplier']);
             }
-
-            // Additional score for repeated pattern detections
-            $patternScore += min($maxPatternScore, $patternData['detection_count'] * $patternMultiplier);
-
-            // Save updated pattern data
-            $this->dataStore->setValue($patternKey, $patternData, $ttl);
-
-            return (float) $patternScore;
         }
 
         return 0;
     }
 
     /**
-     * Track history of excessive requests for repeat offender detection.
+     * Track history of excessive requests for repeat offender detection with optimized storage.
      *
      * @param  string  $historyKey  Key for storing historical data
      * @param  int  $timestamp  Current timestamp
@@ -282,15 +370,21 @@ class BurstinessAnalyzer extends AbstractAnalyzer
             'total_excess' => 0,
         ]);
 
-        // Update history data
-        $history['last_violation'] = $timestamp;
-        $history['violation_count']++;
-        $history['max_excess'] = max($history['max_excess'], $excess);
-        $history['total_excess'] += $excess;
+        // Update history data if this is truly a new violation (not the same second)
+        if ($timestamp > $history['last_violation'] + 1000) { 
+            // Update history data
+            $history['last_violation'] = $timestamp;
+            $history['violation_count']++;
+            $history['max_excess'] = max($history['max_excess'], $excess);
+            $history['total_excess'] += $excess;
 
-        // Store with a longer TTL to track persistent offenders
-        $historyMultiplier = Config::get('citadel.burstiness.history_ttl_multiplier', 6);
-        $this->dataStore->setValue($historyKey, $history, $ttl * $historyMultiplier);
+            // Store with a longer TTL to track persistent offenders
+            $this->dataStore->setValue(
+                $historyKey, 
+                $history, 
+                $ttl * $this->configCache['historyTtlMultiplier']
+            );
+        }
     }
 
     /**
@@ -304,28 +398,28 @@ class BurstinessAnalyzer extends AbstractAnalyzer
      */
     protected function getHistoricalScore(string $historyKey): float
     {
-        $history = $this->dataStore->getValue($historyKey, null);
+        $history = $this->dataStore->getValue($historyKey);
 
         // No history found
-        if (! $history) {
+        if (!$history) {
             return 0;
         }
 
         $historyScore = 0;
 
         // Add penalty based on violation frequency
-        $minViolationsForPenalty = Config::get('citadel.burstiness.min_violations_for_penalty', 1);
-        $maxViolationScore = Config::get('citadel.burstiness.max_violation_score', 50);
+        $minViolationsForPenalty = $this->configCache['minViolationsForPenalty'];
+        $maxViolationScore = $this->configCache['maxViolationScore'];
 
         if ($history['violation_count'] > $minViolationsForPenalty) {
-            // Progressive penalty for repeat offenders
+            // Progressive penalty for repeat offenders using cached config
             $historyScore += min($maxViolationScore, pow($history['violation_count'], 1.5));
         }
 
-        // Add penalty for severe violations (high excess)
-        $severeExcessThreshold = Config::get('citadel.burstiness.severe_excess_threshold', 10);
-        $maxExcessScore = Config::get('citadel.burstiness.max_excess_score', 30);
-        $excessMultiplier = Config::get('citadel.burstiness.excess_multiplier', 2);
+        // Add penalty for severe violations (high excess) using cached config
+        $severeExcessThreshold = $this->configCache['severeExcessThreshold'];
+        $maxExcessScore = $this->configCache['maxExcessScore'];
+        $excessMultiplier = $this->configCache['excessMultiplier'];
 
         if ($history['max_excess'] > $severeExcessThreshold) {
             $historyScore += min($maxExcessScore, $history['max_excess'] * $excessMultiplier);
@@ -352,9 +446,8 @@ class BurstinessAnalyzer extends AbstractAnalyzer
      */
     protected function calculateTTL(int $windowSize): int
     {
-        $bufferMultiplier = Config::get('citadel.burstiness.ttl_buffer_multiplier', 2);
-
-        return (int) ($windowSize / 1000 * $bufferMultiplier);
+        // Use cached buffer multiplier for performance
+        return (int) ($windowSize / 1000 * $this->configCache['ttlBufferMultiplier']);
     }
 
     /**
@@ -367,16 +460,5 @@ class BurstinessAnalyzer extends AbstractAnalyzer
     protected function generateKeyName(string $suffix, string $type): string
     {
         return sprintf('%s:%s:%s', self::KEY_PREFIX, $suffix, $type);
-    }
-
-    /**
-     * Get the key suffix from the fingerprint.
-     *
-     * @param  string  $fingerprint  The user fingerprint
-     * @return string The key suffix
-     */
-    protected function getKeySuffix(string $fingerprint): string
-    {
-        return $fingerprint;
     }
 }

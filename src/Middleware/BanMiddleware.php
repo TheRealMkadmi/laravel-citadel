@@ -108,7 +108,7 @@ class BanMiddleware
         $message = Config::get(CitadelConfig::KEY_BAN_MESSAGE, 'You have been banned from accessing this site.');
 
         if (request()->expectsJson()) {
-            return response()->json(['error' => $message], $statusCode);
+            return response()->json($message, $statusCode);
         }
 
         return response($message, $statusCode);
