@@ -13,8 +13,8 @@ use Spatie\LaravelPackageTools\PackageServiceProvider;
 use Symfony\Component\Finder\Finder;
 use TheRealMkadmi\Citadel\Analyzers\IRequestAnalyzer;
 use TheRealMkadmi\Citadel\Commands\CitadelBanCommand;
-use TheRealMkadmi\Citadel\Commands\CitadelCommand;
 use TheRealMkadmi\Citadel\Commands\CitadelUnbanCommand;
+use TheRealMkadmi\Citadel\Commands\CitadelCommand;
 use TheRealMkadmi\Citadel\Components\Fingerprint;
 use TheRealMkadmi\Citadel\DataStore\ArrayDataStore;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
@@ -29,6 +29,28 @@ use TheRealMkadmi\Citadel\Middleware\ProtectRouteMiddleware;
 
 class CitadelServiceProvider extends PackageServiceProvider
 {
+    /**
+     * Group keys for analyzer types
+     */
+    private const ANALYZER_GROUP_ACTIVE = 'active';
+    private const ANALYZER_GROUP_PASSIVE = 'passive';
+    private const ANALYZER_GROUP_PAYLOAD = 'payload_scanners';
+    
+    /**
+     * Config keys
+     */
+    private const CONFIG_CACHE_KEY = 'citadel.cache';
+    private const CONFIG_API_KEY = 'citadel.api';
+    private const CONFIG_MIDDLEWARE_KEY = 'citadel.middleware';
+    
+    /**
+     * Middleware group names
+     */
+    private const MIDDLEWARE_GROUP_PROTECT = 'citadel-protect';
+    private const MIDDLEWARE_GROUP_PASSIVE = 'citadel-passive';
+    private const MIDDLEWARE_GROUP_ACTIVE = 'citadel-active';
+    private const MIDDLEWARE_ALIAS_API_AUTH = 'citadel-api-auth';
+
     public function configurePackage(Package $package): void
     {
         /*
@@ -42,7 +64,6 @@ class CitadelServiceProvider extends PackageServiceProvider
             ->hasViews()
             ->hasViewComponents('citadel', Fingerprint::class)
             ->hasAssets()
-            ->hasCommand(CitadelCommand::class)
             ->hasCommand(CitadelBanCommand::class)
             ->hasCommand(CitadelUnbanCommand::class)
             ->hasInstallCommand(function (InstallCommand $command) {
@@ -75,14 +96,28 @@ class CitadelServiceProvider extends PackageServiceProvider
 
         // Register middleware
         $router = $this->app->make(Router::class);
-        $router->middlewareGroup('citadel-protect', [
+        
+        // Register the passive middleware group (monitoring only, no blocking)
+        $router->middlewareGroup(self::MIDDLEWARE_GROUP_PASSIVE, [
+            PostProtectRouteMiddleware::class,
+        ]);
+        
+        // Register the active middleware group (full protection)
+        $router->middlewareGroup(self::MIDDLEWARE_GROUP_ACTIVE, [
             ProtectRouteMiddleware::class,
             PostProtectRouteMiddleware::class,
             GeofenceMiddleware::class,
             BanMiddleware::class,
         ]);
+        
+        // Keep the original complete middleware group for backward compatibility
+        $router->middlewareGroup(self::MIDDLEWARE_GROUP_PROTECT, [
+            ProtectRouteMiddleware::class,
+            PostProtectRouteMiddleware::class,
+            BanMiddleware::class,
+        ]);
 
-        $router->aliasMiddleware('citadel-api-auth', ApiAuthMiddleware::class);
+        $router->aliasMiddleware(self::MIDDLEWARE_ALIAS_API_AUTH, ApiAuthMiddleware::class);
 
         // Register API routes
         $this->registerApiRoutes();
@@ -119,16 +154,16 @@ class CitadelServiceProvider extends PackageServiceProvider
     protected function registerApiRoutes(): void
     {
         // Only register API routes if they're enabled in the config
-        if (! config('citadel.api.enabled', false)) {
+        if (! config(self::CONFIG_API_KEY.'.enabled', false)) {
             return;
         }
 
-        $prefix = config('citadel.api.prefix', 'api/citadel');
+        $prefix = config(self::CONFIG_API_KEY.'.prefix', 'api/citadel');
         $middlewareGroups = ['api'];
 
         // Add the API auth middleware if a token is configured
-        if (! empty(config('citadel.api.token'))) {
-            $middlewareGroups[] = 'citadel-api-auth';
+        if (! empty(config(self::CONFIG_API_KEY.'.token'))) {
+            $middlewareGroups[] = self::MIDDLEWARE_ALIAS_API_AUTH;
         } else {
             // Log a warning if API is enabled but no token is configured
             $this->app->make('log')->warning('Citadel API is enabled but no API token is configured. This is a security risk.');
@@ -159,7 +194,7 @@ class CitadelServiceProvider extends PackageServiceProvider
     protected function registerDataStore()
     {
         $this->app->singleton(DataStore::class, function ($app) {
-            $driver = config('citadel.cache.driver', 'auto');
+            $driver = config(self::CONFIG_CACHE_KEY.'.driver', 'auto');
 
             // If a specific driver is configured, use it directly
             if ($driver !== 'auto') {
@@ -174,8 +209,8 @@ class CitadelServiceProvider extends PackageServiceProvider
     protected function resolveAutoDataStore($app): DataStore
     {
         // Get preference configuration
-        $preferOctane = config('citadel.cache.prefer_octane', true);
-        $preferRedis = config('citadel.cache.prefer_redis', true);
+        $preferOctane = config(self::CONFIG_CACHE_KEY.'.prefer_octane', true);
+        $preferRedis = config(self::CONFIG_CACHE_KEY.'.prefer_redis', true);
 
         // If Octane is available and preferred, use Octane store
         if ($preferOctane && $app->bound(Server::class)) {
@@ -230,22 +265,73 @@ class CitadelServiceProvider extends PackageServiceProvider
             return new BanMiddleware($app->make(DataStore::class));
         });
 
+        // Register middleware for active analyzers 
         $this->app->singleton(ProtectRouteMiddleware::class, function ($app) {
-            // Get the analyzer class names
-            $analyzerClasses = $this->discoverAnalyzers();
-
-            // Resolve all analyzer instances from the container
-            $analyzers = $analyzerClasses->map(fn ($class) => $app->make($class))->toArray();
-
-            // Create and return the middleware with all analyzers and DataStore injected
+            // Get all analyzers classes, grouped by type
+            $analyzers = $this->groupAnalyzersByType();
+            
+            // Create and return the middleware with active analyzers and DataStore injected
             return new ProtectRouteMiddleware(
-                $analyzers,
+                $analyzers[self::ANALYZER_GROUP_ACTIVE],
+                $app->make(DataStore::class)
+            );
+        });
+        
+        // Register the middleware for passive analyzers
+        $this->app->singleton(PostProtectRouteMiddleware::class, function ($app) {
+            // Get all analyzers classes, grouped by type
+            $analyzers = $this->groupAnalyzersByType();
+            
+            // Create and return the middleware with passive analyzers and DataStore injected
+            return new PostProtectRouteMiddleware(
+                $analyzers[self::ANALYZER_GROUP_PASSIVE],
                 $app->make(DataStore::class)
             );
         });
 
         // Register API auth middleware
         $this->app->singleton(ApiAuthMiddleware::class);
+    }
+    
+    /**
+     * Group analyzers by their type (active/passive) and other properties
+     * 
+     * @return array<string, array<IRequestAnalyzer>>
+     */
+    protected function groupAnalyzersByType(): array
+    {
+        // Discover all analyzer classes
+        $analyzerClasses = $this->discoverAnalyzers();
+        
+        $active = [];
+        $passive = [];
+        $payloadScanners = [];
+        
+        // Group analyzers by their properties
+        foreach ($analyzerClasses as $class) {
+            /** @var IRequestAnalyzer $analyzer */
+            $analyzer = $this->app->make($class);
+            
+            if (!$analyzer->isEnabled()) {
+                continue;
+            }
+            
+            if ($analyzer->scansPayload()) {
+                $payloadScanners[] = $analyzer;
+            }
+            
+            if ($analyzer->isActive()) {
+                $active[] = $analyzer;
+            } else {
+                $passive[] = $analyzer;
+            }
+        }
+        
+        return [
+            self::ANALYZER_GROUP_ACTIVE => $active,
+            self::ANALYZER_GROUP_PASSIVE => $passive,
+            self::ANALYZER_GROUP_PAYLOAD => $payloadScanners,
+        ];
     }
 
     /**

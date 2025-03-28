@@ -9,20 +9,34 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 
-class SpamminessAnalyzer implements IRequestAnalyzer
+class SpamminessAnalyzer extends AbstractAnalyzer
 {
-    protected DataStore $dataStore;
-
-    protected bool $enabled;
-
+    /**
+     * Weights for different spam detection techniques
+     */
     protected array $weights;
 
+    /**
+     * Configuration for text analysis
+     */
     protected array $textAnalysisConfig;
+
+    /**
+     * Indicates if this analyzer scans payload content.
+     */
+    protected bool $scansPayload = true;
+    
+    /**
+     * This analyzer doesn't make external network requests.
+     */
+    protected bool $active = false;
 
     public function __construct(DataStore $dataStore)
     {
-        $this->dataStore = $dataStore;
+        parent::__construct($dataStore);
+        
         $this->enabled = config('citadel.spamminess.enable_spamminess_analyzer', true);
+        $this->cacheTtl = config('citadel.spamminess.cache_ttl', 3600);
         $this->weights = config('citadel.spamminess.weights', [
             'gibberish_text' => 25.0,
             'repetitive_content' => 10.0,

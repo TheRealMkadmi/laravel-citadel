@@ -8,15 +8,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Str;
 use Reefki\DeviceDetector\Device;
-use TheRealMkadmi\Citadel\Contracts\DataStore;
+use TheRealMkadmi\Citadel\DataStore\DataStore;
 
-class DeviceAnalyzer implements IRequestAnalyzer
+class DeviceAnalyzer extends AbstractAnalyzer
 {
-    /**
-     * The data store for caching results.
-     */
-    protected DataStore $dataStore;
-
     /**
      * The score to add for smartphone devices
      */
@@ -43,18 +38,24 @@ class DeviceAnalyzer implements IRequestAnalyzer
     protected float $unknownScore;
 
     /**
-     * Cache TTL in seconds
+     * Indicates if this analyzer scans payload content.
      */
-    protected int $cacheTtl;
+    protected bool $scansPayload = false;
+
+    /**
+     * This analyzer doesn't make external network requests.
+     */
+    protected bool $active = false;
 
     /**
      * Constructor.
      */
     public function __construct(DataStore $dataStore)
     {
-        $this->dataStore = $dataStore;
+        parent::__construct($dataStore);
 
         // Load all configuration values using Laravel's config helper
+        $this->enabled = config('citadel.device.enable_device_analyzer', true);
         $this->smartphoneScore = (float) config('citadel.device.smartphone_score', 0.0);
         $this->tabletScore = (float) config('citadel.device.tablet_score', 0.0);
         $this->desktopScore = (float) config('citadel.device.desktop_score', 10.0);

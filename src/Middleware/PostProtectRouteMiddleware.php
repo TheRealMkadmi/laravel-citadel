@@ -1,309 +1,102 @@
 <?php
 
+declare(strict_types=1);
+
 namespace TheRealMkadmi\Citadel\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
+use TheRealMkadmi\Citadel\Analyzers\IRequestAnalyzer;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 
 class PostProtectRouteMiddleware
 {
     /**
-     * The data store instance.
+     * Configuration keys.
+     */
+    private const CONFIG_KEY_PASSIVE_ENABLED = 'citadel.middleware.passive_enabled';
+    private const CONFIG_KEY_THRESHOLD_SCORE = 'citadel.middleware.threshold_score';
+    
+    /**
+     * Analyzers to run on the request.
+     *
+     * @var array<IRequestAnalyzer>
+     */
+    protected array $analyzers;
+
+    /**
+     * The data store implementation.
      */
     protected DataStore $dataStore;
 
     /**
-     * Cache key prefix.
-     */
-    protected string $keyPrefix;
-
-    /**
-     * Time-to-live for failure records.
-     */
-    protected int $failureTtl;
-
-    /**
-     * Time-to-live for blocked records.
-     */
-    protected int $blockedTtl;
-
-    /**
-     * The number of failures before considering a request highly suspicious.
-     */
-    protected int $failureThreshold;
-
-    /**
-     * Score to add per failure beyond the initial tolerable failures.
-     */
-    protected float $failureScoreIncrement;
-
-    /**
-     * Score to add when failures exceed the threshold.
-     */
-    protected float $highFailureScore;
-
-    /**
      * Create a new middleware instance.
+     *
+     * @param  array<IRequestAnalyzer>  $analyzers  The analyzers to run
+     * @param  DataStore  $dataStore  The data store implementation
      */
-    public function __construct(DataStore $dataStore)
+    public function __construct(array $analyzers, DataStore $dataStore)
     {
+        $this->analyzers = $analyzers;
         $this->dataStore = $dataStore;
-        $this->keyPrefix = config('citadel.cache.key_prefix', 'citadel:');
-        $this->failureTtl = (int) config('citadel.failure_tracking.ttl', 3600);
-        $this->blockedTtl = (int) config('citadel.failure_tracking.blocked_ttl', 86400);
-        $this->failureThreshold = (int) config('citadel.failure_tracking.threshold', 5);
-        $this->failureScoreIncrement = (float) config('citadel.failure_tracking.score_increment', 5.0);
-        $this->highFailureScore = (float) config('citadel.failure_tracking.high_failure_score', 20.0);
     }
 
     /**
-     * Handle an outgoing response.
-     *
-     * @return mixed
+     * Handle an incoming request.
+     * Unlike ProtectRouteMiddleware, this never blocks requests - it only monitors and logs.
      */
     public function handle(Request $request, Closure $next)
     {
-        // Process the request first
+        // Allow the request to proceed first
         $response = $next($request);
-
-        // Only track failures for requests with fingerprints
-        $fingerprint = $request->getFingerprint();
-
-        if ($fingerprint) {
-            $trackingId = $fingerprint;
-        } else {
-            // If no fingerprint is provided, we'll use IP + UserAgent as a fallback
-            $trackingId = md5($request->ip().$request->userAgent());
+        
+        // If no analyzers are registered or middleware is disabled, just return
+        if (empty($this->analyzers) || ! Config::get(self::CONFIG_KEY_PASSIVE_ENABLED, true)) {
+            return $response;
         }
 
-        // Check if the response indicates a failure or was blocked by Citadel
-        $statusCode = $response->getStatusCode();
-
-        // Check if this was a blocked request from Citadel and track it
-        if ($this->isBlockedByCitadel($response)) {
-            $this->trackBlockedRequest(
-                $trackingId,
-                floatval(config('citadel.threshold', 50.0)),
-                ['SystemBlock' => floatval(config('citadel.threshold', 50.0))],
-                'CitadelMiddleware'
-            );
-        }
-
-        // Track failed responses (client errors, server errors, or responses with specific error indicators)
-        if ($statusCode >= 400 || $this->isBlockedByCitadel($response)) {
-            $this->trackFailedResponse($trackingId, $statusCode);
-
-            // After tracking the failure, get the current failure count and calculate additional suspicion
-            $suspectScore = $this->calculateFailureScore($trackingId);
-
-            if ($suspectScore > 0) {
-                // Log the increased suspicion
-                Log::info(trans('citadel::logging.increased_suspicion'), [
-                    'fingerprint' => $fingerprint ?? 'none',
-                    'tracking_id' => $trackingId,
-                    'url' => $request->fullUrl(),
-                    'ip' => $request->ip(),
-                    'failure_suspect_score' => $suspectScore,
+        // Get the user's fingerprint
+        $tracking = $request->getFingerprint();
+        $scores = collect();
+        
+        // Run all registered analyzers and collect their scores
+        foreach ($this->analyzers as $analyzer) {
+            try {
+                $analyzerName = class_basename($analyzer);
+                $score = $analyzer->analyze($request);
+                
+                // Store individual analyzer scores
+                $scores->put($analyzerName, $score);
+            } catch (\Exception $e) {
+                // Log the error but don't block the request
+                Log::error('Citadel passive analyzer error: {message}', [
+                    'message' => $e->getMessage(),
+                    'analyzer' => class_basename($analyzer),
+                    'tracking_id' => $tracking,
+                    'exception' => $e,
                 ]);
-
-                // Store the current failure score for this tracking ID
-                $this->storeFailureScore($trackingId, $suspectScore);
             }
+        }
+
+        // Log suspicious activity but never block
+        $thresholdScore = Config::get(self::CONFIG_KEY_THRESHOLD_SCORE, 100);
+        $totalScore = $scores->sum();
+        
+        if ($totalScore > $thresholdScore) {
+            Log::warning('Citadel: Passive detection of suspicious activity', [
+                'tracking_id' => $tracking,
+                'scores' => $scores->toArray(),
+                'total_score' => $totalScore,
+                'threshold' => $thresholdScore,
+                'ip' => $request->ip(),
+                'url' => $request->fullUrl(),
+                'user_agent' => $request->userAgent(),
+            ]);
         }
 
         return $response;
-    }
-
-    /**
-     * Check if the response was blocked by Citadel.
-     *
-     * @param  mixed  $response
-     */
-    protected function isBlockedByCitadel($response): bool
-    {
-        // Check for specific indicators that the response was generated by Citadel's blocking mechanism
-        if ($response->getStatusCode() === 403) {
-            $content = $response->getContent();
-            if (is_string($content) && Str::contains($content, [
-                trans('citadel::messages.system_tag'),
-                trans('citadel::messages.request_blocked_tag'),
-            ])) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Track a failed response in the data store.
-     */
-    protected function trackFailedResponse(string $trackingId, int $statusCode): void
-    {
-        // Following the atomic counter with TTL approach described in the design document
-        $failCountKey = Str::start("fw:{$trackingId}:failCount", $this->keyPrefix);
-
-        // For detailed failure tracking, also maintain a record of failure types
-        $failDetailsKey = Str::start("fw:{$trackingId}:failDetails", $this->keyPrefix);
-
-        // Track validation failures separately from firewall blocks
-        $category = $this->getFailureCategory($statusCode);
-        $categoryKey = Str::start("fw:{$trackingId}:fail_{$category}", $this->keyPrefix);
-
-        // Record the timestamp of this failure in a sorted set
-        $failTimestampsKey = Str::start("fw:{$trackingId}:failures", $this->keyPrefix);
-        $currentTimestamp = now()->timestamp;
-
-        // Use a pipeline to execute multiple Redis commands efficiently
-        $this->dataStore->pipeline(function ($pipeline) use (
-            $failCountKey,
-            $categoryKey,
-            $failDetailsKey,
-            $failTimestampsKey,
-            $statusCode,
-            $currentTimestamp
-        ) {
-            // Increment the total failure count
-            $pipeline->increment($failCountKey);
-            $pipeline->expire($failCountKey, $this->failureTtl);
-
-            // Increment the category-specific failure count
-            $pipeline->increment($categoryKey);
-            $pipeline->expire($categoryKey, $this->failureTtl);
-
-            // Add the failure timestamp to the sorted set
-            $pipeline->zAdd($failTimestampsKey, $currentTimestamp, $currentTimestamp, $this->failureTtl);
-
-            // Clean up old timestamps (keep only recent ones)
-            $cutoffTime = now()->subHour()->timestamp;
-            $pipeline->zRemRangeByScore($failTimestampsKey, '-inf', $cutoffTime);
-
-            // Store or update failure details
-            if ($this->dataStore->hasValue($failDetailsKey)) {
-                $failData = $this->dataStore->getValue($failDetailsKey);
-                $failData['count'] = ($failData['count'] ?? 0) + 1;
-
-                if (! isset($failData['codes'])) {
-                    $failData['codes'] = [];
-                }
-
-                $failData['codes'][$statusCode] = ($failData['codes'][$statusCode] ?? 0) + 1;
-                $failData['last_failure'] = $currentTimestamp;
-                $this->dataStore->setValue($failDetailsKey, $failData, $this->failureTtl);
-            } else {
-                $this->dataStore->setValue($failDetailsKey, [
-                    'count' => 1,
-                    'codes' => [$statusCode => 1],
-                    'first_failure' => $currentTimestamp,
-                    'last_failure' => $currentTimestamp,
-                ], $this->failureTtl);
-            }
-        });
-    }
-
-    /**
-     * Calculate a suspect score based on failure history.
-     */
-    protected function calculateFailureScore(string $trackingId): float
-    {
-        $suspectScore = 0;
-
-        // Get the total number of failures in the last hour
-        $failCountKey = Str::start("fw:{$trackingId}:failCount", $this->keyPrefix);
-        $failCount = (int) $this->dataStore->getValue($failCountKey, 0);
-
-        // Get category-specific counts
-        $validationFailsKey = Str::start("fw:{$trackingId}:fail_validation", $this->keyPrefix);
-        $blockFailsKey = Str::start("fw:{$trackingId}:fail_blocked", $this->keyPrefix);
-
-        $validationFails = (int) $this->dataStore->getValue($validationFailsKey, 0);
-        $blockFails = (int) $this->dataStore->getValue($blockFailsKey, 0);
-
-        // Get recent failures count (within a shorter window)
-        $failTimestampsKey = Str::start("fw:{$trackingId}:failures", $this->keyPrefix);
-        $recentFailCount = $this->dataStore->zCard($failTimestampsKey);
-
-        // Implement the failure scoring logic as described in the design document
-        // 1-2 failures might be benign, beyond that we add to the suspect score
-        if ($failCount <= config('citadel.failure_tracking.benign_failures', 2)) {
-            // No penalty for benign failures
-            return 0;
-        }
-
-        // For failures beyond the initial tolerable ones
-        $excessFailures = $failCount - config('citadel.failure_tracking.benign_failures', 2);
-        $suspectScore += $excessFailures * $this->failureScoreIncrement;
-
-        // If failure count exceeds the threshold, add a larger chunk to the suspect score
-        if ($failCount >= $this->failureThreshold) {
-            $suspectScore += $this->highFailureScore;
-        }
-
-        // Weight firewall blocks more heavily than validation failures
-        if ($blockFails > 0) {
-            $suspectScore += $blockFails * config('citadel.failure_tracking.block_multiplier', 10);
-        }
-
-        // If we see a burst of failures in a short time window, that's more suspicious
-        if ($recentFailCount >= config('citadel.failure_tracking.burst_threshold', 3) &&
-            $recentFailCount / $failCount > config('citadel.failure_tracking.burst_ratio', 0.5)) {
-            $suspectScore *= config('citadel.failure_tracking.burst_multiplier', 1.5);
-        }
-
-        return min($suspectScore, config('citadel.failure_tracking.max_score', 100.0));
-    }
-
-    /**
-     * Determine the category of a failure based on status code.
-     */
-    protected function getFailureCategory(int $statusCode): string
-    {
-        if ($statusCode === 403) {
-            return 'blocked';
-        } elseif ($statusCode === 422) {
-            return 'validation';
-        } elseif ($statusCode >= 400 && $statusCode < 500) {
-            return 'client_error';
-        } else {
-            return 'server_error';
-        }
-    }
-
-    /**
-     * Store the current failure score for this tracking ID.
-     */
-    protected function storeFailureScore(string $trackingId, float $suspectScore): void
-    {
-        $scoreKey = Str::start("fw:{$trackingId}:failureScore", $this->keyPrefix);
-        $this->dataStore->setValue($scoreKey, $suspectScore, $this->failureTtl);
-    }
-
-    /**
-     * Track a blocked request in the data store
-     */
-    protected function trackBlockedRequest(string $trackingId, float $totalScore, array $scoreBreakdown, string $terminatedBy): void
-    {
-        $blockedKey = Str::start("blocked:{$trackingId}", $this->keyPrefix);
-
-        // Store the blocked request details
-        $this->dataStore->setValue($blockedKey, [
-            'timestamp' => now()->timestamp,
-            'total_score' => $totalScore,
-            'breakdown' => $scoreBreakdown,
-            'terminated_by' => $terminatedBy,
-        ], $this->blockedTtl);
-
-        // Increment blocked count for this tracking ID
-        $blockedCountKey = Str::start("blocked:count:{$trackingId}", $this->keyPrefix);
-
-        if (! $this->dataStore->hasValue($blockedCountKey)) {
-            $this->dataStore->setValue($blockedCountKey, 1, $this->blockedTtl);
-        } else {
-            $this->dataStore->increment($blockedCountKey);
-        }
     }
 }

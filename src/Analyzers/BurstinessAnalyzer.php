@@ -6,9 +6,9 @@ namespace TheRealMkadmi\Citadel\Analyzers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
-use TheRealMkadmi\Citadel\Contracts\DataStore;
+use TheRealMkadmi\Citadel\DataStore\DataStore;
 
-class BurstinessAnalyzer implements IRequestAnalyzer
+class BurstinessAnalyzer extends AbstractAnalyzer
 {
     /**
      * The key prefix for fingerprint request data.
@@ -16,9 +16,14 @@ class BurstinessAnalyzer implements IRequestAnalyzer
     private const KEY_PREFIX = 'fw';
 
     /**
-     * The DataStore instance.
+     * Indicates if this analyzer scans payload content.
      */
-    protected DataStore $dataStore;
+    protected bool $scansPayload = false;
+    
+    /**
+     * This analyzer doesn't make external requests.
+     */
+    protected bool $active = false;
 
     /**
      * Constructor.
@@ -27,7 +32,9 @@ class BurstinessAnalyzer implements IRequestAnalyzer
      */
     public function __construct(DataStore $dataStore)
     {
-        $this->dataStore = $dataStore;
+        parent::__construct($dataStore);
+        $this->enabled = config('citadel.burstiness.enable_burstiness_analyzer', true);
+        $this->cacheTtl = config('citadel.cache.burst_analysis_ttl', 3600);
     }
 
     /**

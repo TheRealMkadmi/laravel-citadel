@@ -10,23 +10,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 
-class PayloadAnalyzer implements IRequestAnalyzer
+class PayloadAnalyzer extends AbstractAnalyzer
 {
-    /**
-     * The data store for caching results.
-     */
-    protected DataStore $dataStore;
-
-    /**
-     * Cache TTL in seconds
-     */
-    protected int $cacheTtl;
-
-    /**
-     * Flag to enable or disable the analyzer
-     */
-    protected bool $enabled;
-
     /**
      * Known suspicious patterns in request payloads
      */
@@ -43,12 +28,22 @@ class PayloadAnalyzer implements IRequestAnalyzer
     protected float $threatThreshold;
 
     /**
+     * Indicates if this analyzer scans payload content.
+     */
+    protected bool $scansPayload = true;
+    
+    /**
+     * This analyzer doesn't make external network requests.
+     */
+    protected bool $active = false;
+
+    /**
      * Constructor.
      */
     public function __construct(DataStore $dataStore)
     {
-        $this->dataStore = $dataStore;
-
+        parent::__construct($dataStore);
+        
         // Load all configuration values using Laravel's config helper
         $this->enabled = config('citadel.payload.enable_payload_analyzer', true);
         $this->cacheTtl = config('citadel.payload.cache_ttl', config('citadel.cache.payload_analysis_ttl', 3600));

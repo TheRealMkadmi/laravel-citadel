@@ -8,23 +8,8 @@ use Illuminate\Http\Request;
 use TheRealMkadmi\Citadel\Clients\IncolumitasApiClient;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 
-class IpAnalyzer implements IRequestAnalyzer
+class IpAnalyzer extends AbstractAnalyzer
 {
-    /**
-     * The data store for caching results.
-     */
-    protected DataStore $dataStore;
-
-    /**
-     * Cache TTL in seconds
-     */
-    protected int $cacheTtl;
-
-    /**
-     * Flag to enable or disable the analyzer
-     */
-    protected bool $enabled;
-
     /**
      * The API client for IP intelligence
      */
@@ -36,11 +21,21 @@ class IpAnalyzer implements IRequestAnalyzer
     protected array $weights;
 
     /**
+     * Indicates if this analyzer scans payload content.
+     */
+    protected bool $scansPayload = false;
+    
+    /**
+     * Indicates if this analyzer makes external requests.
+     */
+    protected bool $active = true;
+
+    /**
      * Constructor.
      */
     public function __construct(DataStore $dataStore, IncolumitasApiClient $apiClient)
     {
-        $this->dataStore = $dataStore;
+        parent::__construct($dataStore);
         $this->apiClient = $apiClient;
 
         // Load all configuration values using Laravel's config helper

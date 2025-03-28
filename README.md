@@ -71,6 +71,67 @@ The configuration file is located at `config/citadel.php`. Below are the availab
 
 ---
 
+## Middleware Groups
+
+Laravel Citadel provides three middleware groups that you can use in your application:
+
+### 1. Passive Monitoring Only (`citadel-passive`)
+
+The passive middleware group only runs analyzers that don't make external requests. It provides monitoring and logging without blocking any requests, ideal for gathering intelligence about traffic patterns.
+
+```php
+Route::middleware(['citadel-passive'])->group(function () {
+    // These routes will be monitored but never blocked
+    Route::get('/public-content', 'ContentController@index');
+});
+```
+
+### 2. Active Protection (`citadel-active`) 
+
+The active middleware group runs analyzers that may make external requests (such as IP intelligence lookups) and will block malicious traffic. This includes geofencing and ban checking.
+
+```php
+Route::middleware(['citadel-active'])->group(function () {
+    // These routes get full protection with external API calls
+    Route::post('/login', 'AuthController@login');
+    Route::post('/register', 'AuthController@register');
+});
+```
+
+### 3. Complete Protection (`citadel-protect`)
+
+For maximum security, the complete protection middleware group combines both active and passive analyzers. This is the original middleware group and provides backward compatibility.
+
+```php
+Route::middleware(['citadel-protect'])->group(function () {
+    // These routes get complete protection with all analyzers
+    Route::post('/checkout', 'PaymentController@processPayment');
+});
+```
+
+### Configuration
+
+You can enable or disable each middleware group independently in your configuration:
+
+```php
+// In config/citadel.php
+'middleware' => [
+    'enabled' => env('CITADEL_ENABLED', true),             // Global on/off switch
+    'passive_enabled' => env('CITADEL_PASSIVE_ENABLED', true), // Enable passive monitoring
+    'active_enabled' => env('CITADEL_ACTIVE_ENABLED', true),   // Enable active protection
+],
+```
+
+This configuration also applies to your `.env` file:
+
+```
+CITADEL_ENABLED=true
+CITADEL_PASSIVE_ENABLED=true
+CITADEL_ACTIVE_ENABLED=true
+```
+
+---
+
 ## Middleware
 
 ### ProtectRouteMiddleware

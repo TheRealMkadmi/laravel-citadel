@@ -1,69 +1,156 @@
 <?php
 
+declare(strict_types=1);
+
 namespace TheRealMkadmi\Citadel\Middleware;
 
+use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
-use TheRealMkadmi\Citadel\Clients\IncolumitasApiClient;
 
 class GeofenceMiddleware
 {
-    protected IncolumitasApiClient $apiClient;
+    /**
+     * Configuration keys.
+     */
+    private const CONFIG_KEY_ENABLED = 'citadel.middleware.active_enabled';
+    private const CONFIG_KEY_GEOFENCING_ENABLED = 'citadel.geofencing.enabled';
+    private const CONFIG_KEY_GEOFENCING_MODE = 'citadel.geofencing.mode';
+    private const CONFIG_KEY_GEOFENCING_COUNTRIES = 'citadel.geofencing.countries';
 
-    public function __construct(IncolumitasApiClient $apiClient)
-    {
-        $this->apiClient = $apiClient;
-    }
+    /**
+     * Geofencing modes.
+     */
+    private const MODE_ALLOW = 'allow';
+    private const MODE_BLOCK = 'block';
+    
+    /**
+     * Country header names to check.
+     */
+    private const COUNTRY_HEADERS = [
+        'HTTP_CF_IPCOUNTRY',
+        'X-Country-Code',
+        'GEOIP_COUNTRY_CODE',
+    ];
 
-    public function handle(Request $request, \Closure $next)
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Closure  $next
+     * @return mixed
+     */
+    public function handle(Request $request, Closure $next)
     {
-        // Check if geofencing is enabled
-        if (! config('citadel.geofencing.enabled')) {
+        // Skip geofencing if not enabled or if active middleware is disabled
+        if (!Config::get(self::CONFIG_KEY_ENABLED, true) || 
+            !Config::get(self::CONFIG_KEY_GEOFENCING_ENABLED, false)) {
             return $next($request);
         }
 
-        // Get visitor's IP and query for location data
-        $lookupResult = $this->apiClient->query($request->ip());
+        // Get country code from request headers
+        $countryCode = $this->getCountryCode($request);
 
-        // Extract the country code from the response
-        $countryCode = data_get($lookupResult, 'country', null);
-
-        // If country couldn't be determined, log warning and continue
-        if (! $countryCode) {
-            Log::warning('Citadel Geofencing: Could not determine country for IP: '.$request->ip());
-
+        // If country code couldn't be determined, allow the request
+        if (!$countryCode) {
+            Log::info('Citadel Geofencing: Unable to determine country, allowing request');
             return $next($request);
         }
 
-        // Get geofencing mode and countries list
-        $firewallMode = config('citadel.geofencing.mode', 'block');
-        $countriesList = collect(
-            explode(',', config('citadel.geofencing.countries', ''))
-        )->map(fn ($country) => trim($country))->filter()->values()->toArray();
+        // Get the configured list of countries
+        $countriesList = $this->getCountriesList();
 
-        // Get the request country and check against the list
-        $isCountryInList = in_array(strtoupper($countryCode), array_map('strtoupper', $countriesList));
+        // No countries configured, allow all requests
+        if (empty($countriesList)) {
+            return $next($request);
+        }
 
-        // Apply geofencing logic based on mode
-        if ($firewallMode === 'allow') {
-            // Whitelist mode: Only allow listed countries
-            if (! $isCountryInList) {
-                Log::info("Citadel Geofencing: Blocked request from {$countryCode} (not in allowlist)");
-                abort(Response::HTTP_FORBIDDEN, 'Access denied based on geographic location');
+        // Check if the country is in the configured list
+        $isCountryInList = in_array($countryCode, $countriesList);
+        $firewallMode = Config::get(self::CONFIG_KEY_GEOFENCING_MODE, self::MODE_BLOCK);
+
+        if ($firewallMode === self::MODE_ALLOW) {
+            // Allowlist mode: Only allow listed countries
+            if (!$isCountryInList) {
+                Log::info('Citadel Geofencing: Blocked request from {country} (not in allowlist)', [
+                    'country' => $countryCode,
+                ]);
+                return $this->denyAccess();
             }
-        } elseif ($firewallMode === 'block') {
-            // Blacklist mode: Block listed countries
+        } elseif ($firewallMode === self::MODE_BLOCK) {
+            // Blocklist mode: Block listed countries
             if ($isCountryInList) {
-                Log::info("Citadel Geofencing: Blocked request from {$countryCode} (in blocklist)");
-                abort(Response::HTTP_FORBIDDEN, 'Access denied based on geographic location');
+                Log::info('Citadel Geofencing: Blocked request from {country} (in blocklist)', [
+                    'country' => $countryCode,
+                ]);
+                return $this->denyAccess();
             }
         } else {
-            Log::error("Invalid firewall mode: {$firewallMode}");
+            Log::error('Invalid firewall mode: {mode}', ['mode' => $firewallMode]);
             throw new \InvalidArgumentException("Invalid citadel firewall mode: {$firewallMode}");
         }
 
         // Country passed the geofence check
         return $next($request);
+    }
+
+    /**
+     * Get the country code from the request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return string|null
+     */
+    protected function getCountryCode(Request $request): ?string
+    {
+        $countryCode = null;
+
+        // Check common headers for country code
+        foreach (self::COUNTRY_HEADERS as $header) {
+            if ($request->server($header)) {
+                $countryCode = $request->server($header);
+                break;
+            }
+        }
+
+        // Check if we have a country code and format it
+        if ($countryCode) {
+            // Ensure uppercase alpha-2 country code format
+            return Str::upper($countryCode);
+        }
+
+        return null;
+    }
+
+    /**
+     * Get the list of countries from configuration.
+     *
+     * @return array
+     */
+    protected function getCountriesList(): array
+    {
+        $countries = Config::get(self::CONFIG_KEY_GEOFENCING_COUNTRIES, '');
+        
+        if (empty($countries)) {
+            return [];
+        }
+
+        // Return as array of uppercase country codes
+        return collect(explode(',', $countries))
+            ->map(fn($country) => Str::upper(trim($country)))
+            ->filter()
+            ->toArray();
+    }
+
+    /**
+     * Return a forbidden response.
+     *
+     * @return \Symfony\Component\HttpFoundation\Response
+     */
+    protected function denyAccess(): Response
+    {
+        return abort(Response::HTTP_FORBIDDEN, 'Access denied based on geographic location');
     }
 }
