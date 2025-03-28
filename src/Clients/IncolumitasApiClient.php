@@ -15,16 +15,11 @@ class IncolumitasApiClient
 
     /**
      * Cache TTL in seconds.
-     *
-     * @var int
      */
     protected int $cacheTtl;
 
     /**
      * Create a new API client instance.
-     *
-     * @param DataStore $dataStore
-     * @param int $cacheTtl
      */
     public function __construct(DataStore $dataStore, int $cacheTtl = 3600)
     {
@@ -35,14 +30,12 @@ class IncolumitasApiClient
     /**
      * Query the Incolumitas API for information about an IP.
      *
-     * @param string $ip
-     * @return QueryResult
      *
      * @throws Exception if the API call fails.
      */
     public function query(string $ip): QueryResult
     {
-        $cacheKey = "incolumitas:" . $ip;
+        $cacheKey = 'incolumitas:'.$ip;
         $cached = $this->dataStore->getValue($cacheKey);
 
         if ($cached !== null && $cached instanceof QueryResult) {
@@ -51,7 +44,7 @@ class IncolumitasApiClient
 
         $response = Http::get('https://api.incolumitas.com/', ['q' => $ip]);
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             throw new Exception("Failed to fetch information for IP: {$ip}");
         }
 
@@ -70,31 +63,29 @@ class IncolumitasApiClient
 class QueryResult
 {
     public string $ip;
+
     public string $country;
+
     public bool $isBogon;
+
     public bool $isMobile;
+
     public bool $isSatellite;
+
     public bool $isCrawler;
+
     public bool $isDatacenter;
+
     public bool $isTor;
+
     public bool $isProxy;
+
     public bool $isVpn;
+
     public bool $isAbuser;
 
     /**
      * Construct the QueryResult from an array.
-     *
-     * @param string $ip
-     * @param string $country
-     * @param bool $isBogon
-     * @param bool $isMobile
-     * @param bool $isSatellite
-     * @param bool $isCrawler
-     * @param bool $isDatacenter
-     * @param bool $isTor
-     * @param bool $isProxy
-     * @param bool $isVpn
-     * @param bool $isAbuser
      */
     public function __construct(
         string $ip,
@@ -124,9 +115,6 @@ class QueryResult
 
     /**
      * Create a QueryResult instance from an array.
-     *
-     * @param array $data
-     * @return self
      */
     public static function fromArray(array $data): self
     {

@@ -5,9 +5,7 @@ namespace TheRealMkadmi\Citadel;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Str;
 use Laravel\Octane\Server;
 use Spatie\LaravelPackageTools\Commands\InstallCommand;
 use Spatie\LaravelPackageTools\Package;
@@ -18,8 +16,8 @@ use TheRealMkadmi\Citadel\Commands\CitadelBanCommand;
 use TheRealMkadmi\Citadel\Commands\CitadelCommand;
 use TheRealMkadmi\Citadel\Commands\CitadelUnbanCommand;
 use TheRealMkadmi\Citadel\Components\Fingerprint;
-use TheRealMkadmi\Citadel\DataStore\DataStore;
 use TheRealMkadmi\Citadel\DataStore\ArrayDataStore;
+use TheRealMkadmi\Citadel\DataStore\DataStore;
 use TheRealMkadmi\Citadel\DataStore\OctaneDataStore;
 use TheRealMkadmi\Citadel\DataStore\RedisDataStore;
 use TheRealMkadmi\Citadel\Http\Controllers\CitadelApiController;
@@ -83,9 +81,9 @@ class CitadelServiceProvider extends PackageServiceProvider
             GeofenceMiddleware::class,
             BanMiddleware::class,
         ]);
-        
+
         $router->aliasMiddleware('citadel-api-auth', ApiAuthMiddleware::class);
-        
+
         // Register API routes
         $this->registerApiRoutes();
     }
@@ -108,47 +106,45 @@ class CitadelServiceProvider extends PackageServiceProvider
         // Register analyzers and middleware
         $this->registerAnalyzers();
         $this->registerMiddleware();
-        
+
         // Register API controller
         $this->app->singleton(CitadelApiController::class, function ($app) {
             return new CitadelApiController($app->make(DataStore::class));
         });
     }
-    
+
     /**
      * Register API routes.
-     *
-     * @return void
      */
     protected function registerApiRoutes(): void
     {
         // Only register API routes if they're enabled in the config
-        if (!config('citadel.api.enabled', false)) {
+        if (! config('citadel.api.enabled', false)) {
             return;
         }
-        
+
         $prefix = config('citadel.api.prefix', 'api/citadel');
         $middlewareGroups = ['api'];
-        
+
         // Add the API auth middleware if a token is configured
-        if (!empty(config('citadel.api.token'))) {
+        if (! empty(config('citadel.api.token'))) {
             $middlewareGroups[] = 'citadel-api-auth';
         } else {
             // Log a warning if API is enabled but no token is configured
             $this->app->make('log')->warning('Citadel API is enabled but no API token is configured. This is a security risk.');
         }
-        
+
         Route::prefix($prefix)
             ->middleware($middlewareGroups)
             ->group(function () {
                 // Ban endpoint
                 Route::post('/ban', [CitadelApiController::class, 'ban'])
                     ->name('citadel.api.ban');
-                
+
                 // Unban endpoint
                 Route::post('/unban', [CitadelApiController::class, 'unban'])
                     ->name('citadel.api.unban');
-                    
+
                 // Status endpoint - allows checking if the API is accessible
                 Route::get('/status', function () {
                     return response()->json([
@@ -233,7 +229,7 @@ class CitadelServiceProvider extends PackageServiceProvider
         $this->app->singleton(BanMiddleware::class, function ($app) {
             return new BanMiddleware($app->make(DataStore::class));
         });
-        
+
         $this->app->singleton(ProtectRouteMiddleware::class, function ($app) {
             // Get the analyzer class names
             $analyzerClasses = $this->discoverAnalyzers();
@@ -247,7 +243,7 @@ class CitadelServiceProvider extends PackageServiceProvider
                 $app->make(DataStore::class)
             );
         });
-        
+
         // Register API auth middleware
         $this->app->singleton(ApiAuthMiddleware::class);
     }

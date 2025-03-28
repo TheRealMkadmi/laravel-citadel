@@ -4,7 +4,6 @@ namespace TheRealMkadmi\Citadel\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Validator;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 
 class CitadelBanCommand extends Command
@@ -25,22 +24,17 @@ class CitadelBanCommand extends Command
 
     /**
      * The data store instance.
-     *
-     * @var \TheRealMkadmi\Citadel\DataStore\DataStore
      */
     protected DataStore $dataStore;
 
     /**
      * The prefix used for ban cache keys.
-     *
-     * @var string
      */
     protected string $banKeyPrefix;
 
     /**
      * Create a new command instance.
      *
-     * @param \TheRealMkadmi\Citadel\DataStore\DataStore $dataStore
      * @return void
      */
     public function __construct(DataStore $dataStore)
@@ -48,13 +42,11 @@ class CitadelBanCommand extends Command
         parent::__construct();
 
         $this->dataStore = $dataStore;
-        $this->banKeyPrefix = config('citadel.cache.key_prefix', 'citadel:') . config('citadel.ban.cache_key', 'banned');
+        $this->banKeyPrefix = config('citadel.cache.key_prefix', 'citadel:').config('citadel.ban.cache_key', 'banned');
     }
 
     /**
      * Execute the console command.
-     *
-     * @return int
      */
     public function handle(): int
     {
@@ -68,14 +60,16 @@ class CitadelBanCommand extends Command
         }
 
         // Validate the identifier type
-        if (!in_array($type, ['ip', 'fingerprint'])) {
+        if (! in_array($type, ['ip', 'fingerprint'])) {
             $this->error("Invalid identifier type: {$type}. Must be 'ip', 'fingerprint', or 'auto'.");
+
             return self::FAILURE;
         }
 
         // Validate the identifier based on its type
-        if (!$this->validateIdentifier($identifier, $type)) {
+        if (! $this->validateIdentifier($identifier, $type)) {
             $this->error("Invalid {$type} format: {$identifier}");
+
             return self::FAILURE;
         }
 
@@ -87,7 +81,7 @@ class CitadelBanCommand extends Command
         $this->dataStore->setValue($banKey, true, $ttl);
 
         // Log the action
-        $durationText = $ttl ? "for {$duration} minutes" : "permanently";
+        $durationText = $ttl ? "for {$duration} minutes" : 'permanently';
         $this->info("User {$durationText} banned by {$type}: {$identifier}");
         Log::info("Citadel: User banned by {$type}", [
             'identifier' => $identifier,
@@ -100,9 +94,6 @@ class CitadelBanCommand extends Command
 
     /**
      * Detect the type of identifier (IP or fingerprint).
-     *
-     * @param string $identifier
-     * @return string
      */
     protected function detectIdentifierType(string $identifier): string
     {
@@ -117,10 +108,6 @@ class CitadelBanCommand extends Command
 
     /**
      * Validate the identifier based on its type.
-     *
-     * @param string $identifier
-     * @param string $type
-     * @return bool
      */
     protected function validateIdentifier(string $identifier, string $type): bool
     {
@@ -128,7 +115,7 @@ class CitadelBanCommand extends Command
             return filter_var($identifier, FILTER_VALIDATE_IP) !== false;
         } elseif ($type === 'fingerprint') {
             // Simple validation for fingerprint (non-empty string)
-            return !empty(trim($identifier));
+            return ! empty(trim($identifier));
         }
 
         return false;
@@ -137,9 +124,8 @@ class CitadelBanCommand extends Command
     /**
      * Generate a cache key for banned items.
      *
-     * @param string $type The type of ban (ip or fingerprint)
-     * @param string $value The value to check (ip address or fingerprint)
-     * @return string
+     * @param  string  $type  The type of ban (ip or fingerprint)
+     * @param  string  $value  The value to check (ip address or fingerprint)
      */
     protected function generateBanKey(string $type, string $value): string
     {

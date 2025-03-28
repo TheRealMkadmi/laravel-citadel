@@ -95,8 +95,8 @@ return [
     */
     'ip' => [
         'enable_ip_analyzer' => env('CITADEL_ENABLE_IP_ANALYZER', true),
-        
-        // Weights for different IP characteristics 
+
+        // Weights for different IP characteristics
         'weights' => [
             'bogon' => env('CITADEL_IP_WEIGHT_BOGON', 80.0),
             'datacenter' => env('CITADEL_IP_WEIGHT_DATACENTER', 30.0),
@@ -108,7 +108,7 @@ return [
             'mobile' => env('CITADEL_IP_WEIGHT_MOBILE', -10.0),
             'crawler' => env('CITADEL_IP_WEIGHT_CRAWLER', 20.0),
         ],
-        
+
         // Country-specific handling
         'country_scores' => [
             'high_risk_countries' => [],
@@ -231,11 +231,11 @@ return [
         'cache_ttl' => env('CITADEL_PAYLOAD_CACHE_TTL', 3600),
         'max_score' => env('CITADEL_PAYLOAD_MAX_SCORE', 100.0),
         'threat_threshold' => env('CITADEL_PAYLOAD_THREAT_THRESHOLD', 40.0),
-        
+
         // Request size limits
         'max_size' => env('CITADEL_PAYLOAD_MAX_SIZE', 1048576), // 1MB
         'max_params' => env('CITADEL_PAYLOAD_MAX_PARAMS', 100),
-        
+
         // Scoring for anomaly detection
         'large_payload_score' => env('CITADEL_PAYLOAD_LARGE_SIZE_SCORE', 20.0),
         'many_params_score' => env('CITADEL_PAYLOAD_MANY_PARAMS_SCORE', 15.0),
@@ -259,7 +259,7 @@ return [
     'spamminess' => [
         'enable_spamminess_analyzer' => env('CITADEL_ENABLE_SPAMMINESS_ANALYZER', true),
         'max_score' => env('CITADEL_SPAMMINESS_MAX_SCORE', 100.0),
-        
+
         // Scoring weights for different types of anomalies
         'weights' => [
             'gibberish_text' => env('CITADEL_SPAMMINESS_GIBBERISH_WEIGHT', 25.0),
@@ -267,7 +267,7 @@ return [
             'suspicious_entropy' => env('CITADEL_SPAMMINESS_ENTROPY_WEIGHT', 20.0),
             'statistical_anomaly' => env('CITADEL_SPAMMINESS_STATISTICAL_WEIGHT', 30.0),
         ],
-        
+
         // Text analysis parameters
         'text_analysis' => [
             'min_entropy_threshold' => env('CITADEL_SPAMMINESS_MIN_ENTROPY', 1.0),

@@ -19,8 +19,6 @@ class ProtectRouteMiddleware
 
     /**
      * The data store instance.
-     *
-     * @var \TheRealMkadmi\Citadel\DataStore\DataStore
      */
     protected DataStore $dataStore;
 
@@ -32,8 +30,7 @@ class ProtectRouteMiddleware
     /**
      * Create a new middleware instance.
      *
-     * @param array<IRequestAnalyzer> $analyzers
-     * @param \TheRealMkadmi\Citadel\DataStore\DataStore $dataStore
+     * @param  array<IRequestAnalyzer>  $analyzers
      */
     public function __construct(array $analyzers, DataStore $dataStore)
     {
@@ -66,25 +63,25 @@ class ProtectRouteMiddleware
             'url' => $request->fullUrl(),
             'ip' => $request->ip(),
         ];
-        
+
         // Check if there's a failure score from previous requests that should be incorporated
-        $failureScoreKey = Str::start("fw:{$trackingId}:failureScore", 
+        $failureScoreKey = Str::start("fw:{$trackingId}:failureScore",
             config('citadel.cache.key_prefix', 'citadel:'));
-        
+
         if ($this->dataStore->hasValue($failureScoreKey)) {
             $failureScore = (float) $this->dataStore->getValue($failureScoreKey, 0);
             $totalScore += $failureScore;
             $scoreBreakdown['FailureHistory'] = $failureScore;
-            
+
             Log::debug(trans('citadel::logging.failure_history_added'), array_merge($logContext, [
                 'failure_score' => $failureScore,
                 'updated_total' => $totalScore,
             ]));
         }
-        
+
         // Filter analyzers based on request method
         $applicableAnalyzers = $this->getApplicableAnalyzers($request);
-        
+
         // Process each applicable analyzer and collect scores
         foreach ($applicableAnalyzers as $analyzer) {
             $shortName = class_basename($analyzer);
@@ -145,11 +142,10 @@ class ProtectRouteMiddleware
         // Allow the request to proceed if the score is below the threshold
         return $next($request);
     }
-    
+
     /**
      * Get analyzers applicable to the current request based on whether it has a body
      *
-     * @param Request $request
      * @return array<IRequestAnalyzer>
      */
     protected function getApplicableAnalyzers(Request $request): array
@@ -157,18 +153,18 @@ class ProtectRouteMiddleware
         return collect($this->analyzers)->filter(function ($analyzer) use ($request) {
             // Special handling for PayloadAnalyzer and SpamminessAnalyzer:
             // Only run them if the request has a body
-            if ($analyzer instanceof PayloadAnalyzer || 
+            if ($analyzer instanceof PayloadAnalyzer ||
                 $analyzer instanceof SpamminessAnalyzer) {
-                
+
                 // Check if request has any content
-                $hasBody = !empty($request->all()) || !empty($request->getContent());
-                
+                $hasBody = ! empty($request->all()) || ! empty($request->getContent());
+
                 // Skip these analyzers for requests without a body
-                if (!$hasBody) {
+                if (! $hasBody) {
                     return false;
                 }
             }
-            
+
             // Include all other analyzers
             return true;
         })->values()->all();

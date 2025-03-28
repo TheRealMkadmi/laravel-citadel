@@ -24,22 +24,17 @@ class CitadelUnbanCommand extends Command
 
     /**
      * The data store instance.
-     *
-     * @var \TheRealMkadmi\Citadel\DataStore\DataStore
      */
     protected DataStore $dataStore;
 
     /**
      * The prefix used for ban cache keys.
-     *
-     * @var string
      */
     protected string $banKeyPrefix;
 
     /**
      * Create a new command instance.
      *
-     * @param \TheRealMkadmi\Citadel\DataStore\DataStore $dataStore
      * @return void
      */
     public function __construct(DataStore $dataStore)
@@ -47,13 +42,11 @@ class CitadelUnbanCommand extends Command
         parent::__construct();
 
         $this->dataStore = $dataStore;
-        $this->banKeyPrefix = config('citadel.cache.key_prefix', 'citadel:') . config('citadel.ban.cache_key', 'banned');
+        $this->banKeyPrefix = config('citadel.cache.key_prefix', 'citadel:').config('citadel.ban.cache_key', 'banned');
     }
 
     /**
      * Execute the console command.
-     *
-     * @return int
      */
     public function handle(): int
     {
@@ -67,8 +60,9 @@ class CitadelUnbanCommand extends Command
         }
 
         // Validate the identifier type
-        if (!in_array($type, ['ip', 'fingerprint'])) {
+        if (! in_array($type, ['ip', 'fingerprint'])) {
             $this->error("Invalid identifier type: {$type}. Must be 'ip', 'fingerprint', or 'auto'.");
+
             return self::FAILURE;
         }
 
@@ -76,8 +70,9 @@ class CitadelUnbanCommand extends Command
         $banKey = $this->generateBanKey($type, $identifier);
 
         // Check if the ban exists
-        if (!$this->dataStore->hasValue($banKey)) {
+        if (! $this->dataStore->hasValue($banKey)) {
             $this->warn("No active ban found for {$type}: {$identifier}");
+
             return self::FAILURE;
         }
 
@@ -90,18 +85,17 @@ class CitadelUnbanCommand extends Command
                 'identifier' => $identifier,
                 'ban_key' => $banKey,
             ]);
+
             return self::SUCCESS;
         } else {
             $this->error("Failed to unban {$type}: {$identifier}");
+
             return self::FAILURE;
         }
     }
 
     /**
      * Detect the type of identifier (IP or fingerprint).
-     *
-     * @param string $identifier
-     * @return string
      */
     protected function detectIdentifierType(string $identifier): string
     {
@@ -117,9 +111,8 @@ class CitadelUnbanCommand extends Command
     /**
      * Generate a cache key for banned items.
      *
-     * @param string $type The type of ban (ip or fingerprint)
-     * @param string $value The value to check (ip address or fingerprint)
-     * @return string
+     * @param  string  $type  The type of ban (ip or fingerprint)
+     * @param  string  $value  The value to check (ip address or fingerprint)
      */
     protected function generateBanKey(string $type, string $value): string
     {
