@@ -1,218 +1,234 @@
-# A Passive Surveillance Package for Laravel to Protect Your Public Facing Endpoints
+# Laravel Citadel Documentation
 
-[![Latest Version on Packagist](https://img.shields.io/packagist/v/therealmkadmi/Laravel-citadel.svg?style=flat-square)](https://packagist.org/packages/therealmkadmi/Laravel-citadel)
-[![Total Downloads](https://img.shields.io/packagist/dt/therealmkadmi/Laravel-citadel.svg?style=flat-square)](https://packagist.org/packages/therealmkadmi/Laravel-citadel)
+## Introduction
 
-Laravel Citadel is an advanced, real-time firewall package for Laravel designed to protect your public-facing endpoints—especially those handling critical actions such as order placement. Using Redis and Laravel Octane's in-memory caching, Laravel Citadel performs multi-faceted analysis including rate limiting, payload integrity checks, failure tracking, device fingerprint verification, and referrer validation. Its weighted scoring system dynamically flags suspicious activity, enabling you to stop malicious human or automated abuse before it reaches your business logic.
+Laravel Citadel is a passive surveillance package designed to protect your public-facing endpoints. It provides a robust firewall system that analyzes incoming requests, detects anomalies, and blocks malicious traffic. The package is highly configurable and integrates seamlessly with Laravel applications.
+
+---
 
 ## Installation
 
-You can install the package via Composer:
+1. Install the package via Composer:
 
 ```bash
 composer require therealmkadmi/laravel-citadel
 ```
 
-You can publish and run the migrations with:
+2. Publish the configuration file:
 
 ```bash
-php artisan vendor:publish --tag="citadel-migrations"
-php artisan migrate
+php artisan vendor:publish --provider="TheRealMkadmi\\Citadel\\CitadelServiceProvider"
 ```
 
-You can publish the config file with:
+3. Add the middleware to your routes or global middleware stack as needed.
+
+---
+
+## Configuration
+
+The configuration file is located at `config/citadel.php`. Below are the available settings:
+
+### General Settings
+- **version**: Current version of Laravel Citadel.
+
+### Geofencing Settings
+- **enabled**: Enable or disable geofencing.
+- **mode**: `allow` (whitelist) or `block` (blacklist).
+- **countries**: Comma-separated ISO-3166-1 alpha-2 country codes.
+
+### Device Analyzer Settings
+- **smartphone_score**: Score for smartphone devices.
+- **tablet_score**: Score for tablet devices.
+- **desktop_score**: Score for desktop devices.
+- **bot_score**: Score for bots or automated tools.
+
+### IP Analyzer Settings
+- **weights**: Weights for different IP characteristics (e.g., `bogon`, `datacenter`, `tor`, etc.).
+
+### Burstiness Analyzer Settings
+- **min_interval**: Minimum interval between requests (in milliseconds).
+- **window_size**: Sliding window size (in milliseconds).
+- **max_requests_per_window**: Maximum requests allowed in the window.
+
+### Payload Analyzer Settings
+- **required_fields**: Fields required in the payload.
+- **max_size**: Maximum payload size (in bytes).
+- **max_params**: Maximum number of parameters allowed.
+- **suspicious_patterns**: Patterns to detect malicious payloads.
+
+### Spamminess Analyzer Settings
+- **weights**: Weights for spam-related anomalies (e.g., gibberish text, repetitive content).
+
+### Ban Settings
+- **ban_ttl**: Default time-to-live for bans (in seconds).
+- **cache_key**: Key prefix for storing banned IPs or fingerprints.
+- **message**: Message displayed to banned users.
+
+### API Settings
+- **enabled**: Enable or disable API endpoints.
+- **token**: Secret token for API authentication.
+- **prefix**: Prefix for API routes.
+
+---
+
+## Middleware
+
+### ProtectRouteMiddleware
+Analyzes incoming requests using registered analyzers and blocks requests exceeding the configured threshold.
+
+### ApiAuthMiddleware
+Authenticates API requests using a token.
+
+### GeofenceMiddleware
+Blocks requests based on geographical location.
+
+### BanMiddleware
+Checks if a request originates from a banned IP or fingerprint.
+
+---
+
+## Analyzers
+
+### BurstinessAnalyzer
+Detects rapid consecutive requests and suspicious patterns in request timing.
+
+### DeviceAnalyzer
+Analyzes the User-Agent header to determine the type of device making the request.
+
+### IpAnalyzer
+Analyzes the IP address for characteristics like being a datacenter, Tor exit node, or VPN.
+
+### PayloadAnalyzer
+Analyzes the request payload for anomalies, missing fields, and malicious patterns.
+
+### SpamminessAnalyzer
+Detects spam-like behavior in request payloads.
+
+---
+
+## API Endpoints
+
+### Ban Endpoint
+**POST** `/api/citadel/ban`
+
+**Parameters:**
+- `identifier` (string, required): The IP or fingerprint to ban.
+- `type` (string, required): `ip` or `fingerprint`.
+- `duration` (integer, optional): Duration of the ban in minutes.
+
+**Response:**
+- `success` (boolean): Whether the operation was successful.
+- `message` (string): Description of the result.
+
+### Unban Endpoint
+**POST** `/api/citadel/unban`
+
+**Parameters:**
+- `identifier` (string, required): The IP or fingerprint to unban.
+- `type` (string, required): `ip` or `fingerprint`.
+
+**Response:**
+- `success` (boolean): Whether the operation was successful.
+- `message` (string): Description of the result.
+
+### Status Endpoint
+**GET** `/api/citadel/status`
+
+**Response:**
+- `status` (string): `ok` if the API is accessible.
+- `version` (string): Current version of the package.
+- `timestamp` (string): Current server timestamp.
+
+---
+
+## Commands
+
+### CitadelBanCommand
+Bans a user by IP or fingerprint from the command line.
+
+**Usage:**
+```bash
+php artisan citadel:ban {identifier} --type={ip|fingerprint|auto} --duration={minutes}
+```
+
+### CitadelUnbanCommand
+Unbans a user by IP or fingerprint from the command line.
+
+**Usage:**
+```bash
+php artisan citadel:unban {identifier} --type={ip|fingerprint|auto}
+```
+
+### CitadelCommand
+Displays general information about the Citadel package.
+
+**Usage:**
+```bash
+php artisan laravel-citadel
+```
+
+---
+
+## Usage Examples
+
+### Protecting Routes
+Add the `citadel-protect` middleware group to your routes:
+
+```php
+Route::middleware(['citadel-protect'])->group(function () {
+    Route::get('/protected', function () {
+        return 'This route is protected by Citadel.';
+    });
+});
+```
+
+### Using the API
+Enable the API in the configuration file and set a token:
+
+```php
+'api' => [
+    'enabled' => true,
+    'token' => env('CITADEL_API_TOKEN', 'your-secret-token'),
+    'prefix' => 'api/citadel',
+],
+```
+
+Make a request to ban an IP:
 
 ```bash
-php artisan vendor:publish --tag="citadel-config"
+curl -X POST \
+     -H "Authorization: Bearer your-secret-token" \
+     -d "identifier=192.168.1.1&type=ip&duration=60" \
+     http://your-app.test/api/citadel/ban
 ```
 
-This is the contents of the published config file:
+### Customizing Analyzers
+You can create custom analyzers by implementing the `IRequestAnalyzer` interface and registering them in the service provider.
 
-```php
-return [
-    /*
-    |--------------------------------------------------------------------------
-    | Rate Limiting
-    |--------------------------------------------------------------------------
-    |
-    | Define the maximum number of requests per minute and minimum allowed
-    | time interval between orders. The firewall uses a sliding window implemented
-    | with Redis sorted sets to track request frequency.
-    |
-    */
-    'rate_limit' => [
-        'window'       => 60000,  // in milliseconds (60 seconds)
-        'max_requests' => 5,
-        'min_interval' => 5000,   // in milliseconds (5 seconds)
-        'excess_weight'=> 10,     // points per extra request
-        'burst_weight' => 20,     // additional points if requests are too bursty
-    ],
+---
 
-    /*
-    |--------------------------------------------------------------------------
-    | Payload Analysis
-    |--------------------------------------------------------------------------
-    |
-    | Define required fields and parameters for payload validation. The
-    | firewall analyzes payloads for missing fields, nonsensical content,
-    | and extreme values. Adjust the weights to balance false positives.
-    |
-    */
-    'payload' => [
-        'required_fields' => ['name', 'table', 'items'],
-        'missing_field_weight' => 30,
-        'text_anomaly_weight'  => 15,
-        'repetition_weight'    => 10,
-        'extreme_value_weight' => 20,
-        'price_mismatch_weight'=> 20,
-    ],
+## Logging
 
-    /*
-    |--------------------------------------------------------------------------
-    | Failure Tracking
-    |--------------------------------------------------------------------------
-    |
-    | Configure how many failed attempts (due to validation or firewall blocks)
-    | increase the suspect score. The failure counter uses Redis with a TTL to
-    | ensure old failures decay over time.
-    |
-    */
-    'failure' => [
-        'weight_per_failure' => 5,
-        'max_failures'       => 10,
-        'ttl'                => 3600, // in seconds (1 hour)
-    ],
+Citadel logs various events, such as bans, unbans, and detected threats. You can configure the log channel in the `citadel.php` configuration file.
 
-    /*
-    |--------------------------------------------------------------------------
-    | Device Fingerprint
-    |--------------------------------------------------------------------------
-    |
-    | Define the weights for device types. Since the typical usage involves
-    | mobile devices (via QR codes), desktop or unusual User-Agents increase
-    | the suspect score.
-    |
-    */
-    'device' => [
-        'desktop_weight'     => 15,
-        'automation_weight'  => 30,
-    ],
+---
 
-    /*
-    |--------------------------------------------------------------------------
-    | Referrer Validation
-    |--------------------------------------------------------------------------
-    |
-    | Configure valid referers. Requests originating from an unexpected domain
-    | or with no referer add to the suspect score.
-    |
-    */
-    'referrer' => [
-        'expected_domain'    => env('APP_URL'),
-        'missing_weight'     => 5,
-        'invalid_domain_weight' => 15,
-    ],
+## Testing
 
-    /*
-    |--------------------------------------------------------------------------
-    | Overall Threshold
-    |--------------------------------------------------------------------------
-    |
-    | The cumulative suspect score beyond which a request is considered malicious
-    | and is blocked.
-    |
-    */
-    'threshold' => 30,
-];
-```
-
-Optionally, you can publish the views using:
+Run the test suite using PHPUnit:
 
 ```bash
-php artisan vendor:publish --tag="citadel-views"
+vendor/bin/phpunit
 ```
 
-## Usage
-
-Laravel Citadel works as a middleware. Here’s how you can integrate it into your routes:
-
-### 1. Register the Middleware
-
-Add the Citadel firewall middleware to your `app/Http/Kernel.php`:
-
-```php
-protected $routeMiddleware = [
-    // ...
-    'citadel' => \TherealMkadmi\Citadel\Middleware\CitadelFirewall::class,
-];
-```
-
-### 2. Protect Critical Endpoints
-
-Apply the middleware to your sensitive endpoints. For example, to protect the `send-order` endpoint:
-
-```php
-Route::post('/send-order', [OrderController::class, 'placeOrder'])
-     ->middleware('citadel');
-```
-
-### 3. Customize Behavior
-
-Adjust settings in `config/citadel.php` to tailor the firewall to your needs. The configuration parameters include:
-- **Rate Limiting**: Set the window, maximum requests, and burst thresholds.
-- **Payload Analysis**: Define required fields, entropy limits, and weights for anomalies.
-- **Failure Tracking**: Control failure weights and decay time.
-- **Device Fingerprint**: Set additional weights for desktop or automated User-Agents.
-- **Referrer Validation**: Whitelist your domain and adjust penalties for missing or invalid referers.
-- **Threshold**: Set the overall suspect score above which requests are blocked.
-
-## How It Works
-
-Laravel Citadel performs a series of checks on each incoming request:
-1. **Real-Time Frequency Tracking**:  
-   - Uses Redis sorted sets to record and analyze request timestamps.
-   - Removes entries outside a 60-second window and calculates the current request rate.
-   - Enforces a minimum interval between requests to prevent burstiness.
-
-2. **Payload Anomaly Detection**:  
-   - Validates that required fields (e.g., name, table, items) are present.
-   - Analyzes text fields using regex and entropy calculations to detect gibberish or repetitive content.
-   - Checks for extreme values and logical inconsistencies in numeric data (e.g., unrealistic quantities or price mismatches).
-
-3. **Failure Tracking**:  
-   - Tracks failed attempts via a Redis counter with a TTL.
-   - Increments the suspect score for each failure, decaying over time if the user ceases suspicious activity.
-
-4. **Device Fingerprint Analysis**:  
-   - Examines the User-Agent header to determine if the request originates from a mobile device.
-   - Assigns additional points for desktop browsers or known automation tools.
-
-5. **Referrer Verification**:  
-   - Validates the HTTP referer against an expected domain.
-   - Penalizes requests with a missing referer or one that originates from an unauthorized domain.
-
-6. **Weighted Scoring System**:  
-   - Aggregates scores from frequency, payload, failure, device, and referrer analyses.
-   - Compares the cumulative score against a configurable threshold.
-   - Blocks the request if the threshold is exceeded, logging the event for further analysis.
-
-## Gotchas
-
-1) Ensure the cookies (available in config) are excluded from Laravel's cookie encryption. This will eventually be fixed in the package somehow. 
+---
 
 ## Contributing
 
-Contributions are welcome! Please open an issue or submit a pull request. For larger changes, consider discussing your ideas first.
+Contributions are welcome! Please follow the Laravel coding standards and submit a pull request.
 
-## Security Vulnerabilities
-
-For information on reporting security vulnerabilities, contact me privately on `wahibmkadmi16 [at] gmail [dot] com`.
-
-## Credits
-
-- [Wahib](https://github.com/TheRealMkadmi)
-- [All Contributors](../../contributors)
+---
 
 ## License
 
-Laravel Citadel is open-sourced software licensed under the MIT License.
+Laravel Citadel is open-sourced software licensed under the [MIT license](LICENSE.md).
