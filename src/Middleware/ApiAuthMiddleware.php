@@ -18,7 +18,7 @@ class ApiAuthMiddleware
     {
         // Get the API token from config
         $configuredToken = Config::get(CitadelConfig::KEY_API_TOKEN);
-        
+
         // Check if token is configured
         if (empty($configuredToken)) {
             return response()->json(['error' => 'API authentication not configured'], 500);
@@ -26,7 +26,7 @@ class ApiAuthMiddleware
 
         // Get token from request
         $requestToken = $this->getTokenFromRequest($request);
-        
+
         // Validate token
         if ($requestToken !== $configuredToken) {
             return response()->json(['error' => 'Unauthorized'], 401);
@@ -46,13 +46,13 @@ class ApiAuthMiddleware
         if ($bearerToken) {
             return $bearerToken;
         }
-        
+
         // Try to get from custom X-API-Token header
         $headerToken = $request->header('X-API-Token');
         if ($headerToken) {
             return $headerToken;
         }
-        
+
         // Try to get from query string or form parameter
         return $request->input('api_token');
     }

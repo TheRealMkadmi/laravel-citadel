@@ -12,7 +12,7 @@ class ArrayDataStore extends AbstractDataStore
      * Array store identifier constant
      */
     public const STORE_IDENTIFIER = 'array';
-    
+
     /**
      * Create a new Array data store instance.
      */
@@ -31,13 +31,13 @@ class ArrayDataStore extends AbstractDataStore
     public function getValue(string $key, mixed $default = null): mixed
     {
         $prefixedKey = $this->getPrefixedKey($key);
+
         return $this->cacheStore->get($prefixedKey, $default);
     }
 
     /**
      * Store a value in the cache store with proper key prefixing.
      *
-     * @param  mixed  $value
      * @param  int|\DateTimeInterface|\DateInterval|null  $ttl
      * @return bool Success indicator
      */
@@ -51,7 +51,7 @@ class ArrayDataStore extends AbstractDataStore
         } else {
             $this->cacheStore->put($prefixedKey, $value, $ttl);
         }
-        
+
         return true;
     }
 
@@ -62,7 +62,7 @@ class ArrayDataStore extends AbstractDataStore
      * @param  float|int  $score  The score
      * @param  mixed  $member  The member to add
      * @param  int|null  $ttl  Optional TTL in seconds
-     * @return bool|int  Number of elements added or false on failure
+     * @return bool|int Number of elements added or false on failure
      */
     public function zAdd(string $key, float|int $score, mixed $member, ?int $ttl = null): bool|int
     {
@@ -178,8 +178,10 @@ class ArrayDataStore extends AbstractDataStore
     public function pipeline(callable $callback): array
     {
         // Create a simple pipeline simulator
-        $pipeline = new class($this) {
+        $pipeline = new class($this)
+        {
             private ArrayDataStore $dataStore;
+
             private array $commands = [];
 
             public function __construct(ArrayDataStore $dataStore)
@@ -190,30 +192,35 @@ class ArrayDataStore extends AbstractDataStore
             public function zadd(string $key, float|int $score, mixed $member): self
             {
                 $this->commands[] = ['zadd', $key, $score, $member];
+
                 return $this;
             }
 
             public function zremrangebyscore(string $key, float|int|string $min, float|int|string $max): self
             {
                 $this->commands[] = ['zremrangebyscore', $key, $min, $max];
+
                 return $this;
             }
 
             public function expire(string $key, int $ttl): self
             {
                 $this->commands[] = ['expire', $key, $ttl];
+
                 return $this;
             }
 
             public function zcard(string $key): self
             {
                 $this->commands[] = ['zcard', $key];
+
                 return $this;
             }
 
             public function zrange(string $key, int $start, int $stop, bool $withScores = false): self
             {
                 $this->commands[] = ['zrange', $key, $start, $stop, $withScores];
+
                 return $this;
             }
 
@@ -283,6 +290,7 @@ class ArrayDataStore extends AbstractDataStore
     public function hasValue(string $key): bool
     {
         $prefixedKey = $this->getPrefixedKey($key);
+
         return $this->cacheStore->has($prefixedKey);
     }
 
@@ -295,6 +303,7 @@ class ArrayDataStore extends AbstractDataStore
     public function removeValue(string $key): bool
     {
         $prefixedKey = $this->getPrefixedKey($key);
+
         return $this->cacheStore->forget($prefixedKey);
     }
 }

@@ -57,11 +57,12 @@ class CitadelBanCommand extends Command
         $banType = $typeString === 'auto'
             ? BanType::tryFrom('auto', true, $identifier) // Auto-detect based on identifier
             : BanType::tryFrom($typeString);
-        
+
         // Validate the type
         if ($banType === null) {
             $this->error("Invalid identifier type: {$typeString}");
-            $this->line("Valid types are: " . implode(', ', BanType::getValues()));
+            $this->line('Valid types are: '.implode(', ', BanType::getValues()));
+
             return Command::FAILURE;
         }
 
@@ -96,7 +97,7 @@ class CitadelBanCommand extends Command
     protected function generateBanKey(string $identifier, string $type): string
     {
         $safeIdentifier = Str::slug($identifier);
-        $prefix = Config::get(CitadelConfig::KEY_BAN . '.cache_key', 'ban');
+        $prefix = Config::get(CitadelConfig::KEY_BAN.'.cache_key', 'ban');
 
         return "{$prefix}:{$type}:{$safeIdentifier}";
     }

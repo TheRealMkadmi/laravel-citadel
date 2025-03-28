@@ -6,7 +6,6 @@ namespace TheRealMkadmi\Citadel\DataStore;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Redis;
-use Illuminate\Support\Facades\Config;
 
 class RedisDataStore extends AbstractDataStore
 {
@@ -14,7 +13,7 @@ class RedisDataStore extends AbstractDataStore
      * Redis store identifier constant
      */
     public const STORE_IDENTIFIER = 'redis';
-    
+
     /**
      * Create a new Redis data store instance.
      */
@@ -33,6 +32,7 @@ class RedisDataStore extends AbstractDataStore
     public function getValue(string $key, mixed $default = null): mixed
     {
         $prefixedKey = $this->getPrefixedKey($key);
+
         return $this->cacheStore->get($prefixedKey, $default);
     }
 
@@ -54,7 +54,7 @@ class RedisDataStore extends AbstractDataStore
         } else {
             $this->cacheStore->put($prefixedKey, $value, $ttl);
         }
-        
+
         return true;
     }
 
@@ -67,6 +67,7 @@ class RedisDataStore extends AbstractDataStore
     public function removeValue(string $key): bool
     {
         $prefixedKey = $this->getPrefixedKey($key);
+
         return $this->cacheStore->forget($prefixedKey);
     }
 
@@ -84,7 +85,7 @@ class RedisDataStore extends AbstractDataStore
         $prefixedKey = $this->getPrefixedKey($key);
         $result = Redis::zadd($prefixedKey, $score, $member);
 
-        if ($ttl !== null || !$this->shouldUseForever()) {
+        if ($ttl !== null || ! $this->shouldUseForever()) {
             $ttl = $ttl ?? $this->getDefaultTtl();
             Redis::expire($prefixedKey, $ttl);
         }
@@ -103,6 +104,7 @@ class RedisDataStore extends AbstractDataStore
     public function zRemRangeByScore(string $key, float|int|string $min, float|int|string $max): int
     {
         $prefixedKey = $this->getPrefixedKey($key);
+
         return Redis::zremrangebyscore($prefixedKey, $min, $max);
     }
 
@@ -115,6 +117,7 @@ class RedisDataStore extends AbstractDataStore
     public function zCard(string $key): int
     {
         $prefixedKey = $this->getPrefixedKey($key);
+
         return Redis::zcard($prefixedKey);
     }
 
@@ -130,6 +133,7 @@ class RedisDataStore extends AbstractDataStore
     public function zRange(string $key, int $start, int $stop, bool $withScores = false): array
     {
         $prefixedKey = $this->getPrefixedKey($key);
+
         return Redis::zrange($prefixedKey, $start, $stop, $withScores);
     }
 
@@ -154,9 +158,10 @@ class RedisDataStore extends AbstractDataStore
     public function expire(string $key, int $ttl): bool
     {
         $prefixedKey = $this->getPrefixedKey($key);
+
         return Redis::expire($prefixedKey, $ttl);
     }
-    
+
     /**
      * Check if a key exists in the data store.
      *
@@ -166,6 +171,7 @@ class RedisDataStore extends AbstractDataStore
     public function hasValue(string $key): bool
     {
         $prefixedKey = $this->getPrefixedKey($key);
+
         return $this->cacheStore->has($prefixedKey);
     }
 }

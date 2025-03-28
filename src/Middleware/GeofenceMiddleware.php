@@ -55,7 +55,7 @@ class GeofenceMiddleware
 
         // Check if the country is in the configured list
         $isCountryInList = in_array($countryCode, $countriesList);
-        
+
         // Get the configured mode using the enum
         $modeString = Config::get(CitadelConfig::KEY_GEOFENCING_MODE, GeofencingMode::BLOCK->value);
         $firewallMode = GeofencingMode::fromString($modeString);

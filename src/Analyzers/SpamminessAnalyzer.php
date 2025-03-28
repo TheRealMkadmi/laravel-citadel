@@ -8,7 +8,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Str;
-use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 
 class SpamminessAnalyzer extends AbstractAnalyzer
@@ -47,26 +46,26 @@ class SpamminessAnalyzer extends AbstractAnalyzer
     {
         parent::__construct($dataStore);
 
-        $this->enabled = config(self::CONFIG_PREFIX . '.enable_spamminess_analyzer', true);
-        $this->cacheTtl = config(self::CONFIG_PREFIX . '.cache_ttl', 3600);
-        
+        $this->enabled = config(self::CONFIG_PREFIX.'.enable_spamminess_analyzer', true);
+        $this->cacheTtl = config(self::CONFIG_PREFIX.'.cache_ttl', 3600);
+
         // Use Laravel's config helper with constant references
         $this->loadConfigurationValues();
     }
-    
+
     /**
      * Load all configuration values at once to prevent repeated config lookups
      */
     protected function loadConfigurationValues(): void
     {
-        $this->weights = config(self::CONFIG_PREFIX . '.weights', [
+        $this->weights = config(self::CONFIG_PREFIX.'.weights', [
             'gibberish_text' => 25.0,
             'repetitive_content' => 10.0,
             'suspicious_entropy' => 20.0,
             'statistical_anomaly' => 30.0,
         ]);
-        
-        $this->textAnalysisConfig = config(self::CONFIG_PREFIX . '.text_analysis', [
+
+        $this->textAnalysisConfig = config(self::CONFIG_PREFIX.'.text_analysis', [
             'min_entropy_threshold' => 1.0,
             'max_entropy_threshold' => 4.0,
             'min_field_length' => 2,
@@ -82,27 +81,27 @@ class SpamminessAnalyzer extends AbstractAnalyzer
 
     public function analyze(Request $request): float
     {
-        if (!$this->enabled) {
+        if (! $this->enabled) {
             return 0.0;
         }
-        
+
         // Generate a cache key for this fingerprint
         $fingerprint = $request->getFingerprint();
         $cacheKey = "spamminess:{$fingerprint}";
-        
+
         // Check if we have a cached result
         $cachedScore = $this->dataStore->getValue($cacheKey);
         if ($cachedScore !== null) {
-            return (float)$cachedScore;
+            return (float) $cachedScore;
         }
 
         $payload = $request->all();
 
         // Process all fields recursively, handling arrays and nested objects
         $score = $this->processPayload($payload);
-        $maxScore = config(self::CONFIG_PREFIX . '.max_score', 100.0);
+        $maxScore = config(self::CONFIG_PREFIX.'.max_score', 100.0);
         $finalScore = min($score, $maxScore);
-        
+
         // Cache the result
         $this->dataStore->setValue($cacheKey, $finalScore, $this->cacheTtl);
 
@@ -131,7 +130,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         } elseif (is_string($data)) {
             // Skip very large strings to prevent performance issues
             if (Str::length($data) > 10000) {
-                $data = Str::substr($data, 0, 5000) . Str::substr($data, -5000);
+                $data = Str::substr($data, 0, 5000).Str::substr($data, -5000);
             }
             $score += $this->analyzeTextField($data);
         }
@@ -143,12 +142,12 @@ class SpamminessAnalyzer extends AbstractAnalyzer
     {
         // Create a hash key for caching
         $textHash = md5($text);
-        
+
         // Check if we've already analyzed this text
         if (isset($this->analysisCache[$textHash])) {
             return $this->analysisCache[$textHash];
         }
-        
+
         $score = 0.0;
         $text = Str::of($text)->trim();
 
@@ -172,10 +171,10 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         if ($gibberishScore > 0) {
             $score += $this->weights['gibberish_text'] * $gibberishScore;
         }
-        
+
         // Cache the result to avoid repeated analysis
         $this->analysisCache[$textHash] = $score;
-        
+
         // Prevent memory issues by limiting cache size
         if (count($this->analysisCache) > 100) {
             // Remove random entries when cache gets too large
@@ -214,9 +213,11 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         $freq = [];
         // Optimize character splitting for UTF-8 using Laravel's Str helper
         $characters = Str::of($text)->split('//u');
-        
+
         foreach ($characters as $ch) {
-            if ($ch === '') continue;
+            if ($ch === '') {
+                continue;
+            }
             $freq[$ch] = Arr::get($freq, $ch, 0) + 1;
         }
 
@@ -246,12 +247,14 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         // Count consecutive repeated characters
         $repeats = 0;
         $lastChar = '';
-        
+
         // Optimize character splitting for UTF-8 using Laravel's Str helper
         $characters = Str::of($text)->split('//u');
-        
+
         foreach ($characters as $char) {
-            if ($char === '') continue;
+            if ($char === '') {
+                continue;
+            }
             if ($char === $lastChar) {
                 $repeats++;
             }
@@ -265,7 +268,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
             ->explode(' ')
             ->filter()
             ->values();
-            
+
         $wordCount = $words->count();
 
         if ($wordCount > 1) {
@@ -306,7 +309,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         if ($textLength > 20) {
             // 3. Character distribution analysis
             $scores[] = $this->characterDistributionScore($textLower);
-            
+
             // Only perform these expensive analyses on moderately sized texts
             if ($textLength < 1000) {
                 // 4. Statistical n-gram analysis
@@ -367,9 +370,11 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         $currentSeq = 0;
 
         $characters = Str::of($text)->split('//u');
-        
+
         foreach ($characters as $char) {
-            if ($char === '') continue;
+            if ($char === '') {
+                continue;
+            }
             if (preg_match('/[bcdfghjklmnpqrstvwxyz]/i', $char)) {
                 $currentSeq++;
                 $maxConsonantSeq = max($maxConsonantSeq, $currentSeq);
@@ -410,7 +415,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         $variance = $charDistribution->map(function ($value) use ($mean) {
             return pow($value - $mean, 2);
         })->avg();
-        
+
         $stdDev = sqrt($variance);
 
         // Calculate coefficient of variation (measure of relative variability)
@@ -432,9 +437,11 @@ class SpamminessAnalyzer extends AbstractAnalyzer
     {
         $freq = [];
         $characters = Str::of(Str::lower($text))->split('//u');
-        
+
         foreach ($characters as $ch) {
-            if ($ch === '') continue;
+            if ($ch === '') {
+                continue;
+            }
             $freq[$ch] = Arr::get($freq, $ch, 0) + 1;
         }
 

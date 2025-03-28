@@ -12,7 +12,6 @@ use Illuminate\Support\Str;
 use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 use TheRealMkadmi\Citadel\Enums\BanType;
-use TheRealMkadmi\Citadel\Version;
 
 class CitadelApiController
 {
@@ -60,7 +59,7 @@ class CitadelApiController
         $banType = $typeString === 'auto'
             ? BanType::tryFrom('auto', true, $identifier) // Auto-detect based on identifier
             : BanType::tryFrom($typeString);
-            
+
         // Validate the type
         if ($banType === null) {
             return response()->json([
@@ -84,7 +83,7 @@ class CitadelApiController
         // Store ban record
         if ($duration !== null) {
             $this->dataStore->setValue($key, $banData, (int) $duration);
-            
+
             return response()->json([
                 'status' => 'success',
                 'message' => "Banned {$banType->value} '{$identifier}' for {$duration} seconds",
@@ -99,7 +98,7 @@ class CitadelApiController
         } else {
             // Use a very long TTL for permanent ban (10 years)
             $this->dataStore->setValue($key, $banData, 10 * 365 * 24 * 60 * 60);
-            
+
             return response()->json([
                 'status' => 'success',
                 'message' => "Permanently banned {$banType->value} '{$identifier}'",
@@ -141,7 +140,7 @@ class CitadelApiController
         $banType = $typeString === 'auto'
             ? BanType::tryFrom('auto', true, $identifier) // Auto-detect based on identifier
             : BanType::tryFrom($typeString);
-            
+
         // Validate the type
         if ($banType === null) {
             return response()->json([
@@ -156,7 +155,7 @@ class CitadelApiController
 
         // Check if the ban exists
         $banData = $this->dataStore->getValue($key);
-        
+
         if ($banData === null) {
             return response()->json([
                 'status' => 'error',
@@ -166,7 +165,7 @@ class CitadelApiController
 
         // Remove the ban
         $success = $this->dataStore->removeValue($key);
-        
+
         if ($success) {
             return response()->json([
                 'status' => 'success',
@@ -191,7 +190,7 @@ class CitadelApiController
     protected function generateBanKey(string $identifier, string $type): string
     {
         $safeIdentifier = Str::slug($identifier);
-        $prefix = Config::get(CitadelConfig::KEY_BAN . '.cache_key', 'ban');
+        $prefix = Config::get(CitadelConfig::KEY_BAN.'.cache_key', 'ban');
 
         return "{$prefix}:{$type}:{$safeIdentifier}";
     }
