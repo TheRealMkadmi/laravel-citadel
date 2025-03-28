@@ -71,6 +71,21 @@ class ProtectRouteMiddleware
             'ip' => $request->ip(),
         ];
         
+        // Check if there's a failure score from previous requests that should be incorporated
+        $failureScoreKey = Str::start("fw:{$trackingId}:failureScore", 
+            config('citadel.cache.key_prefix', 'citadel:'));
+        
+        if ($this->dataStore->hasValue($failureScoreKey)) {
+            $failureScore = (float) $this->dataStore->getValue($failureScoreKey, 0);
+            $totalScore += $failureScore;
+            $scoreBreakdown['FailureHistory'] = $failureScore;
+            
+            Log::debug(trans('citadel::logging.failure_history_added'), array_merge($logContext, [
+                'failure_score' => $failureScore,
+                'updated_total' => $totalScore,
+            ]));
+        }
+        
         // Process each analyzer and collect scores
         foreach ($this->analyzers as $analyzer) {
             $shortName = class_basename($analyzer);
@@ -84,7 +99,7 @@ class ProtectRouteMiddleware
                 // Store analyzer result in cache with proper prefixing if we have a trackingId
                 if ($trackingId) {
                     $cacheKey = $this->getCacheKey($trackingId, $shortName);
-                    $ttl = config('citadel.cache.analyzer_results_ttl', 3600);
+                    $ttl = (int) config('citadel.cache.analyzer_results_ttl', 3600);
                     $this->dataStore->setValue($cacheKey, $score, $ttl);
                 }
                 
@@ -96,10 +111,8 @@ class ProtectRouteMiddleware
                 
                 // Early return if we're already above the threshold
                 if ($totalScore >= $this->threshold) {
-                    // Track this blocked request
-                    $this->trackBlockedRequest($trackingId, $totalScore, $scoreBreakdown, $shortName);
-                    
-                    Log::warning("Citadel: Request blocked due to high suspect score", array_merge($logContext, [
+                    // The actual tracking of this blocked request is now handled in PostProtectRouteMiddleware
+                    Log::warning(trans('citadel::logging.request_blocked'), array_merge($logContext, [
                         'total_score' => $totalScore,
                         'threshold' => $this->threshold,
                         'breakdown' => $scoreBreakdown,
@@ -108,11 +121,13 @@ class ProtectRouteMiddleware
                     
                     return response()->json([
                         'message' => trans('citadel::messages.request_blocked'),
+                        'citadel' => true,
+                        'request_blocked' => true,
                     ], 403);
                 }
             } catch (\Throwable $e) {
                 // Log errors but don't block requests due to analyzer failures
-                Log::error("Citadel: Analyzer error in {$shortName}", array_merge($logContext, [
+                Log::error(trans('citadel::logging.analyzer_error', ['analyzer' => $shortName]), array_merge($logContext, [
                     'analyzer' => $shortName,
                     'error' => $e->getMessage(),
                     'trace' => $e->getTraceAsString(),
@@ -121,7 +136,7 @@ class ProtectRouteMiddleware
         }
         
         // Log the final score
-        Log::debug("Citadel: Final score for request", array_merge($logContext, [
+        Log::debug(trans('citadel::logging.final_score'), array_merge($logContext, [
             'total_score' => $totalScore,
             'threshold' => $this->threshold,
             'breakdown' => $scoreBreakdown,
@@ -129,14 +144,7 @@ class ProtectRouteMiddleware
         ]));
         
         // Allow the request to proceed if the score is below the threshold
-        $response = $next($request);
-        
-        // Update fail counters if the response indicates an error
-        if ($response->getStatusCode() >= 400 && $trackingId) {
-            $this->trackFailedResponse($trackingId, $response->getStatusCode());
-        }
-        
-        return $response;
+        return $next($request);
     }
     
     /**
@@ -150,76 +158,5 @@ class ProtectRouteMiddleware
     {
         return Str::start("analyzer:{$analyzerName}:{$tracking}", 
             config('citadel.cache.key_prefix', 'citadel:'));
-    }
-    
-    /**
-     * Track a blocked request in the data store
-     *
-     * @param string $tracking
-     * @param float $totalScore
-     * @param array $scoreBreakdown
-     * @param string $terminatedBy
-     * @return void
-     */
-    protected function trackBlockedRequest(string $tracking, float $totalScore, array $scoreBreakdown, string $terminatedBy): void
-    {
-        $blockedKey = Str::start("blocked:{$tracking}", 
-            config('citadel.cache.key_prefix', 'citadel:'));
-        
-        $ttl = config('citadel.cache.blocked_request_ttl', 86400);
-        
-        // Store the blocked request details
-        $this->dataStore->setValue($blockedKey, [
-            'timestamp' => now()->timestamp,
-            'total_score' => $totalScore,
-            'breakdown' => $scoreBreakdown,
-            'terminated_by' => $terminatedBy,
-        ], $ttl);
-        
-        // Increment blocked count for this tracking ID
-        $blockedCountKey = Str::start("blocked:count:{$tracking}", 
-            config('citadel.cache.key_prefix', 'citadel:'));
-            
-        if (!$this->dataStore->hasValue($blockedCountKey)) {
-            $this->dataStore->setValue($blockedCountKey, 1, $ttl);
-        } else {
-            $this->dataStore->increment($blockedCountKey);
-        }
-    }
-    
-    /**
-     * Track a failed response in the data store
-     *
-     * @param string $tracking
-     * @param int $statusCode
-     * @return void
-     */
-    protected function trackFailedResponse(string $tracking, int $statusCode): void
-    {
-        $failKey = Str::start("failed:{$tracking}", 
-            config('citadel.cache.key_prefix', 'citadel:'));
-        
-        $ttl = config('citadel.cache.failed_request_ttl', 86400);
-        
-        // Store or update failed response tracking
-        if (!$this->dataStore->hasValue($failKey)) {
-            $this->dataStore->setValue($failKey, [
-                'count' => 1,
-                'codes' => [$statusCode => 1],
-                'first_failure' => now()->timestamp,
-                'last_failure' => now()->timestamp,
-            ], $ttl);
-        } else {
-            $failData = $this->dataStore->getValue($failKey);
-            $failData['count'] = ($failData['count'] ?? 0) + 1;
-            
-            if (!isset($failData['codes'])) {
-                $failData['codes'] = [];
-            }
-            
-            $failData['codes'][$statusCode] = ($failData['codes'][$statusCode] ?? 0) + 1;
-            $failData['last_failure'] = now()->timestamp;
-            $this->dataStore->setValue($failKey, $failData, $ttl);
-        }
     }
 }
