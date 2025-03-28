@@ -267,6 +267,11 @@ class BurstinessAnalyzer extends AbstractAnalyzer
         if ($intervalCount >= 2) {
             // Calculate mean interval - use array_sum directly for performance
             $meanInterval = array_sum($intervals) / $intervalCount;
+            
+            // Prevent division by zero
+            if ($meanInterval <= 0) {
+                $meanInterval = 1; // Avoid division by zero
+            }
 
             // Calculate variance with optimized approach
             $variance = 0;
@@ -278,17 +283,15 @@ class BurstinessAnalyzer extends AbstractAnalyzer
             // Calculate coefficient of variation (CV)
             // CV = (standard deviation / mean) - lower value indicates more regularity
             $stdDev = sqrt($variance);
-            $cv = ($meanInterval > 0) ? $stdDev / $meanInterval : 0;
+            $cv = $stdDev / $meanInterval; // Division by zero prevented above
 
-            $patternData = [
+            // Retrieve existing pattern data or create new
+            $patternData = $this->dataStore->getValue($patternKey) ?? [
                 'cv_history' => [],
                 'mean_interval' => 0,
                 'detection_count' => 0,
                 'last_updated' => 0,
             ];
-
-            // Store pattern analysis data
-            $this->dataStore->setValue($patternKey, $patternData);
             
             // Only update if it's a new request (checking timestamp can help avoid redundant processing)
             $currentTime = time();
@@ -305,48 +308,54 @@ class BurstinessAnalyzer extends AbstractAnalyzer
                 // Detect if CV is consistently low (suggests regular pattern)
                 // Reuse variable names for memory efficiency
                 $cvCount = count($patternData['cv_history']);
-                $avgCV = array_sum($patternData['cv_history']) / $cvCount;
-
-                // Score based on coefficient of variation thresholds
-                $patternScore = 0;
                 
-                // Use cached config values for better performance
-                if ($avgCV < $this->configCache['veryRegularThreshold']) {
-                    // Very regular pattern - likely a bot
-                    $patternData['detection_count']++;
-                    $patternScore = $this->configCache['veryRegularScore'];
-                } elseif ($avgCV < $this->configCache['somewhatRegularThreshold']) {
-                    // Somewhat regular pattern - suspicious
-                    $patternData['detection_count']++;
-                    $patternScore = $this->configCache['somewhatRegularScore'];
-                } else {
-                    // Irregular pattern - likely human
-                    $patternData['detection_count'] = max(0, $patternData['detection_count'] - 1);
+                // Ensure we have data to work with
+                if ($cvCount > 0) {
+                    $avgCV = array_sum($patternData['cv_history']) / $cvCount;
+
+                    // Score based on coefficient of variation thresholds
+                    $patternScore = 0;
+                    
+                    // Use cached config values for better performance
+                    if ($avgCV < $this->configCache['veryRegularThreshold']) {
+                        // Very regular pattern - likely a bot
+                        $patternData['detection_count']++;
+                        $patternScore = $this->configCache['veryRegularScore'];
+                    } elseif ($avgCV < $this->configCache['somewhatRegularThreshold']) {
+                        // Somewhat regular pattern - suspicious
+                        $patternData['detection_count']++;
+                        $patternScore = $this->configCache['somewhatRegularScore'];
+                    } else {
+                        // Irregular pattern - likely human
+                        $patternData['detection_count'] = max(0, $patternData['detection_count'] - 1);
+                    }
+
+                    // Additional score for repeated pattern detections
+                    $patternScore += min(
+                        $this->configCache['maxPatternScore'], 
+                        $patternData['detection_count'] * $this->configCache['patternMultiplier']
+                    );
+
+                    // Save updated pattern data
+                    $this->dataStore->setValue($patternKey, $patternData, $ttl);
+
+                    return (float) $patternScore;
                 }
-
-                // Additional score for repeated pattern detections
-                $patternScore += min(
-                    $this->configCache['maxPatternScore'], 
-                    $patternData['detection_count'] * $this->configCache['patternMultiplier']
-                );
-
-                // Save updated pattern data
-                $this->dataStore->setValue($patternKey, $patternData, $ttl);
-
-                return (float) $patternScore;
             }
             
             // Calculate pattern score based on existing data
-            $avgCV = array_sum($patternData['cv_history']) / count($patternData['cv_history']);
-            
-            if ($avgCV < $this->configCache['veryRegularThreshold']) {
-                return $this->configCache['veryRegularScore'] + 
-                       min($this->configCache['maxPatternScore'], 
-                           $patternData['detection_count'] * $this->configCache['patternMultiplier']);
-            } elseif ($avgCV < $this->configCache['somewhatRegularThreshold']) {
-                return $this->configCache['somewhatRegularScore'] + 
-                       min($this->configCache['maxPatternScore'], 
-                           $patternData['detection_count'] * $this->configCache['patternMultiplier']);
+            if (!empty($patternData['cv_history'])) {
+                $avgCV = array_sum($patternData['cv_history']) / count($patternData['cv_history']);
+                
+                if ($avgCV < $this->configCache['veryRegularThreshold']) {
+                    return $this->configCache['veryRegularScore'] + 
+                           min($this->configCache['maxPatternScore'], 
+                               $patternData['detection_count'] * $this->configCache['patternMultiplier']);
+                } elseif ($avgCV < $this->configCache['somewhatRegularThreshold']) {
+                    return $this->configCache['somewhatRegularScore'] + 
+                           min($this->configCache['maxPatternScore'], 
+                               $patternData['detection_count'] * $this->configCache['patternMultiplier']);
+                }
             }
         }
 
@@ -364,7 +373,7 @@ class BurstinessAnalyzer extends AbstractAnalyzer
     protected function trackExcessiveRequestHistory(string $historyKey, int $timestamp, int $excess, int $ttl): void
     {
         // Get existing history data or initialize a new record
-        $history = [
+        $history = $this->dataStore->getValue($historyKey) ?? [
             'first_violation' => $timestamp,
             'last_violation' => $timestamp,
             'violation_count' => 0,
@@ -372,8 +381,6 @@ class BurstinessAnalyzer extends AbstractAnalyzer
             'total_excess' => 0,
         ]; 
         
-        $this->dataStore->setValue($historyKey, $history);
-
         // Update history data if this is truly a new violation (not the same second)
         if ($timestamp > $history['last_violation'] + 1000) { 
             // Update history data
