@@ -31,7 +31,7 @@ class PayloadAnalyzer extends AbstractAnalyzer
      * Indicates if this analyzer scans payload content.
      */
     protected bool $scansPayload = true;
-    
+
     /**
      * This analyzer doesn't make external network requests.
      */
@@ -43,7 +43,7 @@ class PayloadAnalyzer extends AbstractAnalyzer
     public function __construct(DataStore $dataStore)
     {
         parent::__construct($dataStore);
-        
+
         // Load all configuration values using Laravel's config helper
         $this->enabled = config('citadel.payload.enable_payload_analyzer', true);
         $this->cacheTtl = config('citadel.payload.cache_ttl', config('citadel.cache.payload_analysis_ttl', 3600));

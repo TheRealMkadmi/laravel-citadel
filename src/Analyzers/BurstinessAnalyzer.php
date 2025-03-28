@@ -19,7 +19,7 @@ class BurstinessAnalyzer extends AbstractAnalyzer
      * Indicates if this analyzer scans payload content.
      */
     protected bool $scansPayload = false;
-    
+
     /**
      * This analyzer doesn't make external requests.
      */

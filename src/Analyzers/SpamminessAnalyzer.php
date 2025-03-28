@@ -25,7 +25,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
      * Indicates if this analyzer scans payload content.
      */
     protected bool $scansPayload = true;
-    
+
     /**
      * This analyzer doesn't make external network requests.
      */
@@ -34,7 +34,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
     public function __construct(DataStore $dataStore)
     {
         parent::__construct($dataStore);
-        
+
         $this->enabled = config('citadel.spamminess.enable_spamminess_analyzer', true);
         $this->cacheTtl = config('citadel.spamminess.cache_ttl', 3600);
         $this->weights = config('citadel.spamminess.weights', [

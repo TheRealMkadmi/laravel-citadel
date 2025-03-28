@@ -4,7 +4,6 @@ namespace TheRealMkadmi\Citadel\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use TheRealMkadmi\Citadel\Analyzers\IRequestAnalyzer;
@@ -16,24 +15,36 @@ class ProtectRouteMiddleware
      * Configuration keys.
      */
     private const CONFIG_KEY_MIDDLEWARE = 'citadel.middleware';
-    private const CONFIG_KEY_ACTIVE_ENABLED = 'citadel.middleware.active_enabled'; 
+
+    private const CONFIG_KEY_ACTIVE_ENABLED = 'citadel.middleware.active_enabled';
+
     private const CONFIG_KEY_ENABLED = 'citadel.middleware.enabled';
+
     private const CONFIG_KEY_THRESHOLD_SCORE = 'citadel.middleware.threshold_score';
+
     private const CONFIG_KEY_WARNING_THRESHOLD = 'citadel.middleware.warning_threshold';
+
     private const CONFIG_KEY_BAN_ENABLED = 'citadel.middleware.ban_enabled';
+
     private const CONFIG_KEY_BAN_DURATION = 'citadel.middleware.ban_duration';
+
     private const CONFIG_KEY_CACHE_TTL = 'citadel.middleware.cache_ttl';
+
     private const CONFIG_KEY_BLOCK_RESPONSE = 'citadel.middleware.block_response';
+
     private const CONFIG_KEY_RESPONSE_TYPE = 'citadel.middleware.block_response.type';
+
     private const CONFIG_KEY_RESPONSE_CODE = 'citadel.middleware.block_response.code';
+
     private const CONFIG_KEY_RESPONSE_MESSAGE = 'citadel.middleware.block_response.message';
+
     private const CONFIG_KEY_RESPONSE_VIEW = 'citadel.middleware.block_response.view';
 
     /**
      * Ban key prefix.
      */
     private const BAN_KEY_PREFIX = 'ban:';
-    
+
     /**
      * Analyzer cache key prefix.
      */
@@ -73,8 +84,8 @@ class ProtectRouteMiddleware
     public function handle(Request $request, Closure $next)
     {
         // If middleware is disabled (globally or active specifically), just pass through
-        if (!Config::get(self::CONFIG_KEY_ENABLED, true) || 
-            !Config::get(self::CONFIG_KEY_ACTIVE_ENABLED, true)) {
+        if (! Config::get(self::CONFIG_KEY_ENABLED, true) ||
+            ! Config::get(self::CONFIG_KEY_ACTIVE_ENABLED, true)) {
             return $next($request);
         }
 
@@ -132,7 +143,7 @@ class ProtectRouteMiddleware
     /**
      * Get analyzers applicable to the current request based on its characteristics
      *
-     * @param Request $request The HTTP request
+     * @param  Request  $request  The HTTP request
      * @return array<IRequestAnalyzer>
      */
     protected function getApplicableAnalyzers(Request $request): array
@@ -142,7 +153,8 @@ class ProtectRouteMiddleware
                 // If analyzer scans payload, only include it when there's a body to scan
                 if ($analyzer->scansPayload()) {
                     // Check if request has any content
-                    $hasBody = !empty($request->all()) || !empty($request->getContent());
+                    $hasBody = ! empty($request->all()) || ! empty($request->getContent());
+
                     return $hasBody;
                 }
 
@@ -156,36 +168,36 @@ class ProtectRouteMiddleware
     /**
      * Run all applicable analyzers on the request and calculate total score
      *
-     * @param Request $request The HTTP request
-     * @param array $analyzers List of analyzers to run
+     * @param  Request  $request  The HTTP request
+     * @param  array  $analyzers  List of analyzers to run
      * @return array Analysis results including scores and total
      */
     protected function runAnalyzers(Request $request, array $analyzers): array
     {
         $scores = collect();
-        
+
         // Run analyzers and collect their scores
         foreach ($analyzers as $analyzer) {
             try {
                 $analyzerName = class_basename($analyzer);
-                
+
                 // Get cache key for analyzer results
                 $cacheKey = $this->getCacheKey($request->getFingerprint(), $analyzerName);
-                
+
                 // Try to get cached result
                 $cachedScore = $this->dataStore->getValue($cacheKey);
                 $score = $cachedScore !== null ? (float) $cachedScore : $analyzer->analyze($request);
-                
+
                 // Cache the score if not already cached
                 if ($cachedScore === null) {
                     // Get configurable cache TTL for analyzer results, default to 1 hour
                     $ttl = Config::get(self::CONFIG_KEY_CACHE_TTL, 3600);
                     $this->dataStore->setValue($cacheKey, $score, $ttl);
                 }
-                
+
                 // Store the score
                 $scores->put($analyzerName, $score);
-                
+
             } catch (\Exception $e) {
                 // Log analyzer errors but continue with others
                 Log::error('Citadel analyzer error: {message}', [
@@ -199,7 +211,7 @@ class ProtectRouteMiddleware
 
         return [
             'scores' => $scores->toArray(),
-            'totalScore' => $scores->sum()
+            'totalScore' => $scores->sum(),
         ];
     }
 
@@ -209,7 +221,7 @@ class ProtectRouteMiddleware
     protected function getCacheKey(string $tracking, string $analyzerName): string
     {
         // Create a consistent key using tracking ID and analyzer name
-        return self::ANALYZER_CACHE_KEY_PREFIX . "{$tracking}:{$analyzerName}";
+        return self::ANALYZER_CACHE_KEY_PREFIX."{$tracking}:{$analyzerName}";
     }
 
     /**
@@ -217,7 +229,8 @@ class ProtectRouteMiddleware
      */
     protected function isBanned(string $fingerprint): bool
     {
-        $key = self::BAN_KEY_PREFIX . $fingerprint;
+        $key = self::BAN_KEY_PREFIX.$fingerprint;
+
         return $this->dataStore->getValue($key) !== null;
     }
 
@@ -226,7 +239,7 @@ class ProtectRouteMiddleware
      */
     protected function banFingerprint(string $fingerprint): void
     {
-        $key = self::BAN_KEY_PREFIX . $fingerprint;
+        $key = self::BAN_KEY_PREFIX.$fingerprint;
         $duration = Config::get(self::CONFIG_KEY_BAN_DURATION, 3600);
         $this->dataStore->setValue($key, now()->timestamp, $duration);
     }

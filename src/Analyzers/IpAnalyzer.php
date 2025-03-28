@@ -24,7 +24,7 @@ class IpAnalyzer extends AbstractAnalyzer
      * Indicates if this analyzer scans payload content.
      */
     protected bool $scansPayload = false;
-    
+
     /**
      * Indicates if this analyzer makes external requests.
      */
