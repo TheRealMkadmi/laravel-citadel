@@ -280,13 +280,15 @@ class BurstinessAnalyzer extends AbstractAnalyzer
             $stdDev = sqrt($variance);
             $cv = ($meanInterval > 0) ? $stdDev / $meanInterval : 0;
 
-            // Store pattern analysis data
-            $patternData = $this->dataStore->getValue($patternKey, [
+            $patternData = [
                 'cv_history' => [],
                 'mean_interval' => 0,
                 'detection_count' => 0,
                 'last_updated' => 0,
-            ]);
+            ];
+
+            // Store pattern analysis data
+            $this->dataStore->setValue($patternKey, $patternData);
             
             // Only update if it's a new request (checking timestamp can help avoid redundant processing)
             $currentTime = time();
@@ -362,13 +364,15 @@ class BurstinessAnalyzer extends AbstractAnalyzer
     protected function trackExcessiveRequestHistory(string $historyKey, int $timestamp, int $excess, int $ttl): void
     {
         // Get existing history data or initialize a new record
-        $history = $this->dataStore->getValue($historyKey, [
+        $history = [
             'first_violation' => $timestamp,
             'last_violation' => $timestamp,
             'violation_count' => 0,
             'max_excess' => 0,
             'total_excess' => 0,
-        ]);
+        ]; 
+        
+        $this->dataStore->setValue($historyKey, $history);
 
         // Update history data if this is truly a new violation (not the same second)
         if ($timestamp > $history['last_violation'] + 1000) { 

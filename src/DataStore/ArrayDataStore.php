@@ -9,23 +9,28 @@ use Illuminate\Support\Facades\Cache;
 class ArrayDataStore extends AbstractDataStore
 {
     /**
+     * Array store identifier constant
+     */
+    public const STORE_IDENTIFIER = 'array';
+    
+    /**
      * Create a new Array data store instance.
      */
     public function __construct()
     {
-        $this->cacheStore = Cache::store('array');
+        $this->cacheStore = Cache::store(self::STORE_IDENTIFIER);
     }
 
     /**
      * Get a value from the cache store with proper key prefixing.
      *
-     * @param  mixed  $default
-     * @return mixed
+     * @param  string  $key  The cache key
+     * @param  mixed  $default  Default value if key doesn't exist
+     * @return mixed The stored value or default if not found
      */
-    public function getValue(string $key, $default = null)
+    public function getValue(string $key, mixed $default = null): mixed
     {
-        $prefixedKey = config('citadel.cache.key_prefix').$key;
-
+        $prefixedKey = $this->getPrefixedKey($key);
         return $this->cacheStore->get($prefixedKey, $default);
     }
 
@@ -34,28 +39,33 @@ class ArrayDataStore extends AbstractDataStore
      *
      * @param  mixed  $value
      * @param  int|\DateTimeInterface|\DateInterval|null  $ttl
+     * @return bool Success indicator
      */
-    public function setValue(string $key, $value, $ttl = null): void
+    public function setValue(string $key, mixed $value, ?int $ttl = null): bool
     {
-        $prefixedKey = config('citadel.cache.key_prefix').$key;
-        $ttl = $ttl ?? config('citadel.cache.default_ttl', 3600);
+        $prefixedKey = $this->getPrefixedKey($key);
+        $ttl = $ttl ?? $this->getDefaultTtl();
 
-        if (config('citadel.cache.use_forever', false)) {
+        if ($this->shouldUseForever()) {
             $this->cacheStore->forever($prefixedKey, $value);
         } else {
             $this->cacheStore->put($prefixedKey, $value, $ttl);
         }
+        
+        return true;
     }
 
     /**
      * Add a member with score to a sorted set.
      *
-     * @return bool|int
+     * @param  string  $key  The sorted set key
+     * @param  float|int  $score  The score
+     * @param  mixed  $member  The member to add
+     * @param  int|null  $ttl  Optional TTL in seconds
+     * @return bool|int  Number of elements added or false on failure
      */
-    public function zAdd(string $key, float|int $score, mixed $member, ?int $ttl = null)
+    public function zAdd(string $key, float|int $score, mixed $member, ?int $ttl = null): bool|int
     {
-        $prefixedKey = config('citadel.cache.key_prefix').$key;
-
         // Get or create the sorted set
         $zset = $this->getValue($key, []);
         $zset[$member] = $score;
@@ -64,10 +74,9 @@ class ArrayDataStore extends AbstractDataStore
         asort($zset);
 
         // Store with configured TTL
-        $ttl = $ttl ?? config('citadel.cache.default_ttl', 3600);
         $this->setValue($key, $zset, $ttl);
 
-        return true;
+        return 1; // Added/updated one member
     }
 
     /**
@@ -169,53 +178,46 @@ class ArrayDataStore extends AbstractDataStore
     public function pipeline(callable $callback): array
     {
         // Create a simple pipeline simulator
-        $pipeline = new class($this)
-        {
-            private $dataStore;
+        $pipeline = new class($this) {
+            private ArrayDataStore $dataStore;
+            private array $commands = [];
 
-            private $commands = [];
-
-            public function __construct($dataStore)
+            public function __construct(ArrayDataStore $dataStore)
             {
                 $this->dataStore = $dataStore;
             }
 
-            public function zadd($key, $score, $member)
+            public function zadd(string $key, float|int $score, mixed $member): self
             {
                 $this->commands[] = ['zadd', $key, $score, $member];
-
                 return $this;
             }
 
-            public function zremrangebyscore($key, $min, $max)
+            public function zremrangebyscore(string $key, float|int|string $min, float|int|string $max): self
             {
                 $this->commands[] = ['zremrangebyscore', $key, $min, $max];
-
                 return $this;
             }
 
-            public function expire($key, $ttl)
+            public function expire(string $key, int $ttl): self
             {
                 $this->commands[] = ['expire', $key, $ttl];
-
                 return $this;
             }
 
-            public function zcard($key)
+            public function zcard(string $key): self
             {
                 $this->commands[] = ['zcard', $key];
-
                 return $this;
             }
 
-            public function zrange($key, $start, $stop, $withScores = false)
+            public function zrange(string $key, int $start, int $stop, bool $withScores = false): self
             {
                 $this->commands[] = ['zrange', $key, $start, $stop, $withScores];
-
                 return $this;
             }
 
-            public function getCommands()
+            public function getCommands(): array
             {
                 return $this->commands;
             }
@@ -270,5 +272,29 @@ class ArrayDataStore extends AbstractDataStore
         }
 
         return false;
+    }
+
+    /**
+     * Check if a key exists in the data store.
+     *
+     * @param  string  $key  The key to check
+     * @return bool Whether the key exists
+     */
+    public function hasValue(string $key): bool
+    {
+        $prefixedKey = $this->getPrefixedKey($key);
+        return $this->cacheStore->has($prefixedKey);
+    }
+
+    /**
+     * Remove a value from the data store.
+     *
+     * @param  string  $key  The key to remove
+     * @return bool Success indicator
+     */
+    public function removeValue(string $key): bool
+    {
+        $prefixedKey = $this->getPrefixedKey($key);
+        return $this->cacheStore->forget($prefixedKey);
     }
 }

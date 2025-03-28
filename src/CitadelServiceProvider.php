@@ -228,8 +228,8 @@ class CitadelServiceProvider extends PackageServiceProvider
     protected function resolveDataStoreByDriver(string $driver): DataStore
     {
         return match ($driver) {
-            'redis' => new RedisDataStore,
-            'octane' => new OctaneDataStore,
+            RedisDataStore::STORE_IDENTIFIER => new RedisDataStore,
+            OctaneDataStore::STORE_IDENTIFIER => new OctaneDataStore,
             default => new ArrayDataStore,
         };
     }
