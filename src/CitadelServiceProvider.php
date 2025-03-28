@@ -47,7 +47,6 @@ class CitadelServiceProvider extends PackageServiceProvider
      * Middleware group names
      */
     private const MIDDLEWARE_GROUP_PROTECT = 'citadel-protect';
-    private const MIDDLEWARE_GROUP_PASSIVE = 'citadel-passive';
     private const MIDDLEWARE_GROUP_ACTIVE = 'citadel-active';
     private const MIDDLEWARE_ALIAS_API_AUTH = 'citadel-api-auth';
 
@@ -96,11 +95,6 @@ class CitadelServiceProvider extends PackageServiceProvider
 
         // Register middleware
         $router = $this->app->make(Router::class);
-        
-        // Register the passive middleware group (monitoring only, no blocking)
-        $router->middlewareGroup(self::MIDDLEWARE_GROUP_PASSIVE, [
-            PostProtectRouteMiddleware::class,
-        ]);
         
         // Register the active middleware group (full protection)
         $router->middlewareGroup(self::MIDDLEWARE_GROUP_ACTIVE, [
