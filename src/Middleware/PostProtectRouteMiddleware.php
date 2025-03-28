@@ -6,7 +6,6 @@ namespace TheRealMkadmi\Citadel\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use TheRealMkadmi\Citadel\Analyzers\IRequestAnalyzer;
@@ -18,8 +17,9 @@ class PostProtectRouteMiddleware
      * Configuration keys.
      */
     private const CONFIG_KEY_PASSIVE_ENABLED = 'citadel.middleware.passive_enabled';
+
     private const CONFIG_KEY_THRESHOLD_SCORE = 'citadel.middleware.threshold_score';
-    
+
     /**
      * Analyzers to run on the request.
      *
@@ -52,7 +52,7 @@ class PostProtectRouteMiddleware
     {
         // Allow the request to proceed first
         $response = $next($request);
-        
+
         // If no analyzers are registered or middleware is disabled, just return
         if (empty($this->analyzers) || ! Config::get(self::CONFIG_KEY_PASSIVE_ENABLED, true)) {
             return $response;
@@ -61,13 +61,13 @@ class PostProtectRouteMiddleware
         // Get the user's fingerprint
         $tracking = $request->getFingerprint();
         $scores = collect();
-        
+
         // Run all registered analyzers and collect their scores
         foreach ($this->analyzers as $analyzer) {
             try {
                 $analyzerName = class_basename($analyzer);
                 $score = $analyzer->analyze($request);
-                
+
                 // Store individual analyzer scores
                 $scores->put($analyzerName, $score);
             } catch (\Exception $e) {
@@ -84,7 +84,7 @@ class PostProtectRouteMiddleware
         // Log suspicious activity but never block
         $thresholdScore = Config::get(self::CONFIG_KEY_THRESHOLD_SCORE, 100);
         $totalScore = $scores->sum();
-        
+
         if ($totalScore > $thresholdScore) {
             Log::warning('Citadel: Passive detection of suspicious activity', [
                 'tracking_id' => $tracking,

@@ -15,9 +15,11 @@ class BanMiddleware
      * Configuration keys.
      */
     private const CONFIG_KEY_ACTIVE_ENABLED = 'citadel.middleware.active_enabled';
+
     private const CONFIG_KEY_BAN_MESSAGE = 'citadel.ban.message';
+
     private const CONFIG_KEY_BAN_RESPONSE_CODE = 'citadel.ban.response_code';
-    
+
     /**
      * Ban key prefix.
      */
@@ -30,8 +32,6 @@ class BanMiddleware
 
     /**
      * Create a new middleware instance.
-     *
-     * @param DataStore $dataStore
      */
     public function __construct(DataStore $dataStore)
     {
@@ -41,14 +41,12 @@ class BanMiddleware
     /**
      * Handle an incoming request.
      *
-     * @param \Illuminate\Http\Request $request
-     * @param \Closure $next
      * @return mixed
      */
     public function handle(Request $request, Closure $next)
     {
         // Skip ban check if active middleware is disabled
-        if (!Config::get(self::CONFIG_KEY_ACTIVE_ENABLED, true)) {
+        if (! Config::get(self::CONFIG_KEY_ACTIVE_ENABLED, true)) {
             return $next($request);
         }
 
@@ -59,7 +57,7 @@ class BanMiddleware
                 'ip' => $request->ip(),
                 'url' => $request->fullUrl(),
             ]);
-            
+
             return $this->blockResponse();
         }
 
@@ -72,7 +70,7 @@ class BanMiddleware
                 'ip' => $request->ip(),
                 'url' => $request->fullUrl(),
             ]);
-            
+
             return $this->blockResponse();
         }
 
@@ -81,28 +79,22 @@ class BanMiddleware
 
     /**
      * Check if an identifier (IP or fingerprint) is banned.
-     *
-     * @param string $identifier
-     * @param string $type
-     * @return bool
      */
     protected function isBanned(string $identifier, string $type): bool
     {
         $key = $this->getBanKey($identifier, $type);
+
         return $this->dataStore->getValue($key) !== null;
     }
 
     /**
      * Generate a ban key for the identifier.
-     *
-     * @param string $identifier
-     * @param string $type
-     * @return string
      */
     protected function getBanKey(string $identifier, string $type): string
     {
         $safeIdentifier = Str::slug($identifier);
-        return self::KEY_PREFIX . "{$type}:{$safeIdentifier}";
+
+        return self::KEY_PREFIX."{$type}:{$safeIdentifier}";
     }
 
     /**

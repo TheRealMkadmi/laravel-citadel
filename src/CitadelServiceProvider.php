@@ -14,7 +14,6 @@ use Symfony\Component\Finder\Finder;
 use TheRealMkadmi\Citadel\Analyzers\IRequestAnalyzer;
 use TheRealMkadmi\Citadel\Commands\CitadelBanCommand;
 use TheRealMkadmi\Citadel\Commands\CitadelUnbanCommand;
-use TheRealMkadmi\Citadel\Commands\CitadelCommand;
 use TheRealMkadmi\Citadel\Components\Fingerprint;
 use TheRealMkadmi\Citadel\DataStore\ArrayDataStore;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
@@ -33,21 +32,26 @@ class CitadelServiceProvider extends PackageServiceProvider
      * Group keys for analyzer types
      */
     private const ANALYZER_GROUP_ACTIVE = 'active';
+
     private const ANALYZER_GROUP_PASSIVE = 'passive';
+
     private const ANALYZER_GROUP_PAYLOAD = 'payload_scanners';
-    
+
     /**
      * Config keys
      */
     private const CONFIG_CACHE_KEY = 'citadel.cache';
+
     private const CONFIG_API_KEY = 'citadel.api';
+
     private const CONFIG_MIDDLEWARE_KEY = 'citadel.middleware';
-    
+
     /**
      * Middleware group names
      */
     private const MIDDLEWARE_GROUP_PROTECT = 'citadel-protect';
     private const MIDDLEWARE_GROUP_ACTIVE = 'citadel-active';
+
     private const MIDDLEWARE_ALIAS_API_AUTH = 'citadel-api-auth';
 
     public function configurePackage(Package $package): void
@@ -103,7 +107,7 @@ class CitadelServiceProvider extends PackageServiceProvider
             GeofenceMiddleware::class,
             BanMiddleware::class,
         ]);
-        
+
         // Keep the original complete middleware group for backward compatibility
         $router->middlewareGroup(self::MIDDLEWARE_GROUP_PROTECT, [
             ProtectRouteMiddleware::class,
@@ -259,23 +263,23 @@ class CitadelServiceProvider extends PackageServiceProvider
             return new BanMiddleware($app->make(DataStore::class));
         });
 
-        // Register middleware for active analyzers 
+        // Register middleware for active analyzers
         $this->app->singleton(ProtectRouteMiddleware::class, function ($app) {
             // Get all analyzers classes, grouped by type
             $analyzers = $this->groupAnalyzersByType();
-            
+
             // Create and return the middleware with active analyzers and DataStore injected
             return new ProtectRouteMiddleware(
                 $analyzers[self::ANALYZER_GROUP_ACTIVE],
                 $app->make(DataStore::class)
             );
         });
-        
+
         // Register the middleware for passive analyzers
         $this->app->singleton(PostProtectRouteMiddleware::class, function ($app) {
             // Get all analyzers classes, grouped by type
             $analyzers = $this->groupAnalyzersByType();
-            
+
             // Create and return the middleware with passive analyzers and DataStore injected
             return new PostProtectRouteMiddleware(
                 $analyzers[self::ANALYZER_GROUP_PASSIVE],
@@ -286,41 +290,41 @@ class CitadelServiceProvider extends PackageServiceProvider
         // Register API auth middleware
         $this->app->singleton(ApiAuthMiddleware::class);
     }
-    
+
     /**
      * Group analyzers by their type (active/passive) and other properties
-     * 
+     *
      * @return array<string, array<IRequestAnalyzer>>
      */
     protected function groupAnalyzersByType(): array
     {
         // Discover all analyzer classes
         $analyzerClasses = $this->discoverAnalyzers();
-        
+
         $active = [];
         $passive = [];
         $payloadScanners = [];
-        
+
         // Group analyzers by their properties
         foreach ($analyzerClasses as $class) {
             /** @var IRequestAnalyzer $analyzer */
             $analyzer = $this->app->make($class);
-            
-            if (!$analyzer->isEnabled()) {
+
+            if (! $analyzer->isEnabled()) {
                 continue;
             }
-            
+
             if ($analyzer->scansPayload()) {
                 $payloadScanners[] = $analyzer;
             }
-            
+
             if ($analyzer->isActive()) {
                 $active[] = $analyzer;
             } else {
                 $passive[] = $analyzer;
             }
         }
-        
+
         return [
             self::ANALYZER_GROUP_ACTIVE => $active,
             self::ANALYZER_GROUP_PASSIVE => $passive,
