@@ -272,4 +272,21 @@ return [
             'max_correlation_threshold' => env('CITADEL_SPAMMINESS_MAX_CORR', 0.8),
         ],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Ban Settings
+    |--------------------------------------------------------------------------
+    |
+    | Configure settings related to the ban feature.
+    | - ban_ttl: Default time-to-live for bans in seconds (null = permanent)
+    | - cache_key: The key prefix used for storing banned IPs/fingerprints
+    |
+    */
+    'ban' => [
+        'ban_ttl' => env('CITADEL_BAN_TTL', null), // null means permanent
+        'cache_key' => env('CITADEL_BAN_CACHE_KEY', 'banned'),
+        'message' => env('CITADEL_BAN_MESSAGE', 'You have been banned from accessing this site.'),
+        'response_code' => env('CITADEL_BAN_RESPONSE_CODE', 403),
+    ],
 ];

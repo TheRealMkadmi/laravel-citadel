@@ -13,13 +13,17 @@ use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 use Symfony\Component\Finder\Finder;
 use TheRealMkadmi\Citadel\Analyzers\IRequestAnalyzer;
+use TheRealMkadmi\Citadel\Commands\CitadelBanCommand;
 use TheRealMkadmi\Citadel\Commands\CitadelCommand;
+use TheRealMkadmi\Citadel\Commands\CitadelUnbanCommand;
 use TheRealMkadmi\Citadel\Components\Fingerprint;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 use TheRealMkadmi\Citadel\DataStore\ArrayDataStore;
 use TheRealMkadmi\Citadel\DataStore\OctaneDataStore;
 use TheRealMkadmi\Citadel\DataStore\RedisDataStore;
+use TheRealMkadmi\Citadel\Middleware\BanMiddleware;
 use TheRealMkadmi\Citadel\Middleware\GeofenceMiddleware;
+use TheRealMkadmi\Citadel\Middleware\PostProtectRouteMiddleware;
 use TheRealMkadmi\Citadel\Middleware\ProtectRouteMiddleware;
 
 class CitadelServiceProvider extends PackageServiceProvider
@@ -38,6 +42,8 @@ class CitadelServiceProvider extends PackageServiceProvider
             ->hasViewComponents('citadel', Fingerprint::class)
             ->hasAssets()
             ->hasCommand(CitadelCommand::class)
+            ->hasCommand(CitadelBanCommand::class)
+            ->hasCommand(CitadelUnbanCommand::class)
             ->hasInstallCommand(function (InstallCommand $command) {
                 $command
                     ->startWith(function (InstallCommand $command) {
@@ -70,11 +76,9 @@ class CitadelServiceProvider extends PackageServiceProvider
         $router = $this->app->make(Router::class);
         $router->middlewareGroup('citadel-protect', [
             ProtectRouteMiddleware::class,
+            PostProtectRouteMiddleware::class,
             GeofenceMiddleware::class,
-        ]);
-        $router->middlewareGroup('citadel-track', [
-            ProtectRouteMiddleware::class,
-            GeofenceMiddleware::class,
+            BanMiddleware::class,
         ]);
     }
     
@@ -169,6 +173,11 @@ class CitadelServiceProvider extends PackageServiceProvider
      */
     protected function registerMiddleware()
     {
+        // Register the BanMiddleware
+        $this->app->singleton(BanMiddleware::class, function ($app) {
+            return new BanMiddleware($app->make(DataStore::class));
+        });
+        
         $this->app->singleton(ProtectRouteMiddleware::class, function ($app) {
             // Get the analyzer class names
             $analyzerClasses = $this->discoverAnalyzers();
