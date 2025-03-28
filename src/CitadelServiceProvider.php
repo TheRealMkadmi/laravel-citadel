@@ -73,8 +73,8 @@ class CitadelServiceProvider extends PackageServiceProvider
     public function packageBooted()
     {
         // Register the getFingerprint macro on the Request class
-        Request::macro('getFingerprint', fn() => app(Citadel::class)->getFingerprint($this));
-        
+        Request::macro('getFingerprint', fn () => app(Citadel::class)->getFingerprint($this));
+
         // Register middleware
         $router = $this->app->make(Router::class);
         $router->middlewareGroup('citadel-protect', [
@@ -89,11 +89,9 @@ class CitadelServiceProvider extends PackageServiceProvider
         // Register API routes
         $this->registerApiRoutes();
     }
-    
+
     /**
      * Register any package services.
-     *
-     * @return void
      */
     public function register(): void
     {
@@ -101,12 +99,12 @@ class CitadelServiceProvider extends PackageServiceProvider
 
         // Register the DataStore singleton first since other components depend on it
         $this->registerDataStore();
-        
+
         // Register the main Citadel service
         $this->app->singleton(Citadel::class, function ($app) {
             return new Citadel($app->make(DataStore::class));
         });
-        
+
         // Register analyzers and middleware
         $this->registerAnalyzers();
         $this->registerMiddleware();
@@ -166,12 +164,12 @@ class CitadelServiceProvider extends PackageServiceProvider
     {
         $this->app->singleton(DataStore::class, function ($app) {
             $driver = config('citadel.cache.driver', 'auto');
-            
+
             // If a specific driver is configured, use it directly
             if ($driver !== 'auto') {
                 return $this->resolveDataStoreByDriver($driver);
             }
-            
+
             // Auto-detect the best available driver
             return $this->resolveAutoDataStore($app);
         });
@@ -182,48 +180,48 @@ class CitadelServiceProvider extends PackageServiceProvider
         // Get preference configuration
         $preferOctane = config('citadel.cache.prefer_octane', true);
         $preferRedis = config('citadel.cache.prefer_redis', true);
-        
+
         // If Octane is available and preferred, use Octane store
         if ($preferOctane && $app->bound(Server::class)) {
-            return new OctaneDataStore();
+            return new OctaneDataStore;
         }
-        
+
         // If Redis is available and preferred, use Redis store
         if ($preferRedis && $this->isRedisAvailable()) {
-            return new RedisDataStore();
+            return new RedisDataStore;
         }
-        
+
         // Fall back to array store
-        return new ArrayDataStore();
+        return new ArrayDataStore;
     }
 
     protected function resolveDataStoreByDriver(string $driver): DataStore
     {
         return match ($driver) {
-            'redis' => new RedisDataStore(),
-            'octane' => new OctaneDataStore(),
-            default => new ArrayDataStore(),
+            'redis' => new RedisDataStore,
+            'octane' => new OctaneDataStore,
+            default => new ArrayDataStore,
         };
     }
 
     protected function isRedisAvailable(): bool
     {
-        return class_exists('Redis') && 
+        return class_exists('Redis') &&
                config('database.redis.client', null) !== null &&
-               !empty(config('database.redis.default', []));
+               ! empty(config('database.redis.default', []));
     }
 
     protected function registerAnalyzers()
     {
         // Discover all classes that implement IRequestAnalyzer
         $analyzers = $this->discoverAnalyzers();
-        
+
         // Register each analyzer with DataStore dependency automatically injected
         foreach ($analyzers as $analyzer) {
             $this->app->singleton($analyzer);
         }
     }
-    
+
     /**
      * Register the middleware with its dependencies.
      *
@@ -239,10 +237,10 @@ class CitadelServiceProvider extends PackageServiceProvider
         $this->app->singleton(ProtectRouteMiddleware::class, function ($app) {
             // Get the analyzer class names
             $analyzerClasses = $this->discoverAnalyzers();
-            
+
             // Resolve all analyzer instances from the container
-            $analyzers = $analyzerClasses->map(fn($class) => $app->make($class))->toArray();
-            
+            $analyzers = $analyzerClasses->map(fn ($class) => $app->make($class))->toArray();
+
             // Create and return the middleware with all analyzers and DataStore injected
             return new ProtectRouteMiddleware(
                 $analyzers,
@@ -253,36 +251,34 @@ class CitadelServiceProvider extends PackageServiceProvider
         // Register API auth middleware
         $this->app->singleton(ApiAuthMiddleware::class);
     }
-    
+
     /**
      * Discover all request analyzer implementations.
-     *
-     * @return Collection
      */
     protected function discoverAnalyzers(): Collection
     {
-        $analyzersPath = __DIR__ . '/Analyzers';
+        $analyzersPath = __DIR__.'/Analyzers';
         $namespace = 'TheRealMkadmi\\Citadel\\Analyzers\\';
-        
-        $finder = new Finder();
+
+        $finder = new Finder;
         $finder->files()->in($analyzersPath)->name('*.php');
-        
+
         return collect($finder)
             ->map(function ($file) use ($namespace): string|null {
-                $class = $namespace . $file->getBasename('.php');
-                
+                $class = $namespace.$file->getBasename('.php');
+
                 // Skip the interface itself and abstract classes
-                if (!class_exists($class) || 
-                    (new \ReflectionClass($class))->isInterface() || 
+                if (! class_exists($class) ||
+                    (new \ReflectionClass($class))->isInterface() ||
                     (new \ReflectionClass($class))->isAbstract()) {
                     return null;
                 }
-                
+
                 // Check if class implements IRequestAnalyzer
                 if (in_array(IRequestAnalyzer::class, class_implements($class) ?: [])) {
                     return $class;
                 }
-                
+
                 return null;
             })
             ->filter()

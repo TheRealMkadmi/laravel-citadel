@@ -26,18 +26,16 @@ class ProtectRouteMiddleware
 
     /**
      * Suspect score threshold for blocking requests
-     *
-     * @var float
      */
     protected float $threshold;
-    
+
     /**
      * Create a new middleware instance.
      *
      * @param array<IRequestAnalyzer> $analyzers
      * @param \TheRealMkadmi\Citadel\DataStore\DataStore $dataStore
      */
-    public function __construct(array $analyzers = [], DataStore $dataStore)
+    public function __construct(array $analyzers, DataStore $dataStore)
     {
         $this->analyzers = $analyzers;
         $this->dataStore = $dataStore;
@@ -47,8 +45,6 @@ class ProtectRouteMiddleware
     /**
      * Handle an incoming request.
      *
-     * @param Request $request
-     * @param \Closure $next
      * @return mixed
      */
     public function handle(Request $request, \Closure $next)
@@ -57,14 +53,14 @@ class ProtectRouteMiddleware
         if (empty($this->analyzers)) {
             return $next($request);
         }
-        
+
         $fingerprint = $request->getFingerprint();
         $totalScore = 0;
         $scoreBreakdown = [];
-        
+
         // If no fingerprint is provided, we can still analyze but will use IP for tracking
-        $trackingId = $fingerprint ?? md5($request->ip() . $request->userAgent());
-        
+        $trackingId = $fingerprint ?? md5($request->ip().$request->userAgent());
+
         $logContext = [
             'fingerprint' => $fingerprint ?? 'none',
             'url' => $request->fullUrl(),
@@ -92,26 +88,26 @@ class ProtectRouteMiddleware
         // Process each applicable analyzer and collect scores
         foreach ($applicableAnalyzers as $analyzer) {
             $shortName = class_basename($analyzer);
-            
+
             try {
                 // Run the analyzer
                 $score = $analyzer->analyze($request);
                 $totalScore += $score;
                 $scoreBreakdown[$shortName] = $score;
-                
+
                 // Store analyzer result in cache with proper prefixing if we have a trackingId
                 if ($trackingId) {
                     $cacheKey = $this->getCacheKey($trackingId, $shortName);
                     $ttl = (int) config('citadel.cache.analyzer_results_ttl', 3600);
                     $this->dataStore->setValue($cacheKey, $score, $ttl);
                 }
-                
+
                 // Log each analyzer's score
                 Log::debug("Citadel: {$shortName} score", array_merge($logContext, [
                     'analyzer' => $shortName,
                     'score' => $score,
                 ]));
-                
+
                 // Early return if we're already above the threshold
                 if ($totalScore >= $this->threshold) {
                     // The actual tracking of this blocked request is now handled in PostProtectRouteMiddleware
@@ -121,7 +117,7 @@ class ProtectRouteMiddleware
                         'breakdown' => $scoreBreakdown,
                         'terminated_by' => $shortName,
                     ]));
-                    
+
                     return response()->json([
                         'message' => trans('citadel::messages.request_blocked'),
                         'citadel' => true,
@@ -137,7 +133,7 @@ class ProtectRouteMiddleware
                 ]));
             }
         }
-        
+
         // Log the final score
         Log::debug(trans('citadel::logging.final_score'), array_merge($logContext, [
             'total_score' => $totalScore,
@@ -145,7 +141,7 @@ class ProtectRouteMiddleware
             'breakdown' => $scoreBreakdown,
             'passed' => true,
         ]));
-        
+
         // Allow the request to proceed if the score is below the threshold
         return $next($request);
     }
@@ -177,17 +173,13 @@ class ProtectRouteMiddleware
             return true;
         })->values()->all();
     }
-    
+
     /**
      * Generate a cache key for analyzer results
-     *
-     * @param string $tracking
-     * @param string $analyzerName
-     * @return string
      */
     protected function getCacheKey(string $tracking, string $analyzerName): string
     {
-        return Str::start("analyzer:{$analyzerName}:{$tracking}", 
+        return Str::start("analyzer:{$analyzerName}:{$tracking}",
             config('citadel.cache.key_prefix', 'citadel:'));
     }
 }
