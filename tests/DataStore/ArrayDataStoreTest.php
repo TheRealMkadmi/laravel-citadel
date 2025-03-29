@@ -197,7 +197,7 @@ class ArrayDataStoreTest extends TestCase
         $value = 'test-value';
         $ttl = 3600;
         
-        // Mock put behavior
+        // Mock put behavior for setValue
         $this->mockCache->shouldReceive('put')
             ->once()
             ->with($prefixedKey, $value, $ttl)
@@ -208,20 +208,26 @@ class ArrayDataStoreTest extends TestCase
             ->with($prefixedKey)
             ->andReturn(true);
             
-        // Mock get behavior for expire method
-        $this->mockCache->shouldReceive('get')
-            ->with('citadel:test-expire', null)
-            ->andReturn($value);
-            
         // Test with explicit TTL
         $this->dataStore->setValue($key, $value, $ttl);
         $this->assertTrue($this->dataStore->hasValue($key));
         
         // Test with expire method
         $key2 = 'test-expire';
+        $prefixedKey2 = 'citadel:' . $key2;
+        
+        // Mock necessary methods for expire test
+        $this->mockCache->shouldReceive('has')
+            ->with($prefixedKey2)
+            ->andReturn(true);
+        
+        $this->mockCache->shouldReceive('get')
+            ->with($prefixedKey2, null)
+            ->andReturn($value);
+            
         $this->mockCache->shouldReceive('put')
             ->once()
-            ->with('citadel:' . $key2, $value, Mockery::any())
+            ->with($prefixedKey2, $value, $ttl)
             ->andReturn(true);
             
         $this->dataStore->setValue($key2, $value);

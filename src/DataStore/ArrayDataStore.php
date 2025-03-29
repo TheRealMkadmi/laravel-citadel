@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace TheRealMkadmi\Citadel\DataStore;
 
 use Illuminate\Support\Facades\Cache;
+use TheRealMkadmi\Citadel\Config\CitadelConfig;
 
 class ArrayDataStore extends AbstractDataStore
 {
@@ -241,7 +242,7 @@ class ArrayDataStore extends AbstractDataStore
                     break;
                 case 'expire':
                     // Handle expiry along with value operations in zAdd
-                    $results[] = true;
+                    $results[] = $this->expire(...$args);
                     break;
                 case 'zcard':
                     $results[] = $this->zCard(...$args);

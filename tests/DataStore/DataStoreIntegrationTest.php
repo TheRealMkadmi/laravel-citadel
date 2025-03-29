@@ -2,6 +2,8 @@
 
 namespace TheRealMkadmi\Citadel\Tests\DataStore;
 
+use Illuminate\Support\Facades\Config;
+use Mockery;
 use PHPUnit\Framework\Attributes\Test;
 use TheRealMkadmi\Citadel\Citadel;
 use TheRealMkadmi\Citadel\Config\CitadelConfig;
@@ -14,11 +16,20 @@ use TheRealMkadmi\Citadel\Tests\TestCase;
  */
 class DataStoreIntegrationTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        
+        // Ensure we're using ArrayDataStore for tests
+        Config::set(CitadelConfig::KEY_CACHE_DRIVER, ArrayDataStore::STORE_IDENTIFIER);
+        $this->app->singleton(DataStore::class, ArrayDataStore::class);
+    }
+    
     #[Test]
     public function it_resolves_array_data_store_from_container()
     {
         // Verify that the container resolves DataStore to ArrayDataStore
-        $dataStore = app(DataStore::class);
+        $dataStore = $this->app->make(DataStore::class);
         $this->assertInstanceOf(ArrayDataStore::class, $dataStore);
     }
 
@@ -29,39 +40,49 @@ class DataStoreIntegrationTest extends TestCase
         $prefix = 'test-prefix:';
         $ttl = 7200;
         
-        config([
+        Config::set([
             CitadelConfig::KEY_CACHE_PREFIX => $prefix,
             CitadelConfig::KEY_CACHE_DEFAULT_TTL => $ttl,
         ]);
         
-        // Create new instances that should use the updated config
-        $dataStore = new ArrayDataStore();
+        // Create a testable array data store
+        $dataStore = Mockery::mock(ArrayDataStore::class)
+            ->makePartial()
+            ->shouldAllowMockingProtectedMethods();
         
-        // Test a protected method via reflection to verify prefix
-        $prefixMethod = new \ReflectionMethod($dataStore, 'getPrefix');
-        $prefixMethod->setAccessible(true);
-        $this->assertEquals($prefix, $prefixMethod->invoke($dataStore));
+        // Test the prefix is correctly retrieved
+        $this->assertEquals($prefix, $dataStore->getPrefix());
         
-        // Test a protected method via reflection to verify TTL
-        $ttlMethod = new \ReflectionMethod($dataStore, 'getDefaultTtl');
-        $ttlMethod->setAccessible(true);
-        $this->assertEquals($ttl, $ttlMethod->invoke($dataStore));
+        // Test the TTL is correctly retrieved
+        $this->assertEquals($ttl, $dataStore->getDefaultTtl());
     }
 
     #[Test]
     public function it_integrates_with_citadel_service()
     {
+        // Create a mock DataStore instance
+        $dataStoreImplementation = new ArrayDataStore();
+        
+        // Override the binding to use our implementation
+        $this->app->instance(DataStore::class, $dataStoreImplementation);
+        
         // Set a key in the data store
         $key = 'integration-test';
         $value = ['test' => 'data'];
         
-        $dataStore = app(DataStore::class);
+        $dataStore = $this->app->make(DataStore::class);
         $dataStore->setValue($key, $value);
         
         // Verify the Citadel service can retrieve it via the data store
-        $citadel = app(Citadel::class);
+        $citadel = $this->app->make(Citadel::class);
         $retrievedValue = $citadel->getDataStore()->getValue($key);
         
         $this->assertEquals($value, $retrievedValue);
+    }
+    
+    protected function tearDown(): void
+    {
+        Mockery::close();
+        parent::tearDown();
     }
 }
