@@ -55,7 +55,7 @@ class CitadelBanCommand extends Command
 
         // Resolve ban type using our enum
         $banType = $typeString === 'auto'
-            ? BanType::tryFrom('auto', true, $identifier) // Auto-detect based on identifier
+            ? BanType::detectType('auto', true, $identifier) // Auto-detect based on identifier
             : BanType::tryFrom($typeString);
         
         // Validate the type

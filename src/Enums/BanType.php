@@ -21,17 +21,17 @@ enum BanType: string
     }
     
     /**
-     * Attempt to create from a string value.
+     * Attempt to create from a string value with auto-detection capabilities.
      * 
      * @param string $value The input string
      * @param bool $autoDetect Whether to auto-detect the type from input if not recognized
      * @param string|null $input Original input for auto-detection
      * @return self|null The matching enum case or null
      */
-    public static function tryFrom(string $value, bool $autoDetect = false, ?string $input = null): ?self
+    public static function detectType(string $value, bool $autoDetect = false, ?string $input = null): ?self
     {
         // Direct match
-        $directMatch = static::tryFrom($value);
+        $directMatch = self::tryFrom($value);
         if ($directMatch !== null) {
             return $directMatch;
         }
