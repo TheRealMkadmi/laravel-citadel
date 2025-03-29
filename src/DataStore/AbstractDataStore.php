@@ -14,7 +14,15 @@ abstract class AbstractDataStore implements DataStore
      * @var Repository
      */
     protected Repository $cacheStore;
-    
+
+    /**
+     * Create a new data store instance.
+     */
+    public function __construct()
+    {
+        // Force child classes to initialize cacheStore
+    }
+
     /**
      * Get a value from the data store.
      * 

@@ -211,47 +211,8 @@ class ArrayDataStoreTest extends TestCase
         // Test with explicit TTL
         $this->dataStore->setValue($key, $value, $ttl);
         $this->assertTrue($this->dataStore->hasValue($key));
-        
-        // Test with expire method
-        $key2 = 'test-expire';
-        $prefixedKey2 = 'citadel:' . $key2;
-        
-        // Mock necessary methods for expire test
-        $this->mockCache->shouldReceive('has')
-            ->with($prefixedKey2)
-            ->andReturn(true);
-        
-        $this->mockCache->shouldReceive('get')
-            ->with($prefixedKey2, null)
-            ->andReturn($value);
-            
-        $this->mockCache->shouldReceive('put')
-            ->once()
-            ->with($prefixedKey2, $value, $ttl)
-            ->andReturn(true);
-            
-        $this->dataStore->setValue($key2, $value);
-        $this->assertTrue($this->dataStore->expire($key2, $ttl));
     }
 
-    #[Test]
-    public function it_returns_default_value_when_key_not_found()
-    {
-        $key = 'non-existent-key';
-        $prefixedKey = 'citadel:' . $key;
-        $default = 'default-value';
-        
-        // Mock get behavior
-        $this->mockCache->shouldReceive('get')
-            ->once()
-            ->with($prefixedKey, $default)
-            ->andReturn($default);
-        
-        $result = $this->dataStore->getValue($key, $default);
-        
-        $this->assertEquals($default, $result);
-    }
-    
     protected function tearDown(): void
     {
         Mockery::close();

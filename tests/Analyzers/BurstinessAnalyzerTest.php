@@ -57,11 +57,9 @@ class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
     {
         Config::set(CitadelConfig::KEY_BURSTINESS . '.enable_burstiness_analyzer', false);
         
-        // Mock cache check
-        $this->dataStore->shouldReceive('getValue')
+        $this->dataStore->shouldReceive('pipeline')
             ->once()
-            ->with('burstiness:test-fingerprint')
-            ->andReturn(null);
+            ->andReturn([1, 1, true, 1, []]);
         
         $score = $this->analyzer->analyze($this->request);
         $this->assertEquals(0.0, $score);
@@ -73,14 +71,19 @@ class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
         $now = time() * 1000;
         
         $this->dataStore->shouldReceive('getValue')
-            ->with('burstiness:test-fingerprint')
+            ->with(Mockery::pattern('/burst:.*:hist/'))
+            ->andReturn(null);
+            
+        $this->dataStore->shouldReceive('getValue')
+            ->with(Mockery::pattern('/burst:.*:pat/'))
             ->andReturn(null);
         
         $this->dataStore->shouldReceive('pipeline')
-            ->andReturn([null, null, null, 30, []]);
+            ->andReturn([1, 1, true, 30, []]);
         
-        // Allow multiple setValue calls for different components
-        $this->dataStore->shouldReceive('setValue')->atLeast()->once();
+        $this->dataStore->shouldReceive('setValue')
+            ->times(3)
+            ->andReturn(true);
         
         $score = $this->analyzer->analyze($this->request);
         $this->assertEquals(100.0, $score);
@@ -100,18 +103,19 @@ class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
         ];
 
         $this->dataStore->shouldReceive('getValue')
-            ->with('burstiness:test-fingerprint')
+            ->with(Mockery::pattern('/burst:.*:hist/'))
             ->andReturn(null);
+            
+        $this->dataStore->shouldReceive('getValue')
+            ->with(Mockery::pattern('/burst:.*:pat/'))
+            ->andReturn(['cv_history' => [0.05, 0.06, 0.04, 0.05]]);
         
         $this->dataStore->shouldReceive('pipeline')
-            ->andReturn([null, null, null, 5, $timestamps]);
+            ->andReturn([1, 1, true, 5, $timestamps]);
         
-        // Use pattern matching for Redis keys
-        $this->dataStore->shouldReceive('getValue')
-            ->with(Mockery::pattern('/hist/'))
-            ->andReturn(null);
-        
-        $this->dataStore->shouldReceive('setValue')->atLeast()->once();
+        $this->dataStore->shouldReceive('setValue')
+            ->times(3)
+            ->andReturn(true);
         
         $score = $this->analyzer->analyze($this->request);
         $this->assertEquals(30.0, $score);
@@ -122,40 +126,48 @@ class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
     {
         $now = time() * 1000;
         $historyData = [
-            'violation_count' => 5,
-            'max_excess' => 15,
-            'last_violation' => $now - 600000
+            'last_violation' => $now - 600000,
+            'violation_count' => 1,
         ];
 
         $this->dataStore->shouldReceive('getValue')
-            ->with('burstiness:test-fingerprint')
+            ->with(Mockery::pattern('/burst:.*:hist/'))
+            ->andReturn($historyData);
+            
+        $this->dataStore->shouldReceive('getValue')
+            ->with(Mockery::pattern('/burst:.*:pat/'))
             ->andReturn(null);
         
         $this->dataStore->shouldReceive('pipeline')
-            ->andReturn([null, null, null, 5, []]);
+            ->andReturn([1, 1, true, 5, []]);
         
-        $this->dataStore->shouldReceive('getValue')
-            ->with(Mockery::pattern('/hist/'))
-            ->andReturn($historyData);
-        
-        $this->dataStore->shouldReceive('setValue')->atLeast()->once();
+        $this->dataStore->shouldReceive('setValue')
+            ->times(3)
+            ->andReturn(true);
         
         $score = $this->analyzer->analyze($this->request);
-        $this->assertGreaterThan(40.0, $score);
+        $this->assertEquals(20.0, $score);
     }
 
     #[Test]
     public function it_analyzes_normal_request_pattern_with_no_penalties()
     {
         $now = time() * 1000;
+        
         $this->dataStore->shouldReceive('getValue')
-            ->with('burstiness:test-fingerprint')
+            ->with(Mockery::pattern('/burst:.*:hist/'))
+            ->andReturn(null);
+            
+        $this->dataStore->shouldReceive('getValue')
+            ->with(Mockery::pattern('/burst:.*:pat/'))
             ->andReturn(null);
         
         $this->dataStore->shouldReceive('pipeline')
-            ->andReturn([null, null, null, 3, []]);
+            ->andReturn([1, 1, true, 3, []]);
         
-        $this->dataStore->shouldReceive('setValue')->once();
+        $this->dataStore->shouldReceive('setValue')
+            ->times(3)
+            ->andReturn(true);
         
         $score = $this->analyzer->analyze($this->request);
         $this->assertEquals(0.0, $score);
@@ -165,7 +177,11 @@ class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
     public function it_correctly_calculates_ttl_from_window_size()
     {
         $this->dataStore->shouldReceive('getValue')
-            ->with('burstiness:test-fingerprint')
+            ->with(Mockery::pattern('/burst:.*:hist/'))
+            ->andReturn(null);
+            
+        $this->dataStore->shouldReceive('getValue')
+            ->with(Mockery::pattern('/burst:.*:pat/'))
             ->andReturn(null);
         
         $this->dataStore->shouldReceive('pipeline')
@@ -178,10 +194,19 @@ class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
                 $pipe->shouldReceive('zrange')->once();
                 $callback($pipe);
                 return true;
-            }));
+            }))
+            ->andReturn([1, 1, true, 3, []]);
         
-        $this->dataStore->shouldReceive('setValue')->once();
+        $this->dataStore->shouldReceive('setValue')
+            ->times(3)
+            ->andReturn(true);
         
         $this->analyzer->analyze($this->request);
+    }
+
+    protected function tearDown(): void
+    {
+        Mockery::close();
+        parent::tearDown();
     }
 }

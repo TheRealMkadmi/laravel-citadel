@@ -214,4 +214,14 @@ class Citadel
         
         return self::BAN_KEY_PREFIX."{$type}:{$safeIdentifier}";
     }
+    
+    /**
+     * Get the data store instance.
+     *
+     * @return DataStore The data store instance
+     */
+    public function getDataStore(): DataStore
+    {
+        return $this->dataStore;
+    }
 }

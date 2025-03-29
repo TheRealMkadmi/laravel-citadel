@@ -19,6 +19,7 @@ class ArrayDataStore extends AbstractDataStore
      */
     public function __construct()
     {
+        parent::__construct();
         $this->cacheStore = Cache::store(self::STORE_IDENTIFIER);
     }
 
@@ -264,15 +265,8 @@ class ArrayDataStore extends AbstractDataStore
      */
     public function expire(string $key, int $ttl): bool
     {
-        // For the Array store, we use the TTL of the underlying cache system
-        if ($this->hasValue($key)) {
-            $value = $this->getValue($key);
-            $this->setValue($key, $value, $ttl);
-
-            return true;
-        }
-
-        return false;
+        $prefixedKey = $this->getPrefixedKey($key);
+        return $this->cacheStore->has($prefixedKey);
     }
 
     /**

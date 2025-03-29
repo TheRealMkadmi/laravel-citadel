@@ -69,6 +69,12 @@ class DataStoreIntegrationTest extends TestCase
         $mockDataStore = Mockery::mock(ArrayDataStore::class)
             ->makePartial();
             
+        // Mock the Cache facade
+        $mockCache = Mockery::mock('Illuminate\Contracts\Cache\Repository');
+        \Illuminate\Support\Facades\Cache::shouldReceive('store')
+            ->with(ArrayDataStore::STORE_IDENTIFIER)
+            ->andReturn($mockCache);
+            
         $key = 'integration-test';
         $value = ['test' => 'data'];
         
@@ -77,9 +83,19 @@ class DataStoreIntegrationTest extends TestCase
             ->once()
             ->with($key)
             ->andReturn($value);
+            
+        $mockCache->shouldReceive('put')
+            ->once()
+            ->withArgs(function($prefixedKey, $val, $ttl) use ($key, $value) {
+                return str_starts_with($prefixedKey, 'citadel:');
+            })
+            ->andReturn(true);
         
         // Override the binding to use our mock implementation
         $this->app->instance(DataStore::class, $mockDataStore);
+        
+        // Initialize the mock data store
+        $mockDataStore->__construct();
         
         // Set a key in the data store
         $mockDataStore->setValue($key, $value);
