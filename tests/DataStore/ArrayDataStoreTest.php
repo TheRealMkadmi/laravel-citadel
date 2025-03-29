@@ -2,90 +2,93 @@
 
 namespace TheRealMkadmi\Citadel\Tests\DataStore;
 
-use Illuminate\Support\Facades\Cache;
-use Mockery;
+use Illuminate\Support\Facades\Config;
 use PHPUnit\Framework\Attributes\Test;
+use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\ArrayDataStore;
 use TheRealMkadmi\Citadel\Tests\TestCase;
 
 class ArrayDataStoreTest extends TestCase
 {
     protected ArrayDataStore $dataStore;
-
-    protected $mockCache;
+    protected string $prefix;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        // Create mock cache store
-        $this->mockCache = Mockery::mock('Illuminate\Contracts\Cache\Repository');
-
-        // Mock the Cache facade to return our mock store
-        Cache::shouldReceive('store')
-            ->with(ArrayDataStore::STORE_IDENTIFIER)
-            ->andReturn($this->mockCache);
-
-        $this->dataStore = new ArrayDataStore;
+        // Ensure we're using a consistent prefix for our tests
+        $this->prefix = 'citadel:';
+        Config::set(CitadelConfig::KEY_CACHE_PREFIX, $this->prefix);
+        
+        // Initialize a real ArrayDataStore instance using Laravel's array cache driver
+        $this->dataStore = new ArrayDataStore();
     }
 
     #[Test]
     public function it_can_set_and_get_values()
     {
         $key = 'test-key';
-        $prefixedKey = 'citadel:'.$key; // Assuming default prefix is 'citadel:'
         $value = 'test-value';
 
-        // Mock behavior for setValue
-        $this->mockCache->shouldReceive('put')
-            ->once()
-            ->with($prefixedKey, $value, Mockery::any())
-            ->andReturn(true);
+        // Set a value and verify it was stored successfully
+        $this->assertTrue($this->dataStore->setValue($key, $value));
+        
+        // Get the value and verify it matches what we stored
+        $result = $this->dataStore->getValue($key);
+        $this->assertEquals($value, $result);
 
-        // Mock behavior for getValue
-        $this->mockCache->shouldReceive('get')
-            ->once()
-            ->with($prefixedKey, null)
-            ->andReturn($value);
+        // Test with different data types
+        $arrayValue = ['name' => 'John', 'age' => 30];
+        $this->dataStore->setValue($key, $arrayValue);
+        $this->assertEquals($arrayValue, $this->dataStore->getValue($key));
+
+        $objectValue = (object)['name' => 'Jane', 'age' => 25];
+        $this->dataStore->setValue($key, $objectValue);
+        $this->assertEquals($objectValue, $this->dataStore->getValue($key));
+    }
+
+    #[Test]
+    public function it_correctly_handles_non_existent_keys()
+    {
+        $key = 'non-existent-key';
+        
+        // Should return null for non-existent keys
+        $this->assertNull($this->dataStore->getValue($key));
+        
+        // Should return false when checking if a non-existent key exists
+        $this->assertFalse($this->dataStore->hasValue($key));
+    }
+
+    #[Test]
+    public function it_can_check_if_value_exists()
+    {
+        $key = 'existing-key';
+        $value = 'existing-value';
 
         $this->dataStore->setValue($key, $value);
-        $result = $this->dataStore->getValue($key);
-
-        $this->assertEquals($value, $result);
+        
+        // Should return true when checking if an existing key exists
+        $this->assertTrue($this->dataStore->hasValue($key));
     }
 
     #[Test]
     public function it_can_remove_values()
     {
-        $key = 'test-key-to-remove';
-        $prefixedKey = 'citadel:'.$key;
-        $value = 'test-value';
+        $key = 'key-to-remove';
+        $value = 'value-to-remove';
 
-        // Mock behavior for hasValue
-        $this->mockCache->shouldReceive('has')
-            ->with($prefixedKey)
-            ->andReturn(true, false);
-
-        // Mock behavior for removeValue
-        $this->mockCache->shouldReceive('forget')
-            ->once()
-            ->with($prefixedKey)
-            ->andReturn(true);
-
-        // Mock setValue behavior
-        $this->mockCache->shouldReceive('put')
-            ->with($prefixedKey, $value, Mockery::any())
-            ->andReturn(true);
-
-        // Mock getValue behavior
-        $this->mockCache->shouldReceive('get')
-            ->with($prefixedKey, null)
-            ->andReturn(null);
-
+        // First set a value
         $this->dataStore->setValue($key, $value);
         $this->assertTrue($this->dataStore->hasValue($key));
-
-        $this->dataStore->removeValue($key);
+        
+        // Now remove it
+        $result = $this->dataStore->removeValue($key);
+        
+        // Check that removal was successful
+        $this->assertTrue($result);
+        
+        // Verify the value is gone
         $this->assertFalse($this->dataStore->hasValue($key));
         $this->assertNull($this->dataStore->getValue($key));
     }
@@ -94,35 +97,16 @@ class ArrayDataStoreTest extends TestCase
     public function it_can_work_with_sorted_sets()
     {
         $key = 'test-sorted-set';
-        $prefixedKey = 'citadel:'.$key;
-
-        // Setup mock data
-        $set = [];
-
-        // Mock get and put for zAdd operations
-        $this->mockCache->shouldReceive('get')
-            ->with($prefixedKey, [])
-            ->andReturnUsing(function () use (&$set) {
-                return $set;
-            });
-
-        $this->mockCache->shouldReceive('put')
-            ->with($prefixedKey, Mockery::any(), Mockery::any())
-            ->andReturnUsing(function ($k, $v) use (&$set) {
-                $set = $v;
-
-                return true;
-            });
 
         // Add members with scores
         $this->dataStore->zAdd($key, 1.0, 'member1');
         $this->dataStore->zAdd($key, 2.0, 'member2');
         $this->dataStore->zAdd($key, 3.0, 'member3');
 
-        // Test zCard to get count
+        // Test zCard returns the correct count
         $this->assertEquals(3, $this->dataStore->zCard($key));
 
-        // Test zRange to get members by index
+        // Test zRange returns members in correct order
         $members = $this->dataStore->zRange($key, 0, -1);
         $this->assertCount(3, $members);
         $this->assertEquals(['member1', 'member2', 'member3'], $members);
@@ -134,39 +118,109 @@ class ArrayDataStoreTest extends TestCase
         $this->assertEquals(2.0, $membersWithScores['member2']);
         $this->assertEquals(3.0, $membersWithScores['member3']);
 
-        // Test zRemRangeByScore to remove members with scores in range
-        $removed = $this->dataStore->zRemRangeByScore($key, 1.0, 2.0);
+        // Test updating an existing member's score
+        $this->dataStore->zAdd($key, 4.0, 'member1');
+        $membersWithScores = $this->dataStore->zRange($key, 0, -1, true);
+        $this->assertEquals(4.0, $membersWithScores['member1']);
+        $this->assertEquals(3, $this->dataStore->zCard($key)); // Count should still be 3
+    }
+
+    #[Test]
+    public function it_can_remove_range_by_score()
+    {
+        $key = 'range-removal-set';
+
+        // Add members with varying scores
+        $this->dataStore->zAdd($key, 1.0, 'member1');
+        $this->dataStore->zAdd($key, 2.0, 'member2');
+        $this->dataStore->zAdd($key, 3.0, 'member3');
+        $this->dataStore->zAdd($key, 4.0, 'member4');
+        $this->dataStore->zAdd($key, 5.0, 'member5');
+
+        // Remove members with scores in range [2.0, 4.0]
+        $removed = $this->dataStore->zRemRangeByScore($key, 2.0, 4.0);
+        
+        // Should have removed 3 members
+        $this->assertEquals(3, $removed);
+        
+        // Should have 2 members left
+        $this->assertEquals(2, $this->dataStore->zCard($key));
+        
+        // Check remaining members
+        $members = $this->dataStore->zRange($key, 0, -1, true);
+        $this->assertCount(2, $members);
+        $this->assertArrayHasKey('member1', $members);
+        $this->assertArrayHasKey('member5', $members);
+    }
+
+    #[Test]
+    public function it_can_remove_range_by_score_with_infinity()
+    {
+        $key = 'infinity-range-set';
+
+        // Add members with varying scores
+        $this->dataStore->zAdd($key, 1.0, 'member1');
+        $this->dataStore->zAdd($key, 2.0, 'member2');
+        $this->dataStore->zAdd($key, 3.0, 'member3');
+
+        // Test removing with -inf to 2.0 (should remove member1 and member2)
+        $removed = $this->dataStore->zRemRangeByScore($key, '-inf', 2.0);
         $this->assertEquals(2, $removed);
         $this->assertEquals(1, $this->dataStore->zCard($key));
+        $members = $this->dataStore->zRange($key, 0, -1);
+        $this->assertEquals(['member3'], $members);
+
+        // Reset the set
+        $this->dataStore->removeValue($key);
+        $this->dataStore->zAdd($key, 1.0, 'member1');
+        $this->dataStore->zAdd($key, 2.0, 'member2');
+        $this->dataStore->zAdd($key, 3.0, 'member3');
+
+        // Test removing with 2.0 to +inf (should remove member2 and member3)
+        $removed = $this->dataStore->zRemRangeByScore($key, 2.0, '+inf');
+        $this->assertEquals(2, $removed);
+        $this->assertEquals(1, $this->dataStore->zCard($key));
+        $members = $this->dataStore->zRange($key, 0, -1);
+        $this->assertEquals(['member1'], $members);
+    }
+
+    #[Test]
+    public function it_can_handle_zrange_with_different_indices()
+    {
+        $key = 'index-test-set';
+
+        // Add members with scores
+        $this->dataStore->zAdd($key, 1.0, 'member1');
+        $this->dataStore->zAdd($key, 2.0, 'member2');
+        $this->dataStore->zAdd($key, 3.0, 'member3');
+        $this->dataStore->zAdd($key, 4.0, 'member4');
+        $this->dataStore->zAdd($key, 5.0, 'member5');
+
+        // Test positive indices
+        $members = $this->dataStore->zRange($key, 1, 3);
+        $this->assertEquals(['member2', 'member3', 'member4'], $members);
+
+        // Test negative indices
+        $members = $this->dataStore->zRange($key, -3, -1);
+        $this->assertEquals(['member3', 'member4', 'member5'], $members);
+
+        // Test mixed indices
+        $members = $this->dataStore->zRange($key, 1, -2);
+        $this->assertEquals(['member2', 'member3', 'member4'], $members);
+        
+        // Test out of bounds
+        $members = $this->dataStore->zRange($key, 10, 20);
+        $this->assertEmpty($members);
+        
+        // Test inverted indices
+        $members = $this->dataStore->zRange($key, 3, 1);
+        $this->assertEmpty($members);
     }
 
     #[Test]
     public function it_can_execute_commands_in_pipeline()
     {
-        $key = 'test-pipeline';
-        $prefixedKey = 'citadel:'.$key;
-
-        // Setup mock data
-        $set = [];
-
-        // Mock get and put for all operations
-        $this->mockCache->shouldReceive('get')
-            ->with($prefixedKey, [])
-            ->andReturnUsing(function () use (&$set) {
-                return $set;
-            });
-
-        $this->mockCache->shouldReceive('put')
-            ->with($prefixedKey, Mockery::any(), Mockery::any())
-            ->andReturnUsing(function ($k, $v) use (&$set) {
-                $set = $v;
-
-                return true;
-            });
-
-        $this->mockCache->shouldReceive('has')
-            ->with($prefixedKey)
-            ->andReturn(true);
+        $key = 'pipeline-test';
 
         $results = $this->dataStore->pipeline(function ($pipe) use ($key) {
             $pipe->zadd($key, 1.0, 'member1');
@@ -186,37 +240,100 @@ class ArrayDataStoreTest extends TestCase
         $this->assertEquals(1, $results[4]); // zremrangebyscore result
         $this->assertTrue($results[5]); // expire result
 
-        // Verify final state
+        // Verify final state - should have only member2 left
         $this->assertEquals(1, $this->dataStore->zCard($key));
+        $members = $this->dataStore->zRange($key, 0, -1);
+        $this->assertEquals(['member2'], $members);
     }
 
     #[Test]
     public function it_handles_ttl_correctly()
     {
-        $key = 'test-ttl';
-        $prefixedKey = 'citadel:'.$key;
+        $key = 'ttl-test';
         $value = 'test-value';
         $ttl = 3600;
 
-        // Mock put behavior for setValue
-        $this->mockCache->shouldReceive('put')
-            ->once()
-            ->with($prefixedKey, $value, $ttl)
-            ->andReturn(true);
-
-        // Mock has behavior
-        $this->mockCache->shouldReceive('has')
-            ->with($prefixedKey)
-            ->andReturn(true);
-
-        // Test with explicit TTL
+        // Set value with explicit TTL
         $this->dataStore->setValue($key, $value, $ttl);
+        
+        // Value should exist
         $this->assertTrue($this->dataStore->hasValue($key));
+        $this->assertEquals($value, $this->dataStore->getValue($key));
+    }
+    
+    #[Test]
+    public function it_handles_ttl_with_forever_setting()
+    {
+        // Configure to use forever setting
+        Config::set(CitadelConfig::KEY_CACHE_USE_FOREVER, true);
+        
+        $key = 'forever-test';
+        $value = 'test-value';
+        
+        // Set value
+        $this->dataStore->setValue($key, $value);
+        
+        // Value should exist
+        $this->assertTrue($this->dataStore->hasValue($key));
+        $this->assertEquals($value, $this->dataStore->getValue($key));
+        
+        // Reset config
+        Config::set(CitadelConfig::KEY_CACHE_USE_FOREVER, false);
+    }
+
+    #[Test]
+    public function it_can_handle_arbitrary_data_types()
+    {
+        $key = 'data-types-test';
+        
+        // Test with string
+        $this->dataStore->setValue($key, 'string value');
+        $this->assertEquals('string value', $this->dataStore->getValue($key));
+        
+        // Test with integer
+        $this->dataStore->setValue($key, 42);
+        $this->assertEquals(42, $this->dataStore->getValue($key));
+        
+        // Test with float
+        $this->dataStore->setValue($key, 3.14159);
+        $this->assertEquals(3.14159, $this->dataStore->getValue($key));
+        
+        // Test with boolean
+        $this->dataStore->setValue($key, true);
+        $this->assertTrue($this->dataStore->getValue($key));
+        
+        // Test with array
+        $array = ['one' => 1, 'two' => 2, 'nested' => ['three' => 3]];
+        $this->dataStore->setValue($key, $array);
+        $this->assertEquals($array, $this->dataStore->getValue($key));
+        
+        // Test with object
+        $object = (object)['name' => 'Test Object', 'properties' => ['a', 'b', 'c']];
+        $this->dataStore->setValue($key, $object);
+        $this->assertEquals($object, $this->dataStore->getValue($key));
     }
 
     protected function tearDown(): void
     {
-        Mockery::close();
+        // Clear any used keys to prevent test pollution
+        $keysToClean = [
+            'test-key',
+            'existing-key',
+            'key-to-remove',
+            'test-sorted-set',
+            'range-removal-set',
+            'infinity-range-set',
+            'index-test-set',
+            'pipeline-test',
+            'ttl-test',
+            'forever-test',
+            'data-types-test',
+        ];
+        
+        foreach ($keysToClean as $key) {
+            $this->dataStore->removeValue($key);
+        }
+        
         parent::tearDown();
     }
 }
