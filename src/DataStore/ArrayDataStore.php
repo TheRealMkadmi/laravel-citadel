@@ -298,4 +298,24 @@ class ArrayDataStore extends AbstractDataStore
         $prefixedKey = $this->getPrefixedKey($key);
         return $this->cacheStore->forget($prefixedKey);
     }
+
+    /**
+     * Get the configured prefix - public accessor for testing.
+     *
+     * @return string The cache key prefix
+     */
+    public function getPrefix(): string
+    {
+        return parent::getPrefix();
+    }
+    
+    /**
+     * Get the default TTL - public accessor for testing.
+     *
+     * @return int The default TTL in seconds
+     */
+    public function getDefaultTtl(): int
+    {
+        return parent::getDefaultTtl();
+    }
 }

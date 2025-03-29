@@ -16,6 +16,11 @@ class BurstinessProtectionTest extends \TheRealMkadmi\Citadel\Tests\TestCase
 {
     use RefreshDatabase;
     
+    /**
+     * Middleware group name for route protection
+     */
+    private const MIDDLEWARE_GROUP = 'citadel-protect';
+    
     protected function setUp(): void
     {
         parent::setUp();
@@ -42,7 +47,7 @@ class BurstinessProtectionTest extends \TheRealMkadmi\Citadel\Tests\TestCase
     protected function setupTestRoutes(): void
     {
         // Create a test route with the protection middleware
-        Route::middleware('citadel.protect')->get('/test-protected', function () {
+        Route::middleware(self::MIDDLEWARE_GROUP)->get('/test-protected', function () {
             return response()->json(['success' => true, 'message' => 'Protected route accessed']);
         })->name('test.protected');
         

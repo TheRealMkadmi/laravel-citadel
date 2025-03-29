@@ -114,7 +114,7 @@ abstract class AbstractDataStore implements DataStore
     protected function calculateTtl(int $milliseconds): int
     {
         $seconds = $milliseconds / 1000;
-        $multiplier = Config::get('citadel.burstiness.ttl_buffer_multiplier', 2);
+        $multiplier = Config::get(CitadelConfig::KEY_BURSTINESS_TTL_BUFFER_MULTIPLIER, 2);
         
         return $seconds * $multiplier;
     }
