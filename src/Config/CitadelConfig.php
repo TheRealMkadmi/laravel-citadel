@@ -63,7 +63,9 @@ class CitadelConfig
      * Analyzer configuration keys
      */
     public const KEY_BURSTINESS = 'citadel.burstiness';
+
     public const KEY_BURSTINESS_TTL_BUFFER_MULTIPLIER = 'citadel.burstiness.ttl_buffer_multiplier';
+
     public const KEY_PAYLOAD = 'citadel.payload';
 
     public const KEY_IP = 'citadel.ip';

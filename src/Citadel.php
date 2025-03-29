@@ -214,7 +214,7 @@ class Citadel
 
         return self::BAN_KEY_PREFIX."{$type}:{$safeIdentifier}";
     }
-    
+
     /**
      * Get the data store instance.
      *

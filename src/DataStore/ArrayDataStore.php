@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace TheRealMkadmi\Citadel\DataStore;
 
 use Illuminate\Support\Facades\Cache;
-use TheRealMkadmi\Citadel\Config\CitadelConfig;
 
 class ArrayDataStore extends AbstractDataStore
 {
@@ -273,6 +272,7 @@ class ArrayDataStore extends AbstractDataStore
     public function expire(string $key, int $ttl): bool
     {
         $prefixedKey = $this->getPrefixedKey($key);
+
         return $this->cacheStore->has($prefixedKey);
     }
 
@@ -311,7 +311,7 @@ class ArrayDataStore extends AbstractDataStore
     {
         return parent::getPrefix();
     }
-    
+
     /**
      * Get the default TTL - public accessor for testing.
      *

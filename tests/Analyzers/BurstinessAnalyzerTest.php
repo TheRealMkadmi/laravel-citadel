@@ -13,20 +13,22 @@ use TheRealMkadmi\Citadel\DataStore\DataStore;
 class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
 {
     protected $dataStore;
+
     protected $analyzer;
+
     protected $request;
 
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         $this->dataStore = Mockery::mock(DataStore::class);
         $this->analyzer = new BurstinessAnalyzer($this->dataStore);
         $this->request = Mockery::mock(Request::class);
         $this->request->shouldReceive('getFingerprint')->andReturn('test-fingerprint');
         $this->configureTestEnvironment();
     }
-    
+
     protected function configureTestEnvironment(): void
     {
         Config::set('citadel.burstiness.enable_burstiness_analyzer', true);
@@ -55,12 +57,12 @@ class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
     #[Test]
     public function it_returns_zero_when_disabled()
     {
-        Config::set(CitadelConfig::KEY_BURSTINESS . '.enable_burstiness_analyzer', false);
-        
+        Config::set(CitadelConfig::KEY_BURSTINESS.'.enable_burstiness_analyzer', false);
+
         $this->dataStore->shouldReceive('pipeline')
             ->once()
             ->andReturn([1, 1, true, 1, []]);
-        
+
         $score = $this->analyzer->analyze($this->request);
         $this->assertEquals(0.0, $score);
     }
@@ -69,27 +71,27 @@ class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
     public function it_caps_score_at_max_frequency_score()
     {
         $now = time() * 1000;
-        
+
         $this->dataStore->shouldReceive('getValue')
             ->with(Mockery::pattern('/burst:.*:hist/'))
             ->andReturn(null);
-            
+
         $this->dataStore->shouldReceive('getValue')
             ->with(Mockery::pattern('/burst:.*:pat/'))
             ->andReturn(null);
-        
+
         $this->dataStore->shouldReceive('pipeline')
             ->andReturn([1, 1, true, 30, []]);
-        
+
         $this->dataStore->shouldReceive('setValue')
             ->times(3)
             ->andReturn(true);
-        
+
         $score = $this->analyzer->analyze($this->request);
         $this->assertEquals(100.0, $score);
     }
 
-    #[Test] 
+    #[Test]
     public function it_detects_regular_patterns_suggesting_automation()
     {
         $now = time() * 1000;
@@ -99,24 +101,24 @@ class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
             $now - ($interval * 3),
             $now - ($interval * 2),
             $now - $interval,
-            $now
+            $now,
         ];
 
         $this->dataStore->shouldReceive('getValue')
             ->with(Mockery::pattern('/burst:.*:hist/'))
             ->andReturn(null);
-            
+
         $this->dataStore->shouldReceive('getValue')
             ->with(Mockery::pattern('/burst:.*:pat/'))
             ->andReturn(['cv_history' => [0.05, 0.06, 0.04, 0.05]]);
-        
+
         $this->dataStore->shouldReceive('pipeline')
             ->andReturn([1, 1, true, 5, $timestamps]);
-        
+
         $this->dataStore->shouldReceive('setValue')
             ->times(3)
             ->andReturn(true);
-        
+
         $score = $this->analyzer->analyze($this->request);
         $this->assertEquals(30.0, $score);
     }
@@ -133,18 +135,18 @@ class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
         $this->dataStore->shouldReceive('getValue')
             ->with(Mockery::pattern('/burst:.*:hist/'))
             ->andReturn($historyData);
-            
+
         $this->dataStore->shouldReceive('getValue')
             ->with(Mockery::pattern('/burst:.*:pat/'))
             ->andReturn(null);
-        
+
         $this->dataStore->shouldReceive('pipeline')
             ->andReturn([1, 1, true, 5, []]);
-        
+
         $this->dataStore->shouldReceive('setValue')
             ->times(3)
             ->andReturn(true);
-        
+
         $score = $this->analyzer->analyze($this->request);
         $this->assertEquals(20.0, $score);
     }
@@ -153,22 +155,22 @@ class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
     public function it_analyzes_normal_request_pattern_with_no_penalties()
     {
         $now = time() * 1000;
-        
+
         $this->dataStore->shouldReceive('getValue')
             ->with(Mockery::pattern('/burst:.*:hist/'))
             ->andReturn(null);
-            
+
         $this->dataStore->shouldReceive('getValue')
             ->with(Mockery::pattern('/burst:.*:pat/'))
             ->andReturn(null);
-        
+
         $this->dataStore->shouldReceive('pipeline')
             ->andReturn([1, 1, true, 3, []]);
-        
+
         $this->dataStore->shouldReceive('setValue')
             ->times(3)
             ->andReturn(true);
-        
+
         $score = $this->analyzer->analyze($this->request);
         $this->assertEquals(0.0, $score);
     }
@@ -179,11 +181,11 @@ class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
         $this->dataStore->shouldReceive('getValue')
             ->with(Mockery::pattern('/burst:.*:hist/'))
             ->andReturn(null);
-            
+
         $this->dataStore->shouldReceive('getValue')
             ->with(Mockery::pattern('/burst:.*:pat/'))
             ->andReturn(null);
-        
+
         $this->dataStore->shouldReceive('pipeline')
             ->with(Mockery::on(function ($callback) {
                 $pipe = Mockery::mock('stdClass');
@@ -193,14 +195,15 @@ class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
                 $pipe->shouldReceive('zcard')->once();
                 $pipe->shouldReceive('zrange')->once();
                 $callback($pipe);
+
                 return true;
             }))
             ->andReturn([1, 1, true, 3, []]);
-        
+
         $this->dataStore->shouldReceive('setValue')
             ->times(3)
             ->andReturn(true);
-        
+
         $this->analyzer->analyze($this->request);
     }
 

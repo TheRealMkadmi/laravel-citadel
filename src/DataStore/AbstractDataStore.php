@@ -10,8 +10,6 @@ abstract class AbstractDataStore implements DataStore
 {
     /**
      * The cache repository instance.
-     *
-     * @var Repository
      */
     protected Repository $cacheStore;
 
@@ -86,7 +84,7 @@ abstract class AbstractDataStore implements DataStore
      */
     protected function getPrefixedKey(string $key): string
     {
-        return $this->getPrefix() . $key;
+        return $this->getPrefix().$key;
     }
 
     /**
@@ -109,21 +107,21 @@ abstract class AbstractDataStore implements DataStore
         // Use forever storage if explicitly configured or if TTL is 0 or negative
         $useForever = Config::get(CitadelConfig::KEY_CACHE_USE_FOREVER, false);
         $ttl = $this->getDefaultTtl();
-        
+
         return $useForever || $ttl <= 0;
     }
-    
+
     /**
      * Calculate TTL in seconds from milliseconds, applying buffer multiplier.
      *
-     * @param int $milliseconds Window size in milliseconds
+     * @param  int  $milliseconds  Window size in milliseconds
      * @return int TTL in seconds with buffer applied
      */
     protected function calculateTtl(int $milliseconds): int
     {
         $seconds = $milliseconds / 1000;
         $multiplier = Config::get(CitadelConfig::KEY_BURSTINESS_TTL_BUFFER_MULTIPLIER, 2);
-        
+
         return $seconds * $multiplier;
     }
 }

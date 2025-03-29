@@ -16,9 +16,9 @@ class WorkbenchServiceProvider extends ServiceProvider
     {
         // Register ArrayDataStore as the default implementation for DataStore
         $this->app->singleton(DataStore::class, function ($app) {
-            return new ArrayDataStore();
+            return new ArrayDataStore;
         });
-        
+
         // Configure settings for testing
         config([
             CitadelConfig::KEY_CACHE_DRIVER => ArrayDataStore::STORE_IDENTIFIER,
