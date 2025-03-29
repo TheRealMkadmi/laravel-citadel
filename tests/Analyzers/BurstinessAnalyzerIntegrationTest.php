@@ -79,7 +79,7 @@ class BurstinessAnalyzerIntegrationTest extends \TheRealMkadmi\Citadel\Tests\Tes
         }
 
         // Score should increase due to excessive requests
-        $this->assertGreaterThan($score1, end($scores));
+        $this->assertGreaterThan($score1, end($scores), 'Expected score to increase due to multiple analyzer calls, but final score was: ' . end($scores));
 
         // Final score should be substantial due to multiple violations
         $this->assertGreaterThan(10.0, end($scores));

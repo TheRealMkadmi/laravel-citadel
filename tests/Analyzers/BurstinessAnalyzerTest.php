@@ -60,7 +60,7 @@ class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
         Config::set(CitadelConfig::KEY_BURSTINESS . '.enable_burstiness_analyzer', false);
 
         $score = $this->analyzer->analyze($this->request);
-        $this->assertEquals(0.0, $score);
+        $this->assertEquals(0.0, $score, 'Expected score to be 0.0 when analyzer is disabled, but got: ' . $score);
     }
 
     #[Test]

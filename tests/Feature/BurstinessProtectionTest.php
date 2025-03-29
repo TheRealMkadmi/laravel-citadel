@@ -109,7 +109,7 @@ class BurstinessProtectionTest extends \TheRealMkadmi\Citadel\Tests\TestCase
                   $response5->status() == 403 ||
                   $response6->status() == 403;
 
-        $this->assertTrue($blocked, 'At least one request should be blocked after multiple rapid requests');
+        $this->assertTrue($blocked, 'Expected at least one request to be blocked after multiple rapid requests, but none were blocked.');
     }
 
     #[Test]
