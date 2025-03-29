@@ -68,7 +68,7 @@ class BanMiddleware
 
         return $next($request);
     }
-    
+
     /**
      * Deny access for banned users.
      */

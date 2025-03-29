@@ -10,7 +10,7 @@ enum ResponseType: string
     case JSON = 'json';
     case VIEW = 'view';
     case REDIRECT = 'redirect';
-    
+
     /**
      * Get the default response type.
      */
@@ -18,13 +18,13 @@ enum ResponseType: string
     {
         return self::TEXT;
     }
-    
+
     /**
      * Create from string value with fallback to default.
      */
     public static function fromString(string $value): self
     {
-        return match(strtolower($value)) {
+        return match (strtolower($value)) {
             'text', 'plain' => self::TEXT,
             'json', 'api' => self::JSON,
             'view', 'html', 'blade' => self::VIEW,
@@ -32,13 +32,13 @@ enum ResponseType: string
             default => self::getDefault(),
         };
     }
-    
+
     /**
      * Get a human-readable description of this response type.
      */
     public function description(): string
     {
-        return match($this) {
+        return match ($this) {
             self::TEXT => 'Plain text response',
             self::JSON => 'JSON response (for APIs)',
             self::VIEW => 'Blade view render',

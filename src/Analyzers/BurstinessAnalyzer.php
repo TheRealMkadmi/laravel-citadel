@@ -52,7 +52,7 @@ class BurstinessAnalyzer extends AbstractAnalyzer
 
     public function analyze(Request $request): float
     {
-        if (!$this->enabled) {
+        if (! $this->enabled) {
             return 0.0;
         }
 

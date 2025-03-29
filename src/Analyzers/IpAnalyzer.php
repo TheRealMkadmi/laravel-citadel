@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace TheRealMkadmi\Citadel\Analyzers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Config;
 use TheRealMkadmi\Citadel\Clients\IncolumitasApiClient;
 use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
@@ -64,13 +63,13 @@ class IpAnalyzer extends AbstractAnalyzer
      */
     public function analyze(Request $request): float
     {
-        if (!$this->enabled) {
+        if (! $this->enabled) {
             return 0.0;
         }
 
         // Get IP address from request
         $ip = $request->ip();
-        if (!$ip) {
+        if (! $ip) {
             return 0.0;
         }
 
@@ -88,7 +87,7 @@ class IpAnalyzer extends AbstractAnalyzer
 
         // Check IP characteristics through API
         $ipData = $this->apiClient->checkIp($ip);
-        if (!$ipData) {
+        if (! $ipData) {
             // No data available, default to 0 score
             return 0.0;
         }
@@ -122,13 +121,13 @@ class IpAnalyzer extends AbstractAnalyzer
 
             // Check if country is in high-risk list
             $highRiskCountries = $this->countryScores['high_risk_countries'] ?? [];
-            if (!empty($highRiskCountries) && in_array($country, $highRiskCountries)) {
+            if (! empty($highRiskCountries) && in_array($country, $highRiskCountries)) {
                 $score += (float) ($this->countryScores['high_risk_score'] ?? 30.0);
             }
 
             // Check if country is in trusted list (can reduce score)
             $trustedCountries = $this->countryScores['trusted_countries'] ?? [];
-            if (!empty($trustedCountries) && in_array($country, $trustedCountries)) {
+            if (! empty($trustedCountries) && in_array($country, $trustedCountries)) {
                 $score += (float) ($this->countryScores['trusted_score'] ?? -15.0);
             }
         }

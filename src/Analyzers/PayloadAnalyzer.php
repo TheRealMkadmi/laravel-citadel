@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace TheRealMkadmi\Citadel\Analyzers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -104,7 +103,7 @@ class PayloadAnalyzer extends AbstractAnalyzer
         return [
             // Get all request body data - normalized to detect obfuscation
             'body' => $request->all(),
-            
+
             // Get raw request body if available (limit size to reduce processing overhead)
             'raw_body' => Str::limit($request->getContent(), 8192, ''),
 
@@ -142,7 +141,7 @@ class PayloadAnalyzer extends AbstractAnalyzer
     {
         // Only encode the data once
         $normalized = json_encode($data);
-        if (!$normalized) {
+        if (! $normalized) {
             return '';
         }
 
@@ -153,23 +152,23 @@ class PayloadAnalyzer extends AbstractAnalyzer
         // Check for base64 encoded payloads (with optimization for large payloads)
         if (strlen($normalized) > 10000) {
             // For large payloads, sample only portions to avoid performance issues
-            $sample = substr($normalized, 0, 3000) . 
-                     substr($normalized, intval(strlen($normalized) / 2), 2000) . 
+            $sample = substr($normalized, 0, 3000).
+                     substr($normalized, intval(strlen($normalized) / 2), 2000).
                      substr($normalized, -3000);
             $matches = [];
             preg_match_all('/[a-zA-Z0-9+\/=]{20,}/', $sample, $matches);
         } else {
             preg_match_all('/[a-zA-Z0-9+\/=]{20,}/', $normalized, $matches);
         }
-        
+
         // Limit the number of matches processed to prevent DoS
         $processedMatches = array_slice($matches[0] ?? [], 0, 10);
-        
+
         foreach ($processedMatches as $encoded) {
             try {
                 $decoded = base64_decode($encoded, true);
                 if ($decoded !== false && preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $decoded) === 0) {
-                    $normalized .= ' ' . $decoded;
+                    $normalized .= ' '.$decoded;
                 }
             } catch (\Exception $e) {
                 // Ignore failed decode attempts
@@ -193,7 +192,7 @@ class PayloadAnalyzer extends AbstractAnalyzer
 
         // 1. Check for known malicious patterns across all data
         // Only normalize and analyze if there's actual content to check
-        if (!empty($data['body']) || !empty($data['query']) || !empty($data['raw_body'])) {
+        if (! empty($data['body']) || ! empty($data['query']) || ! empty($data['raw_body'])) {
             $textToAnalyze = $this->prepareTextForAnalysis($data);
 
             foreach ($this->suspiciousPatterns as $category => $patternGroup) {
@@ -231,7 +230,7 @@ class PayloadAnalyzer extends AbstractAnalyzer
 
         // 3. Check for entropy (randomness) in request parameters
         // High entropy can indicate obfuscated or encrypted malicious code
-        if (!empty($data['query']) || !empty($data['body'])) {
+        if (! empty($data['query']) || ! empty($data['body'])) {
             $entropyScore = $this->calculateEntropyScore($data);
             $score += $entropyScore['score'];
             if ($entropyScore['score'] > 0) {
@@ -264,17 +263,17 @@ class PayloadAnalyzer extends AbstractAnalyzer
     protected function shouldSkipPattern(array $pattern, array $data): bool
     {
         // Skip SQL injection checks for GET requests with no query parameters
-        if (isset($pattern['context']) && $pattern['context'] === 'sql' && 
+        if (isset($pattern['context']) && $pattern['context'] === 'sql' &&
             $data['method'] === 'GET' && empty($data['query'])) {
             return true;
         }
-        
+
         // Skip file inclusion patterns for requests with no file uploads
-        if (isset($pattern['context']) && $pattern['context'] === 'file' && 
-            !$data['has_files']) {
+        if (isset($pattern['context']) && $pattern['context'] === 'file' &&
+            ! $data['has_files']) {
             return true;
         }
-        
+
         return false;
     }
 
@@ -285,20 +284,20 @@ class PayloadAnalyzer extends AbstractAnalyzer
     {
         // Normalize body once for all pattern matching
         $normalizedBody = $this->normalizeData($data['body'] ?? []);
-        
+
         $elements = [
             $data['raw_body'] ?? '',
             $normalizedBody,
-            !empty($data['json']) ? json_encode($data['json']) : '',
+            ! empty($data['json']) ? json_encode($data['json']) : '',
             $data['query_string'] ?? '',
-            !empty($data['query']) ? json_encode($data['query']) : '',
+            ! empty($data['query']) ? json_encode($data['query']) : '',
             $data['user_agent'] ?? '',
             $data['path'] ?? '',
         ];
 
         return Str::of(implode(' ', array_filter($elements)))
-                ->limit(16384) // Limit total size to prevent performance issues
-                ->toString();
+            ->limit(16384) // Limit total size to prevent performance issues
+            ->toString();
     }
 
     /**
@@ -481,7 +480,7 @@ class PayloadAnalyzer extends AbstractAnalyzer
         if (isset($this->entropyCache[$cacheKey])) {
             return $this->entropyCache[$cacheKey];
         }
-        
+
         $entropy = 0;
         $size = strlen($string);
 
@@ -492,8 +491,8 @@ class PayloadAnalyzer extends AbstractAnalyzer
         // For very large strings, sample to improve performance
         if ($size > 1000) {
             // Sample beginning, middle and end of string
-            $sample = substr($string, 0, 300) . 
-                      substr($string, intval($size / 2) - 150, 300) . 
+            $sample = substr($string, 0, 300).
+                      substr($string, intval($size / 2) - 150, 300).
                       substr($string, -300);
             $string = $sample;
             $size = strlen($string);
@@ -511,10 +510,10 @@ class PayloadAnalyzer extends AbstractAnalyzer
             $probability = $frequency / $size;
             $entropy -= $probability * log($probability, 2);
         }
-        
+
         // Cache the result
         $this->entropyCache[$cacheKey] = $entropy;
-        
+
         // Limit cache size to prevent memory issues
         if (count($this->entropyCache) > 100) {
             // Remove random entries when cache gets too large
@@ -557,7 +556,7 @@ class PayloadAnalyzer extends AbstractAnalyzer
             'timestamp' => now()->timestamp,
             'path' => $data['path'] ?? '',
             'method' => $data['method'] ?? '',
-            'has_payload' => !empty($data['body']) || !empty($data['json']),
+            'has_payload' => ! empty($data['body']) || ! empty($data['json']),
         ];
 
         // Update history with current request

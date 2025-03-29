@@ -8,7 +8,7 @@ enum BanType: string
 {
     case IP = 'ip';
     case FINGERPRINT = 'fingerprint';
-    
+
     /**
      * Get all valid ban types as an array.
      */
@@ -19,7 +19,7 @@ enum BanType: string
             self::FINGERPRINT->value,
         ];
     }
-    
+
     /**
      * Attempt to create from a string value with auto-detection capabilities.
      * 
@@ -32,21 +32,22 @@ enum BanType: string
     {
         // Direct match
         $directMatch = self::tryFrom($value);
+        $directMatch = self::tryFrom($value);
         if ($directMatch !== null) {
             return $directMatch;
         }
-        
+
         // Auto-detect if requested
         if ($autoDetect && $input !== null) {
             // If it looks like an IP address, treat it as an IP
             if (filter_var($input, FILTER_VALIDATE_IP)) {
                 return self::IP;
             }
-            
+
             // Otherwise assume it's a fingerprint
             return self::FINGERPRINT;
         }
-        
+
         return null;
     }
 }

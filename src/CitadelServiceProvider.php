@@ -6,7 +6,6 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Route;
-use Laravel\Octane\Server as OctaneServer;
 use Spatie\LaravelPackageTools\Commands\InstallCommand;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
@@ -51,6 +50,7 @@ class CitadelServiceProvider extends PackageServiceProvider
      * Middleware group names
      */
     private const MIDDLEWARE_GROUP_PROTECT = 'citadel-protect';
+
     private const MIDDLEWARE_GROUP_ACTIVE = 'citadel-active';
 
     private const MIDDLEWARE_ALIAS_API_AUTH = 'citadel-api-auth';
@@ -100,7 +100,7 @@ class CitadelServiceProvider extends PackageServiceProvider
 
         // Register middleware
         $router = $this->app->make(Router::class);
-        
+
         // Register the active middleware group (full protection)
         $router->middlewareGroup(self::MIDDLEWARE_GROUP_ACTIVE, [
             ProtectRouteMiddleware::class,

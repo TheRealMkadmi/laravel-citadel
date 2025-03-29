@@ -248,13 +248,13 @@ class ProtectRouteMiddleware
         $responseCode = Config::get(CitadelConfig::KEY_RESPONSE_CODE, 403);
         $responseMessage = Config::get(CitadelConfig::KEY_RESPONSE_MESSAGE, 'Access denied');
         $responseView = Config::get(CitadelConfig::KEY_RESPONSE_VIEW);
-        
+
         // Get response type from config, using the ResponseType enum
         $responseTypeStr = Config::get(CitadelConfig::KEY_RESPONSE_TYPE, ResponseType::TEXT->value);
         $responseType = ResponseType::fromString($responseTypeStr);
-        
+
         // Return response based on configured type
-        return match($responseType) {
+        return match ($responseType) {
             ResponseType::JSON => response()->json(['error' => $responseMessage], $responseCode),
             ResponseType::VIEW => $responseView ? response()->view($responseView, ['message' => $responseMessage], $responseCode)
                                                : response($responseMessage, $responseCode),
