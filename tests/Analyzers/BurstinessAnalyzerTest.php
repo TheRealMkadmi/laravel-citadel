@@ -25,23 +25,8 @@ class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
 
         $this->dataStore = new ArrayDataStore();
         $this->analyzer = new BurstinessAnalyzer($this->dataStore);
-        $this->request = $this->createRequest();
+        $this->request = $this->makeFingerprintedRequest($this->fingerprint);
         $this->configureTestEnvironment();
-    }
-
-    /**
-     * Create a real request with a known fingerprint
-     */
-    protected function createRequest(): Request
-    {
-        $request = Request::create('https://example.com/test', 'GET');
-        // Use reflection to set the fingerprint property since it's normally set by middleware
-        $reflection = new \ReflectionClass($request);
-        $property = $reflection->getProperty('fingerprint');
-        $property->setAccessible(true);
-        $property->setValue($request, $this->fingerprint);
-        
-        return $request;
     }
 
     protected function configureTestEnvironment(): void
@@ -164,7 +149,7 @@ class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
     public function it_handles_requests_with_empty_fingerprint()
     {
         // Create a request with no fingerprint
-        $emptyFingerprintRequest = Request::create('https://example.com/test', 'GET');
+        $emptyFingerprintRequest = $this->makeFingerprintedRequest(null);
         
         // The analyzer should safely return 0 for requests with no fingerprint
         $score = $this->analyzer->analyze($emptyFingerprintRequest);

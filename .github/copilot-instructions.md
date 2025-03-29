@@ -1,3 +1,6 @@
-You are encouraged to think and act in a Laravel idiomatic way. Use laravel helpers whenever possible for operations such as string manipulation, array manipulation, etc.
-You are also encouraged to use Laravel's built-in features and libraries. 
-Avoid hardcoded stiring references, instead, use language features to reference symbols, such as constants, enums, or class names.
+We avoid hardcoded strings and use references to symbols, such as constants, enums, or class names.
+We also avoid using magic numbers and prefer to use named constants or enums instead.
+We use Laravel's built-in features and libraries whenever possible, and we prefer to use Laravel's built-in features and libraries over third-party packages. 
+
+We use $request->getFingerprint() to get the fingerprint of the request and use it to identify the user. This macro is defined in CitadelServiceProvider.php. 
+ 
