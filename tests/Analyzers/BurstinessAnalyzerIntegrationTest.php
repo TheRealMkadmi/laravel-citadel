@@ -47,39 +47,43 @@ class BurstinessAnalyzerIntegrationTest extends \TheRealMkadmi\Citadel\Tests\Tes
         Config::set(CitadelConfig::KEY_BURSTINESS.'.max_frequency_score', 100.0);
 
         // Set all other necessary configuration values
-        Config::set('citadel.burstiness.very_regular_threshold', 0.1);
-        Config::set('citadel.burstiness.somewhat_regular_threshold', 0.25);
-        Config::set('citadel.burstiness.very_regular_score', 30.0);
-        Config::set('citadel.burstiness.somewhat_regular_score', 15.0);
-        Config::set('citadel.burstiness.pattern_multiplier', 5.0);
-        Config::set('citadel.burstiness.max_pattern_score', 20.0);
-        Config::set('citadel.burstiness.min_samples_for_pattern', 3);
-        Config::set('citadel.burstiness.pattern_history_size', 5);
-        Config::set('citadel.burstiness.history_ttl_multiplier', 6);
-        Config::set('citadel.burstiness.min_violations_for_penalty', 1);
-        Config::set('citadel.burstiness.max_violation_score', 50.0);
-        Config::set('citadel.burstiness.severe_excess_threshold', 10);
-        Config::set('citadel.burstiness.max_excess_score', 30.0);
-        Config::set('citadel.burstiness.excess_multiplier', 2.0);
-        Config::set('citadel.burstiness.ttl_buffer_multiplier', 2);
+        Config::set(CitadelConfig::KEY_BURSTINESS.'.very_regular_threshold', 0.1);
+        Config::set(CitadelConfig::KEY_BURSTINESS.'.somewhat_regular_threshold', 0.25);
+        Config::set(CitadelConfig::KEY_BURSTINESS.'.very_regular_score', 30.0);
+        Config::set(CitadelConfig::KEY_BURSTINESS.'.somewhat_regular_score', 15.0);
+        Config::set(CitadelConfig::KEY_BURSTINESS.'.pattern_history_size', 5);
+        Config::set(CitadelConfig::KEY_BURSTINESS.'.history_ttl_multiplier', 6);
+        Config::set(CitadelConfig::KEY_BURSTINESS.'.min_violations_for_penalty', 1);
+        Config::set(CitadelConfig::KEY_BURSTINESS.'.max_violation_score', 50.0);
+        Config::set(CitadelConfig::KEY_BURSTINESS.'.severe_excess_threshold', 10);
+        Config::set(CitadelConfig::KEY_BURSTINESS.'.max_excess_score', 30.0);
+        Config::set(CitadelConfig::KEY_BURSTINESS.'.excess_multiplier', 2.0);
+        Config::set(CitadelConfig::KEY_BURSTINESS.'.ttl_buffer_multiplier', 2);
+        Config::set(CitadelConfig::KEY_BURSTINESS.'.min_samples_for_pattern', 3);
     }
 
     /**
-     * Create a mock request with the test fingerprint
+     * Create a real request with a specific fingerprint
      */
-    protected function createMockRequest(): Request
+    protected function createRequest(string $fingerprint = null): Request
     {
-        $request = \Mockery::mock(Request::class);
-        $request->shouldReceive('getFingerprint')->andReturn($this->fingerprint);
-
+        $requestFingerprint = $fingerprint ?? $this->fingerprint;
+        $request = Request::create('https://example.com/test', 'GET');
+        
+        // Use reflection to set the fingerprint property since it's normally set by middleware
+        $reflection = new \ReflectionClass($request);
+        $property = $reflection->getProperty('fingerprint');
+        $property->setAccessible(true);
+        $property->setValue($request, $requestFingerprint);
+        
         return $request;
     }
 
     #[Test]
     public function multiple_analyzer_calls_within_window_increase_score()
     {
-        // Create mock request
-        $request = $this->createMockRequest();
+        // Create real request
+        $request = $this->createRequest();
 
         // First request should have zero score (no history)
         $score1 = $this->analyzer->analyze($request);
@@ -101,8 +105,8 @@ class BurstinessAnalyzerIntegrationTest extends \TheRealMkadmi\Citadel\Tests\Tes
     #[Test]
     public function scores_are_cached_between_calls()
     {
-        // Create mock request
-        $request = $this->createMockRequest();
+        // Create real request
+        $request = $this->createRequest();
 
         // First analysis stores a score
         $originalScore = $this->analyzer->analyze($request);
@@ -132,8 +136,9 @@ class BurstinessAnalyzerIntegrationTest extends \TheRealMkadmi\Citadel\Tests\Tes
     #[Test]
     public function normal_request_pattern_should_not_trigger_penalties()
     {
-        // Create a sequence of requests with normal timing
-        $request = $this->createMockRequest();
+        // Create a unique fingerprint for this test
+        $fingerprint = 'normal-pattern-test-'.uniqid();
+        $request = $this->createRequest($fingerprint);
 
         // Simulate normal user behavior with reasonable gaps
         $score1 = $this->analyzer->analyze($request);
@@ -159,8 +164,8 @@ class BurstinessAnalyzerIntegrationTest extends \TheRealMkadmi\Citadel\Tests\Tes
     public function burst_pattern_should_trigger_penalty()
     {
         // Unique fingerprint for this test
-        $this->fingerprint = 'burst-test-fingerprint-'.uniqid();
-        $request = $this->createMockRequest();
+        $fingerprint = 'burst-test-fingerprint-'.uniqid();
+        $request = $this->createRequest($fingerprint);
 
         // Initial request
         $score1 = $this->analyzer->analyze($request);
@@ -192,8 +197,8 @@ class BurstinessAnalyzerIntegrationTest extends \TheRealMkadmi\Citadel\Tests\Tes
     public function regular_pattern_detection_should_work()
     {
         // Unique fingerprint for this test
-        $this->fingerprint = 'pattern-test-fingerprint-'.uniqid();
-        $request = $this->createMockRequest();
+        $fingerprint = 'pattern-test-fingerprint-'.uniqid();
+        $request = $this->createRequest($fingerprint);
 
         // Need to override defaults to make this test feasible in reasonable time
         Config::set(CitadelConfig::KEY_BURSTINESS.'.min_interval', 1000); // 1 second in ms
@@ -222,8 +227,8 @@ class BurstinessAnalyzerIntegrationTest extends \TheRealMkadmi\Citadel\Tests\Tes
     public function excessive_requests_should_trigger_penalties()
     {
         // Unique fingerprint for this test
-        $this->fingerprint = 'excess-test-fingerprint-'.uniqid();
-        $request = $this->createMockRequest();
+        $fingerprint = 'excess-test-fingerprint-'.uniqid();
+        $request = $this->createRequest($fingerprint);
 
         // Make many requests in quick succession
         $scores = [];
@@ -243,8 +248,8 @@ class BurstinessAnalyzerIntegrationTest extends \TheRealMkadmi\Citadel\Tests\Tes
     public function historical_offenses_should_increase_penalty()
     {
         // Unique fingerprint for this test
-        $this->fingerprint = 'history-test-fingerprint-'.uniqid();
-        $request = $this->createMockRequest();
+        $fingerprint = 'history-test-fingerprint-'.uniqid();
+        $request = $this->createRequest($fingerprint);
 
         // First offense - several requests in quick succession
         $firstOffenseScores = [];
@@ -269,5 +274,46 @@ class BurstinessAnalyzerIntegrationTest extends \TheRealMkadmi\Citadel\Tests\Tes
             $secondMaxScore,
             'Second offense should be scored higher due to history'
         );
+    }
+
+    #[Test]
+    public function different_fingerprints_should_not_affect_each_other()
+    {
+        // Create two requests with different fingerprints
+        $fingerprint1 = 'isolation-test-1-'.uniqid();
+        $fingerprint2 = 'isolation-test-2-'.uniqid();
+        
+        $request1 = $this->createRequest($fingerprint1);
+        $request2 = $this->createRequest($fingerprint2);
+        
+        // Generate violations for the first fingerprint
+        $scores1 = [];
+        for ($i = 0; $i < 10; $i++) {
+            $scores1[] = $this->analyzer->analyze($request1);
+        }
+        
+        // The second fingerprint should still have a clean record
+        $score2 = $this->analyzer->analyze($request2);
+        
+        $this->assertEquals(0.0, $score2, 'Different fingerprints should be scored independently');
+        $this->assertGreaterThan(0.0, end($scores1), 'First fingerprint should have accumulated score');
+    }
+    
+    #[Test]
+    public function analyzer_should_handle_malformed_pattern_data()
+    {
+        // Create a request with a specific fingerprint
+        $fingerprint = 'malformed-data-test-'.uniqid();
+        $request = $this->createRequest($fingerprint);
+        
+        // Manually insert malformed pattern data
+        $patKey = "burst:" . substr(md5($fingerprint), 0, 12) . ":pat";
+        $this->dataStore->setValue($patKey, "not an array as expected");
+        
+        // The analyzer should handle this gracefully without errors
+        $score = $this->analyzer->analyze($request);
+        
+        // We're mainly testing that no exception is thrown
+        $this->assertIsFloat($score);
     }
 }
