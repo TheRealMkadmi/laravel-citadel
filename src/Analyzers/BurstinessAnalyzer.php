@@ -145,9 +145,6 @@ class BurstinessAnalyzer extends AbstractAnalyzer
                 'timestamps' => $recentTimestamps,
             ]);
             
-            // Define a threshold for extreme request volumes based on maximum requests allowed
-            $extremeRequestThreshold = $this->configCache['maxRequestsPerWindow'] * 3;
-            
             // For extremely high request volumes, immediately return max score
             if ($requestCount >= $this->configCache['extremeRequestThreshold']) {
                 Log::debug('Citadel: Extremely high request count detected, applying max frequency score', [
@@ -170,6 +167,28 @@ class BurstinessAnalyzer extends AbstractAnalyzer
                 // Store the calculated score with a short TTL
                 $this->dataStore->setValue($cacheKey, $historyScore, $this->configCache['ttlBufferMultiplier']);
                 return $historyScore;
+            }
+
+            // Analyze the pattern before calculating other scores
+            $patternType = $this->detectPatternType($recentTimestamps, $patternKey);
+            Log::debug('Citadel: Pattern type detected', [
+                'patternType' => $patternType
+            ]);
+            
+            // For regular automated patterns, return the veryRegularScore immediately
+            if ($patternType === self::PATTERN_REGULAR) {
+                $score = $this->configCache['veryRegularScore'];
+                Log::debug('Citadel: Regular pattern detected, using veryRegularScore', [
+                    'score' => $score
+                ]);
+                $this->dataStore->setValue($cacheKey, $score, $this->configCache['ttlBufferMultiplier']);
+                return $score;
+            }
+            
+            // For normal patterns, return zero immediately
+            if ($patternType === self::PATTERN_NORMAL) {
+                Log::debug('Citadel: Normal pattern detected, returning 0');
+                return 0.0;
             }
 
             $score = 0.0;
@@ -203,31 +222,8 @@ class BurstinessAnalyzer extends AbstractAnalyzer
                 $this->trackExcessiveRequestHistory($historyKey, $now, $excess, $this->configCache['windowSize']);
             }
 
-            // Analyze the pattern after frequency analysis
-            $patternType = $this->detectPatternType($recentTimestamps, $patternKey);
-            Log::debug('Citadel: Pattern type detected', [
-                'patternType' => $patternType
-            ]);
-            
-            // For normal patterns, but only if we don't already have a high excess score
-            if ($patternType === self::PATTERN_NORMAL && $score < $this->configCache['burstPenaltyScore']) {
-                Log::debug('Citadel: Normal pattern detected, resetting score to 0');
-                $score = 0.0;
-            }
-            
-            // For regular automated patterns, apply the score only if it's higher than current score
-            if ($patternType === self::PATTERN_REGULAR) {
-                $patternScore = $this->configCache['veryRegularScore'];
-                if ($patternScore > $score) {
-                    $score = $patternScore;
-                    Log::debug('Citadel: Regular pattern detected, using veryRegularScore', [
-                        'score' => $score
-                    ]);
-                }
-            }
-
             // Burst detection - check if requests are too close together
-            if (count($recentTimestamps) >= 2 && $patternType !== self::PATTERN_NORMAL) {
+            if (count($recentTimestamps) >= 2) {
                 $isBurst = $this->detectBurst($recentTimestamps, $this->configCache['minInterval']);
                 if ($isBurst) {
                     $burstPenalty = $this->configCache['burstPenaltyScore'];
