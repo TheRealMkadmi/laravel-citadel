@@ -85,7 +85,8 @@ class BurstinessAnalyzer extends AbstractAnalyzer
         // Only use the cache for very rapid requests (within same second)
         // This helps prevent abuse while still allowing tests to work properly
         $cachedScore = $this->dataStore->getValue($cacheKey);
-        if ($cachedScore !== null && rand(1, 3) !== 1) { // 2/3 chance to use cache to prevent abuse
+        if ($cachedScore !== null) { 
+            // Always use cache if available
             return (float) $cachedScore;
         }
 
@@ -239,8 +240,15 @@ class BurstinessAnalyzer extends AbstractAnalyzer
                     (int) ($windowSize / 1000 * $this->configCache['historyTtlMultiplier'])
                 );
 
+                // Don't trigger pattern penalties for normal user patterns
+                // If the mean interval is very large (> 4 seconds), it's likely normal user behavior
+                if ($mean > 4000) {
+                    return 0.0;
+                }
+
                 // Return score based on regularity thresholds
                 if ($avgCV < $this->configCache['veryRegularThreshold']) {
+                    // Very regular pattern (likely bot/script)
                     return $this->configCache['veryRegularScore'];
                 }
                 
