@@ -256,7 +256,23 @@ class BurstinessAnalyzer extends AbstractAnalyzer
             'minSamplesNeeded' => $this->configCache['minSamplesForPatternDetection']
         ]);
 
-        // Check for well-spaced normal pattern first
+        // First check if pattern data exists - this takes priority over timestamp analysis
+        $patternData = $this->dataStore->getValue($patternKey);
+        if (is_array($patternData) && isset($patternData['cv_history']) && is_array($patternData['cv_history'])) {
+            Log::debug('Citadel: Found existing pattern data', ['pattern_data' => $patternData]);
+            
+            // Check if cv_history contains values below very regular threshold
+            $cvHistory = $patternData['cv_history'];
+            if (count($cvHistory) > 0) {
+                $avgCV = array_sum($cvHistory) / count($cvHistory);
+                if ($avgCV < $this->configCache['veryRegularThreshold']) {
+                    Log::debug('Citadel: Detected regular pattern from stored cv_history', ['avg_cv' => $avgCV]);
+                    return self::PATTERN_REGULAR;
+                }
+            }
+        }
+
+        // Check for well-spaced normal pattern
         if ($this->isWellSpacedPattern($timestamps)) {
             Log::debug('Citadel: Detected well-spaced pattern');
             return self::PATTERN_NORMAL;
@@ -295,6 +311,32 @@ class BurstinessAnalyzer extends AbstractAnalyzer
                 ]);
 
                 if ($cv < $this->configCache['veryRegularThreshold']) {
+                    // Update pattern history with new CV value
+                    $patternData = $this->dataStore->getValue($patternKey) ?? [];
+                    if (!is_array($patternData)) {
+                        $patternData = [];
+                    }
+                    
+                    if (!isset($patternData['cv_history']) || !is_array($patternData['cv_history'])) {
+                        $patternData['cv_history'] = [];
+                    }
+                    
+                    $patternData['cv_history'][] = $cv;
+                    // Keep history limited to configured size
+                    if (count($patternData['cv_history']) > $this->configCache['patternHistorySize']) {
+                        $patternData['cv_history'] = array_slice(
+                            $patternData['cv_history'], 
+                            -$this->configCache['patternHistorySize']
+                        );
+                    }
+                    
+                    // Store updated pattern data
+                    $this->dataStore->setValue(
+                        $patternKey, 
+                        $patternData,
+                        $this->calculateTTL($this->configCache['windowSize'] * $this->configCache['historyTtlMultiplier'])
+                    );
+                    
                     Log::debug('Citadel: Detected regular pattern based on statistics');
                     return self::PATTERN_REGULAR;
                 }
