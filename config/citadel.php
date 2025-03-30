@@ -133,6 +133,7 @@ return [
         'min_interval' => env('CITADEL_BURSTINESS_MIN_INTERVAL', 5000), // milliseconds
         'window_size' => env('CITADEL_BURSTINESS_WINDOW_SIZE', 60000), // milliseconds (60 seconds)
         'max_requests_per_window' => env('CITADEL_MAX_REQUESTS_PER_WINDOW', 5),
+        'extreme_request_threshold' => env('CITADEL_EXTREME_REQUEST_THRESHOLD', 15), // Threshold to trigger max score
 
         // Scoring parameters
         'excess_request_score' => env('CITADEL_EXCESS_REQUEST_SCORE', 10),

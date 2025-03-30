@@ -200,4 +200,56 @@ class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
         $score = $this->analyzer->analyze($this->request);
         $this->assertGreaterThan(30.0, $score, "Score should combine multiple penalty factors");
     }
+
+    #[Test]
+    public function it_calculates_excess_request_scores_correctly()
+    {
+        // Test with different request counts to see how excess scores are calculated
+        $key = "burst:" . substr(md5($this->fingerprint), 0, 12) . ":req";
+        $now = time() * 1000;
+        $scores = [];
+        
+        // Test with 6, 10, 15, and 20 requests
+        foreach ([6, 10, 15, 20] as $requestCount) {
+            // Clear existing data and add new timestamps
+            $this->dataStore = new ArrayDataStore();
+            $this->analyzer = new BurstinessAnalyzer($this->dataStore);
+            
+            for ($i = 0; $i < $requestCount; $i++) {
+                $this->dataStore->zAdd($key, $now - ($i * 1000), $now - ($i * 1000));
+            }
+            
+            $score = $this->analyzer->analyze($this->request);
+            $scores[$requestCount] = $score;
+        }
+        
+        // Check that scores increase as request count increases
+        $this->assertLessThan($scores[10], $scores[15], "Score should increase with more requests");
+        $this->assertLessThan($scores[15], $scores[20], "Score should increase with more requests");
+        
+        // Check that excess requests are being scored correctly
+        // 6 requests = 1 excess request * 10 = 10 score (+ potential burst penalty if intervals are close)
+        $this->assertGreaterThanOrEqual(10.0, $scores[6], "Score for 6 requests should be at least 10.0");
+        
+        // Verify that a high number of requests approaches the maximum score
+        $this->assertGreaterThanOrEqual($scores[10] + 50, $scores[20], "Score should significantly increase with many excess requests");
+    }
+
+    #[Test]
+    public function it_applies_correct_scoring_for_high_request_volume()
+    {
+        // Start with a much higher number of requests than the cap test
+        $key = "burst:" . substr(md5($this->fingerprint), 0, 12) . ":req";
+        $now = time() * 1000;
+        
+        // Add 15 timestamps - should be 10 excess requests * excessRequestScore (10) = score of 100
+        // (10 excess * 10 points per excess = 100, which is the max)
+        for ($i = 0; $i < 15; $i++) {
+            $this->dataStore->zAdd($key, $now - ($i * 1000), $now - ($i * 1000));
+        }
+
+        $score = $this->analyzer->analyze($this->request);
+        // This should return close to 100 based on the default config (excessRequestScore * excess count)
+        $this->assertTrue($score >= 90.0 && $score <= 100.0, "Score should be near maximum for 15 requests, got {$score}");
+    }
 }

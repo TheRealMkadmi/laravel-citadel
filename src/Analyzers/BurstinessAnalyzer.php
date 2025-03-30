@@ -62,6 +62,7 @@ class BurstinessAnalyzer extends AbstractAnalyzer
             'windowSize' => (int) config(CitadelConfig::KEY_BURSTINESS . '.window_size', 60000),
             'minInterval' => (int) config(CitadelConfig::KEY_BURSTINESS . '.min_interval', 5000),
             'maxRequestsPerWindow' => (int) config(CitadelConfig::KEY_BURSTINESS . '.max_requests_per_window', 5),
+            'extremeRequestThreshold' => (int) config(CitadelConfig::KEY_BURSTINESS . '.extreme_request_threshold', 15),
             'excessRequestScore' => (float) config(CitadelConfig::KEY_BURSTINESS . '.excess_request_score', 10),
             'burstPenaltyScore' => (float) config(CitadelConfig::KEY_BURSTINESS . '.burst_penalty_score', 20),
             'maxFrequencyScore' => (float) config(CitadelConfig::KEY_BURSTINESS . '.max_frequency_score', 100),
@@ -144,7 +145,22 @@ class BurstinessAnalyzer extends AbstractAnalyzer
                 'timestamps' => $recentTimestamps,
             ]);
             
-            // Handle historical penalties first (these override other checks to ensure test compliance)
+            // Define a threshold for extreme request volumes based on maximum requests allowed
+            $extremeRequestThreshold = $this->configCache['maxRequestsPerWindow'] * 3;
+            
+            // For extremely high request volumes, immediately return max score
+            if ($requestCount >= $this->configCache['extremeRequestThreshold']) {
+                Log::debug('Citadel: Extremely high request count detected, applying max frequency score', [
+                    'requestCount' => $requestCount,
+                    'extremeRequestThreshold' => $this->configCache['extremeRequestThreshold'],
+                    'maxFrequencyScore' => $this->configCache['maxFrequencyScore']
+                ]);
+                
+                $this->dataStore->setValue($cacheKey, $this->configCache['maxFrequencyScore'], $this->configCache['ttlBufferMultiplier']);
+                return $this->configCache['maxFrequencyScore'];
+            }
+            
+            // Handle historical penalties
             $historyScore = $this->getHistoricalScore($historyKey);
             if ($historyScore > 0) {
                 Log::debug('Citadel: Using historical score', [
@@ -156,38 +172,26 @@ class BurstinessAnalyzer extends AbstractAnalyzer
                 return $historyScore;
             }
 
-            // Analyze the pattern before calculating other scores
-            $patternType = $this->detectPatternType($recentTimestamps, $patternKey);
-            Log::debug('Citadel: Pattern type detected', [
-                'patternType' => $patternType
-            ]);
-            
-            // For normal patterns, return zero immediately
-            if ($patternType === self::PATTERN_NORMAL) {
-                Log::debug('Citadel: Normal pattern detected, returning 0');
-                return 0.0;
-            }
-            
-            // For regular automated patterns, return the veryRegularScore
-            if ($patternType === self::PATTERN_REGULAR) {
-                $score = $this->configCache['veryRegularScore'];
-                Log::debug('Citadel: Regular pattern detected, using veryRegularScore', [
-                    'score' => $score
-                ]);
-                $this->dataStore->setValue($cacheKey, $score, $this->configCache['ttlBufferMultiplier']);
-                return $score;
-            }
-
             $score = 0.0;
             
             // Frequency analysis - too many requests in time window
             if ($requestCount > $this->configCache['maxRequestsPerWindow']) {
                 $excess = $requestCount - $this->configCache['maxRequestsPerWindow'];
-                $excessScore = min(
-                    $this->configCache['excessRequestScore'] * $excess,
-                    $this->configCache['maxFrequencyScore']
-                );
+                
+                // Apply progressive scoring for excessive requests
+                $excessScore = $this->configCache['excessRequestScore'] * $excess;
+                
+                // Apply multiplier for very high request volume
+                $severeExcessThreshold = $this->configCache['severeExcessThreshold'];
+                if ($excess > $severeExcessThreshold) {
+                    $excessMultiplier = $this->configCache['excessMultiplier'];
+                    $excessScore = $excessScore * $excessMultiplier;
+                }
+                
+                // Cap at max frequency score
+                $excessScore = min($excessScore, $this->configCache['maxFrequencyScore']);
                 $score += $excessScore;
+                
                 Log::debug('Citadel: Excess request penalty applied', [
                     'requestCount' => $requestCount,
                     'maxRequestsPerWindow' => $this->configCache['maxRequestsPerWindow'],
@@ -195,11 +199,35 @@ class BurstinessAnalyzer extends AbstractAnalyzer
                     'excessScore' => $excessScore,
                     'runningScore' => $score
                 ]);
+                
                 $this->trackExcessiveRequestHistory($historyKey, $now, $excess, $this->configCache['windowSize']);
             }
 
+            // Analyze the pattern after frequency analysis
+            $patternType = $this->detectPatternType($recentTimestamps, $patternKey);
+            Log::debug('Citadel: Pattern type detected', [
+                'patternType' => $patternType
+            ]);
+            
+            // For normal patterns, but only if we don't already have a high excess score
+            if ($patternType === self::PATTERN_NORMAL && $score < $this->configCache['burstPenaltyScore']) {
+                Log::debug('Citadel: Normal pattern detected, resetting score to 0');
+                $score = 0.0;
+            }
+            
+            // For regular automated patterns, apply the score only if it's higher than current score
+            if ($patternType === self::PATTERN_REGULAR) {
+                $patternScore = $this->configCache['veryRegularScore'];
+                if ($patternScore > $score) {
+                    $score = $patternScore;
+                    Log::debug('Citadel: Regular pattern detected, using veryRegularScore', [
+                        'score' => $score
+                    ]);
+                }
+            }
+
             // Burst detection - check if requests are too close together
-            if (count($recentTimestamps) >= 2) {
+            if (count($recentTimestamps) >= 2 && $patternType !== self::PATTERN_NORMAL) {
                 $isBurst = $this->detectBurst($recentTimestamps, $this->configCache['minInterval']);
                 if ($isBurst) {
                     $burstPenalty = $this->configCache['burstPenaltyScore'];
@@ -218,8 +246,6 @@ class BurstinessAnalyzer extends AbstractAnalyzer
                         $this->calculateTTL($this->configCache['windowSize'])
                     );
                 }
-
-                // Pattern analysis is already handled above by detectPatternType
             }
             
             // Apply final score cap
@@ -353,41 +379,39 @@ class BurstinessAnalyzer extends AbstractAnalyzer
      */
     protected function isWellSpacedPattern(array $timestamps): bool
     {
-        // Directly handle the test case for normal pattern with no penalties
-        if (count($timestamps) === 4) {
-            $numericTimestamps = array_map('floatval', $timestamps);
-            sort($numericTimestamps);
-            
-            Log::debug('Citadel: Checking if pattern is well-spaced', [
-                'timestamps' => $numericTimestamps,
-                'minInterval' => $this->configCache['minInterval']
+        // Need at least 2 timestamps to check spacing
+        if (count($timestamps) < 2) {
+            return false;
+        }
+
+        $numericTimestamps = array_map('floatval', $timestamps);
+        sort($numericTimestamps);
+        
+        Log::debug('Citadel: Checking if pattern is well-spaced', [
+            'timestamps' => $numericTimestamps,
+            'minInterval' => $this->configCache['minInterval']
+        ]);
+        
+        // Check if all timestamps are sufficiently spaced apart
+        $allWellSpaced = true;
+        for ($i = 1; $i < count($numericTimestamps); $i++) {
+            $interval = $numericTimestamps[$i] - $numericTimestamps[$i-1];
+            Log::debug('Citadel: Interval check', [
+                'index' => $i,
+                'interval' => $interval,
+                'minInterval' => $this->configCache['minInterval'],
+                'isWellSpaced' => ($interval >= $this->configCache['minInterval'])
             ]);
             
-            // Check if timestamps are sufficiently spaced apart (20 seconds in the test)
-            $allWellSpaced = true;
-            for ($i = 1; $i < count($numericTimestamps); $i++) {
-                $interval = $numericTimestamps[$i] - $numericTimestamps[$i-1];
-                Log::debug('Citadel: Interval check', [
-                    'index' => $i,
-                    'interval' => $interval,
-                    'minInterval' => $this->configCache['minInterval'],
-                    'isWellSpaced' => ($interval >= $this->configCache['minInterval'])
-                ]);
-                
-                if ($interval < $this->configCache['minInterval']) {
-                    $allWellSpaced = false;
-                    break;
-                }
+            if ($interval < $this->configCache['minInterval']) {
+                $allWellSpaced = false;
+                break;
             }
-            
-            if ($allWellSpaced) {
-                Log::debug('Citadel: All intervals well-spaced, normal pattern detected');
-                return true;
-            }
-        } else {
-            Log::debug('Citadel: Pattern not meeting timestamp count criteria for well-spaced check', [
-                'timestampCount' => count($timestamps)
-            ]);
+        }
+        
+        if ($allWellSpaced) {
+            Log::debug('Citadel: All intervals well-spaced, normal pattern detected');
+            return true;
         }
         
         return false;
@@ -482,16 +506,6 @@ class BurstinessAnalyzer extends AbstractAnalyzer
         
         if (! $history || !is_array($history)) {
             return 0.0;
-        }
-
-        // Special case for the historical penalties test - exact match for test case
-        if (isset($history['violation_count']) && $history['violation_count'] === 1 && 
-            isset($history['last_violation']) && 
-            !isset($history['total_excess']) && !isset($history['max_excess'])) {
-            Log::debug('Citadel: Detected test case for historical penalties', [
-                'burstPenaltyScore' => $this->configCache['burstPenaltyScore']
-            ]);
-            return $this->configCache['burstPenaltyScore'];
         }
 
         $score = 0.0;
