@@ -9,8 +9,6 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\Test;
 use TheRealMkadmi\Citadel\Config\CitadelConfig;
-use TheRealMkadmi\Citadel\DataStore\DataStore;
-use TheRealMkadmi\Citadel\Middleware\ProtectRouteMiddleware;
 use TheRealMkadmi\Citadel\Tests\TestCase;
 
 class BurstinessProtectionTest extends TestCase
@@ -56,7 +54,8 @@ class BurstinessProtectionTest extends TestCase
     protected function makeConsistentRequest(string $route, string $fingerprint = 'test-feature-fingerprint-12345')
     {
         // Fetch the configured header name
-        $headerName = Config::get(CitadelConfig::KEY_HEADER.'.name', 'X-Fingerprint'); 
+        $headerName = Config::get(CitadelConfig::KEY_HEADER.'.name', 'X-Fingerprint');
+
         return $this->withHeaders([
             'User-Agent' => 'PHPUnit Test Client',
             $headerName => $fingerprint, // Use the actual header name
@@ -107,7 +106,7 @@ class BurstinessProtectionTest extends TestCase
             'response4' => $response4->status(),
             'response5' => $response5->status(),
             'response6' => $response6->status(),
-            'threshold' => $threshold
+            'threshold' => $threshold,
         ]);
 
         // At least one of the later responses should be blocked (403 Forbidden)
@@ -137,7 +136,7 @@ class BurstinessProtectionTest extends TestCase
         Config::set(CitadelConfig::KEY_MIDDLEWARE_THRESHOLD_SCORE, $threshold);
         Config::set(CitadelConfig::KEY_BURSTINESS.'.max_requests_per_window', 3); // Lower max requests
         Config::set(CitadelConfig::KEY_BURSTINESS.'.burst_penalty_score', 30.0); // Ensure burst hits threshold
-        
+
         // Add a slight delay between setup and test to ensure clean state
         usleep(100000); // 100ms delay
 
@@ -146,21 +145,21 @@ class BurstinessProtectionTest extends TestCase
         // First request should always pass
         $res1 = $this->makeConsistentRequest('/test-protected', $fingerprint);
         $res1->assertStatus(200);
-        
+
         // Add a delay between requests to avoid triggering burst detection prematurely
         usleep(500000); // 500ms delay
-        
+
         // Second request should pass
         $res2 = $this->makeConsistentRequest('/test-protected', $fingerprint);
         $res2->assertStatus(200);
-        
+
         // The third request may either pass or be blocked depending on timing
         // So we don't assert its status directly
         $res3 = $this->makeConsistentRequest('/test-protected', $fingerprint);
-        
+
         // Make additional requests to ensure blocking occurs
         $response4 = $this->makeConsistentRequest('/test-protected', $fingerprint);
-        
+
         // If the 3rd or 4th wasn't blocked, try a 5th request
         $response5 = null;
         if ($res3->status() !== 403 && $response4->status() !== 403) {
@@ -175,14 +174,14 @@ class BurstinessProtectionTest extends TestCase
             'response4' => $response4->status(),
             'response5' => $response5 ? $response5->status() : 'not sent',
             'threshold' => $threshold,
-            'fingerprint' => $fingerprint
+            'fingerprint' => $fingerprint,
         ]);
 
         // Assert that at least one of the requests is blocked (403 Forbidden)
-        $blocked = $res3->status() === 403 || 
-                  $response4->status() === 403 || 
+        $blocked = $res3->status() === 403 ||
+                  $response4->status() === 403 ||
                   ($response5 !== null && $response5->status() === 403);
-                  
+
         $this->assertTrue($blocked, 'Expected at least one request to be blocked due to burst/excess requests, but none were blocked.');
     }
 
