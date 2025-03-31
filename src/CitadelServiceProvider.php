@@ -45,7 +45,7 @@ class CitadelServiceProvider extends PackageServiceProvider
     private const MIDDLEWARE_GROUP_PROTECT = 'citadel-protect';
 
     private const MIDDLEWARE_GROUP_ACTIVE = 'citadel-active';
-    
+
     private const MIDDLEWARE_ALIAS_API_AUTH = 'citadel-api-auth';
 
     public function configurePackage(Package $package): void
@@ -127,14 +127,14 @@ class CitadelServiceProvider extends PackageServiceProvider
         $this->registerDataStore();
 
         // Register the main Citadel service
-        $this->app->singleton(Citadel::class, fn($app) => new Citadel($app->make(DataStore::class)));
+        $this->app->singleton(Citadel::class, fn ($app) => new Citadel($app->make(DataStore::class)));
 
         // Register analyzers and middleware
         $this->registerAnalyzers();
         $this->registerMiddleware();
 
         // Register API controller
-        $this->app->singleton(CitadelApiController::class, fn($app) => new CitadelApiController($app->make(DataStore::class)));
+        $this->app->singleton(CitadelApiController::class, fn ($app) => new CitadelApiController($app->make(DataStore::class)));
     }
 
     /**
@@ -261,7 +261,7 @@ class CitadelServiceProvider extends PackageServiceProvider
         $this->app->singleton(ProtectRouteMiddleware::class, function ($app) {
             // Group analyzers by their type
             $analyzers = $this->groupAnalyzersByCapabilities();
-            
+
             // Create the middleware instance with the appropriate analyzers based on context
             return new ProtectRouteMiddleware(
                 $analyzers,
@@ -281,7 +281,7 @@ class CitadelServiceProvider extends PackageServiceProvider
     protected function groupAnalyzersByCapabilities(): array
     {
         $analyzerClasses = $this->discoverAnalyzers();
-        
+
         $bodyAnalyzers = [];
         $externalResourceAnalyzers = [];
         $allAnalyzers = [];
@@ -296,12 +296,12 @@ class CitadelServiceProvider extends PackageServiceProvider
 
             // Add to all analyzers collection
             $allAnalyzers[] = $analyzer;
-            
+
             // Group by specific capabilities
             if ($analyzer->requiresRequestBody()) {
                 $bodyAnalyzers[] = $analyzer;
             }
-            
+
             if ($analyzer->usesExternalResources()) {
                 $externalResourceAnalyzers[] = $analyzer;
             }
@@ -310,7 +310,7 @@ class CitadelServiceProvider extends PackageServiceProvider
         return [
             'all' => $allAnalyzers,
             'body_analyzers' => $bodyAnalyzers,
-            'external_resource_analyzers' => $externalResourceAnalyzers
+            'external_resource_analyzers' => $externalResourceAnalyzers,
         ];
     }
 

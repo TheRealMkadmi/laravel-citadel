@@ -131,7 +131,7 @@ return [
     'burstiness' => [
         // Enable or disable burstiness analyzer
         'enable_burstiness_analyzer' => env('CITADEL_ENABLE_BURSTINESS_ANALYZER', true),
-        
+
         // Basic window and interval settings
         'min_interval' => env('CITADEL_BURSTINESS_MIN_INTERVAL', 5000), // milliseconds
         'window_size' => env('CITADEL_BURSTINESS_WINDOW_SIZE', 60000), // milliseconds (60 seconds)

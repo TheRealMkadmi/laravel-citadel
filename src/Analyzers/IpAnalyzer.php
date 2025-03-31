@@ -8,7 +8,6 @@ use Illuminate\Http\Request;
 use TheRealMkadmi\Citadel\Clients\IncolumitasApiClient;
 use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
-use TheRealMkadmi\Citadel\Enums\AnalyzerType;
 
 class IpAnalyzer extends AbstractAnalyzer
 {

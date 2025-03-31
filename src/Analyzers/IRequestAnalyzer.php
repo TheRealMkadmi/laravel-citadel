@@ -25,7 +25,7 @@ interface IRequestAnalyzer
      * If true, this analyzer will only run on requests that have a body.
      */
     public function requiresRequestBody(): bool;
-    
+
     /**
      * Check if this analyzer makes external API calls or resource requests.
      * External resource analyzers can be globally disabled via environment config.

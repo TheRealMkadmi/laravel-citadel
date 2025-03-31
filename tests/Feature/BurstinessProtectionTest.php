@@ -33,7 +33,7 @@ class BurstinessProtectionTest extends TestCase
         Config::set('citadel.ip.enable_ip_analyzer', false);
         Config::set('citadel.payload.enable_payload_analyzer', false);
         Config::set('citadel.spamminess.enable_spamminess_analyzer', false);
-        
+
         // Ensure BurstinessAnalyzer is enabled
         Config::set(CitadelConfig::KEY_BURSTINESS.'.enable_burstiness_analyzer', true);
 
