@@ -24,11 +24,9 @@ class BurstinessProtectionTest extends TestCase
     {
         parent::setUp();
 
-        // Configure burst protection settings
-        Config::set(CitadelConfig::KEY_MIDDLEWARE_ENABLED, true);
-        Config::set(CitadelConfig::KEY_MIDDLEWARE_ACTIVE_ENABLED, true);
-
         // Disable all other analyzers except BurstinessAnalyzer to isolate testing
+        Config::set(CitadelConfig::KEY_MIDDLEWARE_ENABLED, true);
+        Config::set(CitadelConfig::KEY_MIDDLEWARE_ACTIVE_ENABLED, value: false);
         Config::set('citadel.device.enable_device_analyzer', false);
         Config::set('citadel.ip.enable_ip_analyzer', false);
         Config::set('citadel.payload.enable_payload_analyzer', false);
@@ -36,9 +34,6 @@ class BurstinessProtectionTest extends TestCase
         
         // Ensure BurstinessAnalyzer is enabled
         Config::set(CitadelConfig::KEY_BURSTINESS.'.enable_burstiness_analyzer', true);
-
-        // The BurstinessAnalyzer is now enabled in TestCase::getEnvironmentSetUp
-        // so we don't need to enable it here anymore
     }
 
     protected function setupTestRoutes(): void
