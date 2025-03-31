@@ -51,14 +51,6 @@ class PayloadAnalyzer extends AbstractAnalyzer
     }
 
     /**
-     * PayloadAnalyzer scans request payload
-     */
-    public function scansPayload(): bool
-    {
-        return true;
-    }
-
-    /**
      * Cached entropy calculations
      */
     protected array $entropyCache = [];

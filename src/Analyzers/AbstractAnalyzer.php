@@ -7,7 +7,6 @@ namespace TheRealMkadmi\Citadel\Analyzers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
-use TheRealMkadmi\Citadel\Enums\AnalyzerType;
 
 /**
  * Base class for all request analyzers with common functionality
@@ -28,11 +27,6 @@ abstract class AbstractAnalyzer implements IRequestAnalyzer
      * Cache TTL in seconds.
      */
     protected int $cacheTtl = 3600;
-
-    /**
-     * Whether this analyzer operates in blocking or monitoring mode.
-     */
-    protected AnalyzerType $analyzerType = AnalyzerType::BLOCKING;
 
     /**
      * Constructor.
@@ -75,14 +69,6 @@ abstract class AbstractAnalyzer implements IRequestAnalyzer
     public function usesExternalResources(): bool
     {
         return false;
-    }
-
-    /**
-     * Get the analyzer's operating mode.
-     */
-    public function getAnalyzerType(): AnalyzerType
-    {
-        return $this->analyzerType;
     }
 
     /**

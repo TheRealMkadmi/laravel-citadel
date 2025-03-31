@@ -296,8 +296,8 @@ class CitadelServiceProvider extends PackageServiceProvider
     {
         $analyzerClasses = $this->discoverAnalyzers();
         
-        $bodyScanning = [];
-        $externalResource = [];
+        $bodyAnalyzers = [];
+        $externalResourceAnalyzers = [];
         $allAnalyzers = [];
 
         foreach ($analyzerClasses as $class) {
@@ -313,18 +313,18 @@ class CitadelServiceProvider extends PackageServiceProvider
             
             // Group by specific capabilities
             if ($analyzer->requiresRequestBody()) {
-                $bodyScanning[] = $analyzer;
+                $bodyAnalyzers[] = $analyzer;
             }
             
             if ($analyzer->usesExternalResources()) {
-                $externalResource[] = $analyzer;
+                $externalResourceAnalyzers[] = $analyzer;
             }
         }
 
         return [
             'all' => $allAnalyzers,
-            'body_scanning' => $bodyScanning,
-            'external_resource' => $externalResource
+            'body_analyzers' => $bodyAnalyzers,
+            'external_resource_analyzers' => $externalResourceAnalyzers
         ];
     }
 

@@ -5,37 +5,13 @@ declare(strict_types=1);
 namespace TheRealMkadmi\Citadel\Enums;
 
 /**
- * Defines the fundamental types of analyzers based on their behavior and impact
+ * Defines analyzer capabilities
  */
-enum AnalyzerType: string {    
+class AnalyzerType
+{
     /**
-     * Analyzers that can block requests based on their score
+     * Analyzer capability flags - define what each analyzer can do
      */
-    case BLOCKING = "blocking";
-    
-    /**
-     * Analyzers that only monitor and score behavior but don't block
-     */
-    case MONITORING = "monitoring";
-
-    /**
-     * Get all possible enum values as strings
-     */
-    public static function getValues(): array {
-        return [
-            self::BLOCKING->value,
-            self::MONITORING->value,
-        ];
-    }
-
-    /**
-     * Create enum from string value with fallback
-     */
-    public static function fromString(string $value): self {
-        return match (strtolower($value)) {
-            'blocking' => self::BLOCKING,
-            'monitoring' => self::MONITORING,
-            default => self::MONITORING,
-        };
-    }
+    public const REQUIRES_REQUEST_BODY = 'requires_request_body';
+    public const USES_EXTERNAL_RESOURCES = 'uses_external_resources';
 }

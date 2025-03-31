@@ -33,12 +33,6 @@ class SpamminessAnalyzer extends AbstractAnalyzer
      */
     protected array $analysisCache = [];
 
-    
-    /**
-     * Whether this analyzer operates in blocking or monitoring mode
-     */
-    protected AnalyzerType $analyzerType = AnalyzerType::BLOCKING;
-
     /**
      * This analyzer requires a request body to function
      */
@@ -53,14 +47,6 @@ class SpamminessAnalyzer extends AbstractAnalyzer
     public function usesExternalResources(): bool
     {
         return false;
-    }
-
-    /**
-     * SpamminessAnalyzer scans request payload
-     */
-    public function scansPayload(): bool
-    {
-        return true;
     }
 
     public function __construct(DataStore $dataStore)

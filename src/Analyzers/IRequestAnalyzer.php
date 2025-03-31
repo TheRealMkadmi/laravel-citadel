@@ -3,7 +3,6 @@
 namespace TheRealMkadmi\Citadel\Analyzers;
 
 use Illuminate\Http\Request;
-use TheRealMkadmi\Citadel\Enums\AnalyzerType;
 
 /**
  * Interface for all request analyzers in the Citadel system
@@ -32,11 +31,6 @@ interface IRequestAnalyzer
      * External resource analyzers can be globally disabled via environment config.
      */
     public function usesExternalResources(): bool;
-
-    /**
-     * Get the analyzer's operating mode (blocking or monitoring).
-     */
-    public function getAnalyzerType(): AnalyzerType;
 
     /**
      * Get a unique identifier for this analyzer type.

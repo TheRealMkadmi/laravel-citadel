@@ -27,12 +27,6 @@ class IpAnalyzer extends AbstractAnalyzer
      */
     protected array $countryScores;
 
-    
-    /**
-     * Whether this analyzer operates in blocking or monitoring mode
-     */
-    protected AnalyzerType $analyzerType = AnalyzerType::BLOCKING;
-
     /**
      * This analyzer uses external resources for IP analysis
      */
