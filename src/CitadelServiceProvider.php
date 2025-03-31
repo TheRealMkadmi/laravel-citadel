@@ -46,8 +46,6 @@ class CitadelServiceProvider extends PackageServiceProvider
 
     private const MIDDLEWARE_GROUP_ACTIVE = 'citadel-active';
     
-    private const MIDDLEWARE_GROUP_PASSIVE = 'citadel-passive';
-
     private const MIDDLEWARE_ALIAS_API_AUTH = 'citadel-api-auth';
 
     public function configurePackage(Package $package): void
@@ -96,19 +94,12 @@ class CitadelServiceProvider extends PackageServiceProvider
         // Register middleware
         $router = $this->app->make(Router::class);
 
-        // Register the active middleware group (full protection with active analyzers)
         $router->middlewareGroup(self::MIDDLEWARE_GROUP_ACTIVE, [
             ProtectRouteMiddleware::class,
             GeofenceMiddleware::class,
             BanMiddleware::class,
         ]);
-        
-        // Register the passive middleware group (monitoring only with passive analyzers)
-        $router->middlewareGroup(self::MIDDLEWARE_GROUP_PASSIVE, [
-            ProtectRouteMiddleware::class,
-        ]);
 
-        // Keep the original complete middleware group for backward compatibility
         $router->middlewareGroup(self::MIDDLEWARE_GROUP_PROTECT, [
             ProtectRouteMiddleware::class,
             BanMiddleware::class,
@@ -136,18 +127,14 @@ class CitadelServiceProvider extends PackageServiceProvider
         $this->registerDataStore();
 
         // Register the main Citadel service
-        $this->app->singleton(Citadel::class, function ($app) {
-            return new Citadel($app->make(DataStore::class));
-        });
+        $this->app->singleton(Citadel::class, fn($app) => new Citadel($app->make(DataStore::class)));
 
         // Register analyzers and middleware
         $this->registerAnalyzers();
         $this->registerMiddleware();
 
         // Register API controller
-        $this->app->singleton(CitadelApiController::class, function ($app) {
-            return new CitadelApiController($app->make(DataStore::class));
-        });
+        $this->app->singleton(CitadelApiController::class, fn($app) => new CitadelApiController($app->make(DataStore::class)));
     }
 
     /**
