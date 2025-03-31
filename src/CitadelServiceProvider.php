@@ -22,7 +22,6 @@ use TheRealMkadmi\Citadel\DataStore\ArrayDataStore;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 use TheRealMkadmi\Citadel\DataStore\OctaneDataStore;
 use TheRealMkadmi\Citadel\DataStore\RedisDataStore;
-use TheRealMkadmi\Citadel\Enums\AnalyzerType;
 use TheRealMkadmi\Citadel\Http\Controllers\CitadelApiController;
 use TheRealMkadmi\Citadel\Middleware\ApiAuthMiddleware;
 use TheRealMkadmi\Citadel\Middleware\BanMiddleware;

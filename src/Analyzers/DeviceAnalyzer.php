@@ -10,7 +10,6 @@ use Illuminate\Support\Str;
 use Reefki\DeviceDetector\DeviceDetector;
 use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
-use TheRealMkadmi\Citadel\Enums\AnalyzerType;
 
 class DeviceAnalyzer extends AbstractAnalyzer
 {
@@ -48,11 +47,6 @@ class DeviceAnalyzer extends AbstractAnalyzer
      * Bot detection patterns
      */
     protected array $botPatterns = [];
-
-    /**
-     * Whether this analyzer operates in blocking or monitoring mode
-     */
-    protected AnalyzerType $analyzerType = AnalyzerType::BLOCKING;
 
     /**
      * Local device detection instance

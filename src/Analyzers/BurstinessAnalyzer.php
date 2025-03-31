@@ -71,7 +71,6 @@ class BurstinessAnalyzer extends AbstractAnalyzer
     /**
      * Whether this analyzer operates in blocking or monitoring mode
      */
-    protected AnalyzerType $analyzerType = AnalyzerType::BLOCKING;
     
     /**
      * This analyzer doesn't require request body to function
