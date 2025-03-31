@@ -126,6 +126,6 @@ class CitadelConfig
     public const KEY_FEATURES = 'citadel.features';
 
     public const KEY_FEATURES_COLLECT_IP = 'citadel.features.collect_ip';
-    
+
     public const KEY_FEATURES_COLLECT_USER_AGENT = 'citadel.features.collect_user_agent';
 }

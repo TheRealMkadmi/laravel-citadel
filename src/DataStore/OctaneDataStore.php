@@ -298,6 +298,7 @@ class OctaneDataStore extends AbstractDataStore
             public function zremrangebyrank(string $key, int $start, int $stop): self
             {
                 $this->commands[] = ['zremrangebyrank', $key, $start, $stop];
+
                 return $this;
             }
 

@@ -79,7 +79,7 @@ class BurstinessAnalyzerIntegrationTest extends \TheRealMkadmi\Citadel\Tests\Tes
         }
 
         // Score should increase due to excessive requests
-        $this->assertGreaterThan($score1, end($scores), 'Expected score to increase due to multiple analyzer calls, but final score was: ' . end($scores));
+        $this->assertGreaterThan($score1, end($scores), 'Expected score to increase due to multiple analyzer calls, but final score was: '.end($scores));
 
         // Final score should be substantial due to multiple violations
         $this->assertGreaterThan(10.0, end($scores));
@@ -265,37 +265,37 @@ class BurstinessAnalyzerIntegrationTest extends \TheRealMkadmi\Citadel\Tests\Tes
         // Create two requests with different fingerprints
         $fingerprint1 = 'isolation-test-1-'.uniqid();
         $fingerprint2 = 'isolation-test-2-'.uniqid();
-        
+
         $request1 = $this->makeFingerprintedRequest($fingerprint1);
         $request2 = $this->makeFingerprintedRequest($fingerprint2);
-        
+
         // Generate violations for the first fingerprint
         $scores1 = [];
         for ($i = 0; $i < 10; $i++) {
             $scores1[] = $this->analyzer->analyze($request1);
         }
-        
+
         // The second fingerprint should still have a clean record
         $score2 = $this->analyzer->analyze($request2);
-        
+
         $this->assertEquals(0.0, $score2, 'Different fingerprints should be scored independently');
         $this->assertGreaterThan(0.0, end($scores1), 'First fingerprint should have accumulated score');
     }
-    
+
     #[Test]
     public function analyzer_should_handle_malformed_pattern_data()
     {
         // Create a request with a specific fingerprint
         $fingerprint = 'malformed-data-test-'.uniqid();
         $request = $this->makeFingerprintedRequest($fingerprint);
-        
+
         // Manually insert malformed pattern data
-        $patKey = "burst:" . substr(md5($fingerprint), 0, 12) . ":pat";
-        $this->dataStore->setValue($patKey, "not an array as expected");
-        
+        $patKey = 'burst:'.substr(md5($fingerprint), 0, 12).':pat';
+        $this->dataStore->setValue($patKey, 'not an array as expected');
+
         // The analyzer should handle this gracefully without errors
         $score = $this->analyzer->analyze($request);
-        
+
         // We're mainly testing that no exception is thrown
         $this->assertIsFloat($score);
     }

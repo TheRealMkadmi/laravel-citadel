@@ -133,6 +133,7 @@ class RedisDataStore extends AbstractDataStore
     public function zRange(string $key, int $start, int $stop, bool $withScores = false): array
     {
         $prefixedKey = $this->getPrefixedKey($key);
+
         return Redis::zrange($prefixedKey, $start, $stop, $withScores);
     }
 
@@ -147,6 +148,7 @@ class RedisDataStore extends AbstractDataStore
     public function zRemRangeByRank(string $key, int $start, int $stop): int
     {
         $prefixedKey = $this->getPrefixedKey($key);
+
         return Redis::zremrangebyrank($prefixedKey, $start, $stop);
     }
 

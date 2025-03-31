@@ -11,6 +11,7 @@ use TheRealMkadmi\Citadel\Tests\TestCase;
 class ArrayDataStoreTest extends TestCase
 {
     protected ArrayDataStore $dataStore;
+
     protected string $prefix;
 
     protected function setUp(): void
@@ -20,9 +21,9 @@ class ArrayDataStoreTest extends TestCase
         // Ensure we're using a consistent prefix for our tests
         $this->prefix = 'citadel:';
         Config::set(CitadelConfig::KEY_CACHE_PREFIX, $this->prefix);
-        
+
         // Initialize a real ArrayDataStore instance using Laravel's array cache driver
-        $this->dataStore = new ArrayDataStore();
+        $this->dataStore = new ArrayDataStore;
     }
 
     #[Test]
@@ -33,7 +34,7 @@ class ArrayDataStoreTest extends TestCase
 
         // Set a value and verify it was stored successfully
         $this->assertTrue($this->dataStore->setValue($key, $value));
-        
+
         // Get the value and verify it matches what we stored
         $result = $this->dataStore->getValue($key);
         $this->assertEquals($value, $result);
@@ -43,7 +44,7 @@ class ArrayDataStoreTest extends TestCase
         $this->dataStore->setValue($key, $arrayValue);
         $this->assertEquals($arrayValue, $this->dataStore->getValue($key));
 
-        $objectValue = (object)['name' => 'Jane', 'age' => 25];
+        $objectValue = (object) ['name' => 'Jane', 'age' => 25];
         $this->dataStore->setValue($key, $objectValue);
         $this->assertEquals($objectValue, $this->dataStore->getValue($key));
     }
@@ -52,10 +53,10 @@ class ArrayDataStoreTest extends TestCase
     public function it_correctly_handles_non_existent_keys()
     {
         $key = 'non-existent-key';
-        
+
         // Should return null for non-existent keys
         $this->assertNull($this->dataStore->getValue($key));
-        
+
         // Should return false when checking if a non-existent key exists
         $this->assertFalse($this->dataStore->hasValue($key));
     }
@@ -67,7 +68,7 @@ class ArrayDataStoreTest extends TestCase
         $value = 'existing-value';
 
         $this->dataStore->setValue($key, $value);
-        
+
         // Should return true when checking if an existing key exists
         $this->assertTrue($this->dataStore->hasValue($key));
     }
@@ -81,13 +82,13 @@ class ArrayDataStoreTest extends TestCase
         // First set a value
         $this->dataStore->setValue($key, $value);
         $this->assertTrue($this->dataStore->hasValue($key));
-        
+
         // Now remove it
         $result = $this->dataStore->removeValue($key);
-        
+
         // Check that removal was successful
         $this->assertTrue($result);
-        
+
         // Verify the value is gone
         $this->assertFalse($this->dataStore->hasValue($key));
         $this->assertNull($this->dataStore->getValue($key));
@@ -109,7 +110,7 @@ class ArrayDataStoreTest extends TestCase
         $removed = $this->dataStore->zRemRangeByRank($key, 1, 3);
         $this->assertEquals(3, $removed);
         $this->assertEquals(2, $this->dataStore->zCard($key));
-        
+
         // Check remaining members
         $members = $this->dataStore->zRange($key, 0, -1);
         $this->assertEquals(['member1', 'member5'], $members);
@@ -119,7 +120,7 @@ class ArrayDataStoreTest extends TestCase
         $this->dataStore->zAdd($key, 1.0, 'member1');
         $this->dataStore->zAdd($key, 2.0, 'member2');
         $this->dataStore->zAdd($key, 3.0, 'member3');
-        
+
         // Test removing with negative indices
         $removed = $this->dataStore->zRemRangeByRank($key, -2, -1);
         $this->assertEquals(2, $removed);
@@ -246,13 +247,13 @@ class ArrayDataStoreTest extends TestCase
 
         // Remove members with scores in range [2.0, 4.0]
         $removed = $this->dataStore->zRemRangeByScore($key, 2.0, 4.0);
-        
+
         // Should have removed 3 members
         $this->assertEquals(3, $removed);
-        
+
         // Should have 2 members left
         $this->assertEquals(2, $this->dataStore->zCard($key));
-        
+
         // Check remaining members
         $members = $this->dataStore->zRange($key, 0, -1, true);
         $this->assertCount(2, $members);
@@ -314,11 +315,11 @@ class ArrayDataStoreTest extends TestCase
         // Test mixed indices
         $members = $this->dataStore->zRange($key, 1, -2);
         $this->assertEquals(['member2', 'member3', 'member4'], $members);
-        
+
         // Test out of bounds
         $members = $this->dataStore->zRange($key, 10, 20);
         $this->assertEmpty($members);
-        
+
         // Test inverted indices
         $members = $this->dataStore->zRange($key, 3, 1);
         $this->assertEmpty($members);
@@ -362,28 +363,28 @@ class ArrayDataStoreTest extends TestCase
 
         // Set value with explicit TTL
         $this->dataStore->setValue($key, $value, $ttl);
-        
+
         // Value should exist
         $this->assertTrue($this->dataStore->hasValue($key));
         $this->assertEquals($value, $this->dataStore->getValue($key));
     }
-    
+
     #[Test]
     public function it_handles_ttl_with_forever_setting()
     {
         // Configure to use forever setting
         Config::set(CitadelConfig::KEY_CACHE_USE_FOREVER, true);
-        
+
         $key = 'forever-test';
         $value = 'test-value';
-        
+
         // Set value
         $this->dataStore->setValue($key, $value);
-        
+
         // Value should exist
         $this->assertTrue($this->dataStore->hasValue($key));
         $this->assertEquals($value, $this->dataStore->getValue($key));
-        
+
         // Reset config
         Config::set(CitadelConfig::KEY_CACHE_USE_FOREVER, false);
     }
@@ -392,30 +393,30 @@ class ArrayDataStoreTest extends TestCase
     public function it_can_handle_arbitrary_data_types()
     {
         $key = 'data-types-test';
-        
+
         // Test with string
         $this->dataStore->setValue($key, 'string value');
         $this->assertEquals('string value', $this->dataStore->getValue($key));
-        
+
         // Test with integer
         $this->dataStore->setValue($key, 42);
         $this->assertEquals(42, $this->dataStore->getValue($key));
-        
+
         // Test with float
         $this->dataStore->setValue($key, 3.14159);
         $this->assertEquals(3.14159, $this->dataStore->getValue($key));
-        
+
         // Test with boolean
         $this->dataStore->setValue($key, true);
         $this->assertTrue($this->dataStore->getValue($key));
-        
+
         // Test with array
         $array = ['one' => 1, 'two' => 2, 'nested' => ['three' => 3]];
         $this->dataStore->setValue($key, $array);
         $this->assertEquals($array, $this->dataStore->getValue($key));
-        
+
         // Test with object
-        $object = (object)['name' => 'Test Object', 'properties' => ['a', 'b', 'c']];
+        $object = (object) ['name' => 'Test Object', 'properties' => ['a', 'b', 'c']];
         $this->dataStore->setValue($key, $object);
         $this->assertEquals($object, $this->dataStore->getValue($key));
     }
@@ -440,13 +441,13 @@ class ArrayDataStoreTest extends TestCase
             'invalid-range-set',
             'remove-all-set',
             'order-test-set',
-            'pipeline-rank-test'
+            'pipeline-rank-test',
         ];
-        
+
         foreach ($keysToClean as $key) {
             $this->dataStore->removeValue($key);
         }
-        
+
         parent::tearDown();
     }
 }

@@ -239,6 +239,7 @@ class ArrayDataStore extends AbstractDataStore
         $pipeline = new class($this)
         {
             private ArrayDataStore $dataStore;
+
             private array $commands = [];
 
             public function __construct(ArrayDataStore $dataStore)
@@ -249,36 +250,42 @@ class ArrayDataStore extends AbstractDataStore
             public function zadd(string $key, float|int $score, mixed $member): self
             {
                 $this->commands[] = ['zadd', $key, $score, $member];
+
                 return $this;
             }
 
             public function zremrangebyscore(string $key, float|int|string $min, float|int|string $max): self
             {
                 $this->commands[] = ['zremrangebyscore', $key, $min, $max];
+
                 return $this;
             }
 
             public function expire(string $key, int $ttl): self
             {
                 $this->commands[] = ['expire', $key, $ttl];
+
                 return $this;
             }
 
             public function zcard(string $key): self
             {
                 $this->commands[] = ['zcard', $key];
+
                 return $this;
             }
 
             public function zremrangebyrank(string $key, int $start, int $stop): self
             {
                 $this->commands[] = ['zremrangebyrank', $key, $start, $stop];
+
                 return $this;
             }
 
             public function zrange(string $key, int $start, int $stop, bool $withScores = false): self
             {
                 $this->commands[] = ['zrange', $key, $start, $stop, $withScores];
+
                 return $this;
             }
 
@@ -331,13 +338,14 @@ class ArrayDataStore extends AbstractDataStore
     public function expire(string $key, int $ttl): bool
     {
         $prefixedKey = $this->getPrefixedKey($key);
-        
-        if (!$this->cacheStore->has($prefixedKey)) {
+
+        if (! $this->cacheStore->has($prefixedKey)) {
             return false;
         }
 
         // Get current value and re-store with new TTL
         $value = $this->cacheStore->get($prefixedKey);
+
         return $this->cacheStore->put($prefixedKey, $value, $ttl);
     }
 
