@@ -28,11 +28,17 @@ class BurstinessProtectionTest extends TestCase
         Config::set(CitadelConfig::KEY_MIDDLEWARE_ENABLED, true);
         Config::set(CitadelConfig::KEY_MIDDLEWARE_ACTIVE_ENABLED, true);
 
+        // Disable all other analyzers except BurstinessAnalyzer to isolate testing
+        Config::set('citadel.device.enable_device_analyzer', false);
+        Config::set('citadel.ip.enable_ip_analyzer', false);
+        Config::set('citadel.payload.enable_payload_analyzer', false);
+        Config::set('citadel.spamminess.enable_spamminess_analyzer', false);
+        
+        // Ensure BurstinessAnalyzer is enabled
+        Config::set(CitadelConfig::KEY_BURSTINESS.'.enable_burstiness_analyzer', true);
+
         // The BurstinessAnalyzer is now enabled in TestCase::getEnvironmentSetUp
         // so we don't need to enable it here anymore
-
-        // Set up test routes (moved to getEnvironmentSetUp to ensure config is applied first)
-        // $this->setupTestRoutes();
     }
 
     protected function setupTestRoutes(): void
