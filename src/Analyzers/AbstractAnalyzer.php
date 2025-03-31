@@ -5,9 +5,13 @@ declare(strict_types=1);
 namespace TheRealMkadmi\Citadel\Analyzers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 use TheRealMkadmi\Citadel\Enums\AnalyzerType;
 
+/**
+ * Base class for all request analyzers with common functionality
+ */
 abstract class AbstractAnalyzer implements IRequestAnalyzer
 {
     /**
@@ -21,9 +25,14 @@ abstract class AbstractAnalyzer implements IRequestAnalyzer
     protected bool $enabled = true;
 
     /**
-     * Whether this takes active action against the request or the client to decide
+     * Cache TTL in seconds.
      */
-    protected AnalyzerType $analyzerType = AnalyzerType::PASSIVE;
+    protected int $cacheTtl = 3600;
+
+    /**
+     * Whether this analyzer operates in blocking or monitoring mode.
+     */
+    protected AnalyzerType $analyzerType = AnalyzerType::BLOCKING;
 
     /**
      * Constructor.
@@ -38,43 +47,51 @@ abstract class AbstractAnalyzer implements IRequestAnalyzer
      */
     public function isEnabled(): bool
     {
+        // Additional check for external resources analyzers
+        if ($this->usesExternalResources() && !config('citadel.external_analyzers.enabled', true)) {
+            // Log that external resource usage is disabled
+            Log::debug('Citadel: External analyzer {analyzer} disabled by global setting', [
+                'analyzer' => $this->getIdentifier(),
+            ]);
+            return false;
+        }
+        
         return $this->enabled;
     }
 
     /**
-     * Check if this analyzer scans payload content.
+     * Check if this analyzer requires the request body for analysis.
+     * Default is false, override in specific analyzers as needed.
      */
-    public function scansPayload(): bool
+    public function requiresRequestBody(): bool
     {
-        // Scans payload is determined by the analyzer implementation
-        // Override in specific analyzers as needed
         return false;
     }
 
     /**
-     * Check if this analyzer invokes external resources.
+     * Check if this analyzer makes external API calls or resource requests.
+     * Default is false, override in specific analyzers as needed.
      */
-    public function invokesExternalResource(): bool
+    public function usesExternalResources(): bool
     {
-        // External resource usage is determined by the analyzer implementation
-        // Override in specific analyzers as needed
         return false;
     }
 
     /**
-     * Check if this analyzer is active (blocks requests) or passive (only monitors).
-     */
-    public function isActive(): bool
-    {
-        return $this->analyzerType === AnalyzerType::ACTIVE || $this->analyzerType === AnalyzerType::BOTH;
-    }
-
-    /**
-     * Get the analyzer type enum value.
+     * Get the analyzer's operating mode.
      */
     public function getAnalyzerType(): AnalyzerType
     {
         return $this->analyzerType;
+    }
+
+    /**
+     * Get a unique identifier for this analyzer type.
+     * By default, uses the class basename, but can be overridden.
+     */
+    public function getIdentifier(): string
+    {
+        return class_basename($this);
     }
 
     /**

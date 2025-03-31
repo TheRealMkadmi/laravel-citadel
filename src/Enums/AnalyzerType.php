@@ -4,31 +4,38 @@ declare(strict_types=1);
 
 namespace TheRealMkadmi\Citadel\Enums;
 
+/**
+ * Defines the fundamental types of analyzers based on their behavior and impact
+ */
 enum AnalyzerType: string {    
-    case ACTIVE = "active";
-    case PASSIVE = "passive";
-    case BOTH = "both";
+    /**
+     * Analyzers that can block requests based on their score
+     */
+    case BLOCKING = "blocking";
+    
+    /**
+     * Analyzers that only monitor and score behavior but don't block
+     */
+    case MONITORING = "monitoring";
 
     /**
-     * Analyzer attribute flags
+     * Get all possible enum values as strings
      */
-    public const SCANS_PAYLOAD = 'scans_payload';
-    public const INVOKES_EXTERNAL_RESOURCE = 'invokes_external_resource';
-
     public static function getValues(): array {
         return [
-            self::ACTIVE->value,
-            self::PASSIVE->value,
-            self::BOTH->value,
+            self::BLOCKING->value,
+            self::MONITORING->value,
         ];
     }
 
+    /**
+     * Create enum from string value with fallback
+     */
     public static function fromString(string $value): self {
         return match (strtolower($value)) {
-            'active' => self::ACTIVE,
-            'passive' => self::PASSIVE,
-            'both' => self::BOTH,
-            default => self::ACTIVE,
+            'blocking' => self::BLOCKING,
+            'monitoring' => self::MONITORING,
+            default => self::MONITORING,
         };
     }
 }

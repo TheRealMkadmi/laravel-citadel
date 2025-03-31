@@ -29,16 +29,24 @@ class IpAnalyzer extends AbstractAnalyzer
 
     
     /**
-     * Whether this takes active action against the request or the client to decide
+     * Whether this analyzer operates in blocking or monitoring mode
      */
-    protected AnalyzerType $analyzerType = AnalyzerType::PASSIVE;
+    protected AnalyzerType $analyzerType = AnalyzerType::BLOCKING;
 
     /**
-     * IpAnalyzer invokes external resources
+     * This analyzer uses external resources for IP analysis
      */
-    public function invokesExternalResource(): bool
+    public function usesExternalResources(): bool
     {
         return true;
+    }
+
+    /**
+     * This analyzer doesn't require request body to function
+     */
+    public function requiresRequestBody(): bool
+    {
+        return false;
     }
 
     /**

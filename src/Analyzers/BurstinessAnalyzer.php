@@ -69,14 +69,33 @@ class BurstinessAnalyzer extends AbstractAnalyzer
 
     
     /**
-     * Whether this takes active action against the request or the client to decide
+     * Whether this analyzer operates in blocking or monitoring mode
      */
-    protected AnalyzerType $analyzerType = AnalyzerType::PASSIVE;
+    protected AnalyzerType $analyzerType = AnalyzerType::BLOCKING;
     
     /**
-     * Analyzer type constants to ensure consistent usage across the application
+     * This analyzer doesn't require request body to function
      */
-    private const ANALYZER_TYPE = AnalyzerType::PASSIVE;
+    public function requiresRequestBody(): bool
+    {
+        return false;
+    }
+    
+    /**
+     * This analyzer doesn't use external resources
+     */
+    public function usesExternalResources(): bool
+    {
+        return false;
+    }
+    
+    /**
+     * Get a unique identifier for this analyzer
+     */
+    public function getIdentifier(): string
+    {
+        return 'BurstinessAnalyzer';
+    }
     
     /**
      * Cache of configuration values

@@ -330,4 +330,19 @@ return [
         'token' => env('CITADEL_API_TOKEN'),
         'prefix' => env('CITADEL_API_PREFIX', 'api/citadel'),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | External Resource Analyzer Settings
+    |--------------------------------------------------------------------------
+    |
+    | Control analyzers that make external API calls or use external resources.
+    | This allows for globally enabling/disabling external resource usage, which
+    | may be useful in development environments or to limit API usage costs.
+    |
+    */
+    'external_analyzers' => [
+        'enabled' => env('CITADEL_ENABLE_EXTERNAL_ANALYZERS', true),
+        'log_disabled_calls' => env('CITADEL_LOG_DISABLED_EXTERNAL_CALLS', true),
+    ],
 ];

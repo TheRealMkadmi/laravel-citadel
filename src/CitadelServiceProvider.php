@@ -274,7 +274,7 @@ class CitadelServiceProvider extends PackageServiceProvider
         // Register middleware with analyzers grouped by type
         $this->app->singleton(ProtectRouteMiddleware::class, function ($app) {
             // Group analyzers by their type
-            $analyzers = $this->groupAnalyzersByType();
+            $analyzers = $this->groupAnalyzersByCapabilities();
             
             // Create the middleware instance with the appropriate analyzers based on context
             return new ProtectRouteMiddleware(
@@ -288,21 +288,18 @@ class CitadelServiceProvider extends PackageServiceProvider
     }
 
     /**
-     * Group analyzers by their type using the AnalyzerType enum
+     * Group analyzers by their capabilities
      *
      * @return array<string, array<IRequestAnalyzer>>
      */
-    protected function groupAnalyzersByType(): array
+    protected function groupAnalyzersByCapabilities(): array
     {
-        // Discover all analyzer classes
         $analyzerClasses = $this->discoverAnalyzers();
         
-        $active = [];
-        $passive = [];
-        $payloadScanners = [];
-        $externalResourceUsers = [];
+        $bodyScanning = [];
+        $externalResource = [];
+        $allAnalyzers = [];
 
-        // Group analyzers by their attributes and type
         foreach ($analyzerClasses as $class) {
             /** @var IRequestAnalyzer $analyzer */
             $analyzer = $this->app->make($class);
@@ -311,39 +308,23 @@ class CitadelServiceProvider extends PackageServiceProvider
                 continue;
             }
 
+            // Add to all analyzers collection
+            $allAnalyzers[] = $analyzer;
+            
             // Group by specific capabilities
-            if ($analyzer->scansPayload()) {
-                $payloadScanners[] = $analyzer;
+            if ($analyzer->requiresRequestBody()) {
+                $bodyScanning[] = $analyzer;
             }
             
-            if ($analyzer->invokesExternalResource()) {
-                $externalResourceUsers[] = $analyzer;
-            }
-
-            // Group by analyzer type
-            $analyzerType = $analyzer->getAnalyzerType();
-            
-            switch ($analyzerType) {
-                case AnalyzerType::ACTIVE:
-                    $active[] = $analyzer;
-                    break;
-                    
-                case AnalyzerType::PASSIVE:
-                    $passive[] = $analyzer;
-                    break;
-                    
-                case AnalyzerType::BOTH:
-                    $active[] = $analyzer;
-                    $passive[] = $analyzer;
-                    break;
+            if ($analyzer->usesExternalResources()) {
+                $externalResource[] = $analyzer;
             }
         }
 
         return [
-            AnalyzerType::ACTIVE->value => $active,
-            AnalyzerType::PASSIVE->value => $passive,
-            AnalyzerType::SCANS_PAYLOAD => $payloadScanners,
-            AnalyzerType::INVOKES_EXTERNAL_RESOURCE => $externalResourceUsers
+            'all' => $allAnalyzers,
+            'body_scanning' => $bodyScanning,
+            'external_resource' => $externalResource
         ];
     }
 

@@ -50,9 +50,9 @@ class DeviceAnalyzer extends AbstractAnalyzer
     protected array $botPatterns = [];
 
     /**
-     * Whether this takes active action against the request or the client to decide
+     * Whether this analyzer operates in blocking or monitoring mode
      */
-    protected AnalyzerType $analyzerType = AnalyzerType::PASSIVE;
+    protected AnalyzerType $analyzerType = AnalyzerType::BLOCKING;
 
     /**
      * Local device detection instance
@@ -202,5 +202,29 @@ class DeviceAnalyzer extends AbstractAnalyzer
         }
 
         return false;
+    }
+
+    /**
+     * This analyzer doesn't require request body to function
+     */
+    public function requiresRequestBody(): bool
+    {
+        return false;
+    }
+
+    /**
+     * This analyzer doesn't use external resources
+     */
+    public function usesExternalResources(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Get unique identifier for this analyzer
+     */
+    public function getIdentifier(): string
+    {
+        return 'DeviceAnalyzer';
     }
 }

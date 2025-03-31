@@ -30,9 +30,25 @@ class PayloadAnalyzer extends AbstractAnalyzer
 
     
     /**
-     * Whether this takes active action against the request or the client to decide
+     * Whether this analyzer operates in blocking or monitoring mode.
      */
-    protected AnalyzerType $analyzerType = AnalyzerType::PASSIVE;
+    protected AnalyzerType $analyzerType = AnalyzerType::BLOCKING;
+
+    /**
+     * This analyzer requires a request body to function
+     */
+    public function requiresRequestBody(): bool
+    {
+        return true;
+    }
+
+    /**
+     * This analyzer doesn't use external resources
+     */
+    public function usesExternalResources(): bool
+    {
+        return false;
+    }
 
     /**
      * PayloadAnalyzer scans request payload
