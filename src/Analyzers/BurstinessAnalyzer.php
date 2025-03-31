@@ -71,7 +71,12 @@ class BurstinessAnalyzer extends AbstractAnalyzer
     /**
      * Whether this takes active action against the request or the client to decide
      */
-    protected AnalyzerType $analyzerType = AnalyzerType::PASSIVE;
+    protected AnalyzerType $analyzerType = AnalyzerType::ACTIVE;
+    
+    /**
+     * Analyzer type constants to ensure consistent usage across the application
+     */
+    private const ANALYZER_TYPE = AnalyzerType::ACTIVE;
     
     /**
      * Cache of configuration values
