@@ -9,7 +9,6 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
-use TheRealMkadmi\Citadel\Enums\AnalyzerType;
 
 class BurstinessAnalyzer extends AbstractAnalyzer
 {
@@ -67,11 +66,10 @@ class BurstinessAnalyzer extends AbstractAnalyzer
 
     private const REPEAT_VIOLATION_MULTIPLIER = 1.2;
 
-    
     /**
      * Whether this analyzer operates in blocking or monitoring mode
      */
-    
+
     /**
      * This analyzer doesn't require request body to function
      */
@@ -79,7 +77,7 @@ class BurstinessAnalyzer extends AbstractAnalyzer
     {
         return false;
     }
-    
+
     /**
      * This analyzer doesn't use external resources
      */
@@ -87,7 +85,7 @@ class BurstinessAnalyzer extends AbstractAnalyzer
     {
         return false;
     }
-    
+
     /**
      * Get a unique identifier for this analyzer
      */
@@ -95,7 +93,7 @@ class BurstinessAnalyzer extends AbstractAnalyzer
     {
         return 'BurstinessAnalyzer';
     }
-    
+
     /**
      * Cache of configuration values
      */

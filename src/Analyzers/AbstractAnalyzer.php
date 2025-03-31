@@ -42,14 +42,15 @@ abstract class AbstractAnalyzer implements IRequestAnalyzer
     public function isEnabled(): bool
     {
         // Additional check for external resources analyzers
-        if ($this->usesExternalResources() && !config('citadel.external_analyzers.enabled', true)) {
+        if ($this->usesExternalResources() && ! config('citadel.external_analyzers.enabled', true)) {
             // Log that external resource usage is disabled
             Log::debug('Citadel: External analyzer {analyzer} disabled by global setting', [
                 'analyzer' => $this->getIdentifier(),
             ]);
+
             return false;
         }
-        
+
         return $this->enabled;
     }
 

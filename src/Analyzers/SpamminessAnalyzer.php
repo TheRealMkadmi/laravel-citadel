@@ -9,7 +9,6 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Str;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
-use TheRealMkadmi\Citadel\Enums\AnalyzerType;
 
 class SpamminessAnalyzer extends AbstractAnalyzer
 {
