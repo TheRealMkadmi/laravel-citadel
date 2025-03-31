@@ -93,8 +93,9 @@ class ProtectRouteMiddleware
         if (empty($applicableAnalyzers)) {
             Log::debug('Citadel Middleware: No applicable analyzers for request', [
                 'fingerprint' => $fingerprint,
-                'path' => $request->path()
+                'path' => $request->path(),
             ]);
+
             return $next($request);
         }
 
@@ -105,11 +106,11 @@ class ProtectRouteMiddleware
 
         // The threshold score for blocking requests
         $thresholdScore = Config::get(CitadelConfig::KEY_MIDDLEWARE_THRESHOLD_SCORE, 100);
-        
+
         // Find the maximum individual analyzer score
         $maxIndividualScore = $scores->max();
-        $maxScoringAnalyzer = $scores->filter(fn($value) => $value == $maxIndividualScore)->keys()->first();
-        
+        $maxScoringAnalyzer = $scores->filter(fn ($value) => $value == $maxIndividualScore)->keys()->first();
+
         // Log detailed score information for testing/debugging
         Log::debug('Citadel Middleware: Score evaluation', [
             'fingerprint' => $fingerprint,
@@ -117,7 +118,7 @@ class ProtectRouteMiddleware
             'maxIndividualScore' => $maxIndividualScore,
             'maxScoringAnalyzer' => $maxScoringAnalyzer,
             'thresholdScore' => $thresholdScore,
-            'allScores' => $scores->toArray()
+            'allScores' => $scores->toArray(),
         ]);
 
         // Check if we're in active mode
@@ -136,9 +137,9 @@ class ProtectRouteMiddleware
             Log::warning('Citadel Middleware: Blocking request due to high scores', [
                 'fingerprint' => $fingerprint,
                 'threshold' => $thresholdScore,
-                'totalScore' => $totalScore, 
+                'totalScore' => $totalScore,
                 'maxIndividualScore' => $maxIndividualScore,
-                'triggeringAnalyzer' => ($maxIndividualScore >= $thresholdScore) ? $maxScoringAnalyzer : 'combinedScore'
+                'triggeringAnalyzer' => ($maxIndividualScore >= $thresholdScore) ? $maxScoringAnalyzer : 'combinedScore',
             ]);
 
             return $this->blockRequest($request);
@@ -245,7 +246,7 @@ class ProtectRouteMiddleware
         Log::debug('Citadel Middleware: Running analyzers', [
             'fingerprint' => $fingerprint,
             'analyzerCount' => count($analyzers),
-            'analyzerNames' => collect($analyzers)->map(fn($a) => class_basename($a))->toArray()
+            'analyzerNames' => collect($analyzers)->map(fn ($a) => class_basename($a))->toArray(),
         ]);
 
         // Run analyzers and collect their scores
@@ -253,7 +254,7 @@ class ProtectRouteMiddleware
             try {
                 $analyzerName = class_basename($analyzer);
                 $score = 0.0; // Initialize score
-                
+
                 // Try to get from cache first
                 $cacheKey = $this->getCacheKey($fingerprint, $analyzerName);
                 $cachedScore = $this->dataStore->getValue($cacheKey);
@@ -261,33 +262,33 @@ class ProtectRouteMiddleware
                 if ($cachedScore !== null) {
                     $score = (float) $cachedScore;
                     Log::debug('Citadel Middleware: Used cached score for analyzer', [
-                        'analyzer' => $analyzerName, 
-                        'fingerprint' => $fingerprint, 
-                        'score' => $score
+                        'analyzer' => $analyzerName,
+                        'fingerprint' => $fingerprint,
+                        'score' => $score,
                     ]);
                 } else {
                     // No cache hit, calculate fresh score
                     $score = $analyzer->analyze($request);
-                    
+
                     // Store score in cache if non-zero
                     if ($score > 0.0) {
                         $ttl = Config::get(CitadelConfig::KEY_MIDDLEWARE_CACHE_TTL, 3600);
                         $this->dataStore->setValue($cacheKey, $score, $ttl);
                         Log::debug('Citadel Middleware: Calculated and cached score for analyzer', [
-                            'analyzer' => $analyzerName, 
-                            'fingerprint' => $fingerprint, 
-                            'score' => $score, 
-                            'ttl' => $ttl
+                            'analyzer' => $analyzerName,
+                            'fingerprint' => $fingerprint,
+                            'score' => $score,
+                            'ttl' => $ttl,
                         ]);
                     } else {
                         Log::debug('Citadel Middleware: Calculated fresh score for analyzer', [
-                            'analyzer' => $analyzerName, 
-                            'fingerprint' => $fingerprint, 
-                            'score' => $score
+                            'analyzer' => $analyzerName,
+                            'fingerprint' => $fingerprint,
+                            'score' => $score,
                         ]);
                     }
                 }
-                
+
                 // Store the score regardless of how it was obtained
                 $scores->put($analyzerName, $score);
 
@@ -304,13 +305,13 @@ class ProtectRouteMiddleware
 
         // Calculate total score from all analyzers
         $totalScore = $scores->sum();
-        
+
         Log::debug('Citadel Middleware: Calculated total score', [
-            'fingerprint' => $fingerprint, 
-            'scores' => $scores->toArray(), 
+            'fingerprint' => $fingerprint,
+            'scores' => $scores->toArray(),
             'analyzers_count' => count($analyzers),
             'scores_count' => $scores->count(),
-            'totalScore' => $totalScore
+            'totalScore' => $totalScore,
         ]);
 
         return [

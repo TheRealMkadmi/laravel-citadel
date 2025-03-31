@@ -62,14 +62,14 @@ class TestCase extends Orchestra
             'driver' => 'array',
             'serialize' => false,
         ]);
-        
+
         // Ensure BurstinessAnalyzer is enabled for tests that might use it
         $app['config']->set(CitadelConfig::KEY_BURSTINESS.'.enable_burstiness_analyzer', true);
-        
+
         // Define common test routes used across feature tests
         $this->defineTestRoutes($app);
     }
-    
+
     /**
      * Define common test routes used across feature tests.
      */
