@@ -22,24 +22,15 @@ use TheRealMkadmi\Citadel\DataStore\ArrayDataStore;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 use TheRealMkadmi\Citadel\DataStore\OctaneDataStore;
 use TheRealMkadmi\Citadel\DataStore\RedisDataStore;
+use TheRealMkadmi\Citadel\Enums\AnalyzerType;
 use TheRealMkadmi\Citadel\Http\Controllers\CitadelApiController;
 use TheRealMkadmi\Citadel\Middleware\ApiAuthMiddleware;
 use TheRealMkadmi\Citadel\Middleware\BanMiddleware;
 use TheRealMkadmi\Citadel\Middleware\GeofenceMiddleware;
-use TheRealMkadmi\Citadel\Middleware\PostProtectRouteMiddleware;
 use TheRealMkadmi\Citadel\Middleware\ProtectRouteMiddleware;
 
 class CitadelServiceProvider extends PackageServiceProvider
 {
-    /**
-     * Group keys for analyzer types
-     */
-    private const ANALYZER_GROUP_ACTIVE = 'active';
-
-    private const ANALYZER_GROUP_PASSIVE = 'passive';
-
-    private const ANALYZER_GROUP_PAYLOAD = 'payload_scanners';
-
     /**
      * Config keys
      */
@@ -55,6 +46,8 @@ class CitadelServiceProvider extends PackageServiceProvider
     private const MIDDLEWARE_GROUP_PROTECT = 'citadel-protect';
 
     private const MIDDLEWARE_GROUP_ACTIVE = 'citadel-active';
+    
+    private const MIDDLEWARE_GROUP_PASSIVE = 'citadel-passive';
 
     private const MIDDLEWARE_ALIAS_API_AUTH = 'citadel-api-auth';
 
@@ -104,18 +97,21 @@ class CitadelServiceProvider extends PackageServiceProvider
         // Register middleware
         $router = $this->app->make(Router::class);
 
-        // Register the active middleware group (full protection)
+        // Register the active middleware group (full protection with active analyzers)
         $router->middlewareGroup(self::MIDDLEWARE_GROUP_ACTIVE, [
             ProtectRouteMiddleware::class,
-            PostProtectRouteMiddleware::class,
             GeofenceMiddleware::class,
             BanMiddleware::class,
+        ]);
+        
+        // Register the passive middleware group (monitoring only with passive analyzers)
+        $router->middlewareGroup(self::MIDDLEWARE_GROUP_PASSIVE, [
+            ProtectRouteMiddleware::class,
         ]);
 
         // Keep the original complete middleware group for backward compatibility
         $router->middlewareGroup(self::MIDDLEWARE_GROUP_PROTECT, [
             ProtectRouteMiddleware::class,
-            PostProtectRouteMiddleware::class,
             BanMiddleware::class,
         ]);
 
@@ -272,26 +268,17 @@ class CitadelServiceProvider extends PackageServiceProvider
             return new BanMiddleware($app->make(DataStore::class));
         });
 
-        // Register middleware for active analyzers
+        // Register GeofenceMiddleware
+        $this->app->singleton(GeofenceMiddleware::class);
+
+        // Register middleware with analyzers grouped by type
         $this->app->singleton(ProtectRouteMiddleware::class, function ($app) {
-            // Get all analyzers classes, grouped by type
+            // Group analyzers by their type
             $analyzers = $this->groupAnalyzersByType();
-
-            // Create and return the middleware with active analyzers and DataStore injected
+            
+            // Create the middleware instance with the appropriate analyzers based on context
             return new ProtectRouteMiddleware(
-                $analyzers[self::ANALYZER_GROUP_ACTIVE],
-                $app->make(DataStore::class)
-            );
-        });
-
-        // Register the middleware for passive analyzers
-        $this->app->singleton(PostProtectRouteMiddleware::class, function ($app) {
-            // Get all analyzers classes, grouped by type
-            $analyzers = $this->groupAnalyzersByType();
-
-            // Create and return the middleware with passive analyzers and DataStore injected
-            return new PostProtectRouteMiddleware(
-                $analyzers[self::ANALYZER_GROUP_PASSIVE],
+                $analyzers,
                 $app->make(DataStore::class)
             );
         });
@@ -301,7 +288,7 @@ class CitadelServiceProvider extends PackageServiceProvider
     }
 
     /**
-     * Group analyzers by their type (active/passive) and other properties
+     * Group analyzers by their type using the AnalyzerType enum
      *
      * @return array<string, array<IRequestAnalyzer>>
      */
@@ -309,12 +296,12 @@ class CitadelServiceProvider extends PackageServiceProvider
     {
         // Discover all analyzer classes
         $analyzerClasses = $this->discoverAnalyzers();
-
+        
         $active = [];
         $passive = [];
-        $payloadScanners = [];
+        $payload = [];
 
-        // Group analyzers by their properties
+        // Group analyzers by their type using the AnalyzerType enum
         foreach ($analyzerClasses as $class) {
             /** @var IRequestAnalyzer $analyzer */
             $analyzer = $this->app->make($class);
@@ -323,21 +310,34 @@ class CitadelServiceProvider extends PackageServiceProvider
                 continue;
             }
 
+            // Group by payload scanning capability
             if ($analyzer->scansPayload()) {
-                $payloadScanners[] = $analyzer;
+                $payload[] = $analyzer;
             }
 
-            if ($analyzer->isActive()) {
-                $active[] = $analyzer;
-            } else {
-                $passive[] = $analyzer;
+            // Group by analyzer type
+            $analyzerType = $analyzer->getAnalyzerType();
+            
+            switch ($analyzerType) {
+                case AnalyzerType::ACTIVE:
+                    $active[] = $analyzer;
+                    break;
+                    
+                case AnalyzerType::PASSIVE:
+                    $passive[] = $analyzer;
+                    break;
+                    
+                case AnalyzerType::BOTH:
+                    $active[] = $analyzer;
+                    $passive[] = $analyzer;
+                    break;
             }
         }
 
         return [
-            self::ANALYZER_GROUP_ACTIVE => $active,
-            self::ANALYZER_GROUP_PASSIVE => $passive,
-            self::ANALYZER_GROUP_PAYLOAD => $payloadScanners,
+            AnalyzerType::ACTIVE->value => $active,
+            AnalyzerType::PASSIVE->value => $passive,
+            'payload' => $payload,
         ];
     }
 

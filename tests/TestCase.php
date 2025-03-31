@@ -25,20 +25,20 @@ class TestCase extends Orchestra
         Config::set(CitadelConfig::KEY_CACHE.'.prefer_redis', false);
         Config::set('cache.default', 'array');
 
-        // Config::set('logging.default', 'stack');
-        // Config::set('logging.channels.stack', [
-        //     'driver' => 'stack',
-        //     'channels' => ['single', 'stderr'], // Or ['daily', 'stderr'] for rotation
-        //     'ignore_exceptions' => false,
-        // ]);
-        // Config::set('logging.channels.single.path', storage_path('logs/laravel.log'));
-        // Config::set('logging.channels.stderr', [
-        //     'driver' => 'monolog',
-        //     'handler' => \Monolog\Handler\StreamHandler::class,
-        //     'with' => [
-        //         'stream' => 'php://stderr',
-        //     ],
-        // ]);
+        Config::set('logging.default', 'stack');
+        Config::set('logging.channels.stack', [
+            'driver' => 'stack',
+            'channels' => ['single', 'stderr'], // Or ['daily', 'stderr'] for rotation
+            'ignore_exceptions' => false,
+        ]);
+        Config::set('logging.channels.single.path', storage_path('logs/laravel.log'));
+        Config::set('logging.channels.stderr', [
+            'driver' => 'monolog',
+            'handler' => \Monolog\Handler\StreamHandler::class,
+            'with' => [
+                'stream' => 'php://stderr',
+            ],
+        ]);
     }
 
     protected function getPackageProviders($app)

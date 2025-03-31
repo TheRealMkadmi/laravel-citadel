@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
+use TheRealMkadmi\Citadel\Enums\AnalyzerType;
 
 class BurstinessAnalyzer extends AbstractAnalyzer
 {
@@ -66,16 +67,12 @@ class BurstinessAnalyzer extends AbstractAnalyzer
 
     private const REPEAT_VIOLATION_MULTIPLIER = 1.2;
 
+    
     /**
-     * Whether this analyzer scans request payload
+     * Whether this takes active action against the request or the client to decide
      */
-    protected bool $scansPayload = false;
-
-    /**
-     * Whether this analyzer is active
-     */
-    protected bool $active = true;
-
+    protected AnalyzerType $analyzerType = AnalyzerType::PASSIVE;
+    
     /**
      * Cache of configuration values
      */

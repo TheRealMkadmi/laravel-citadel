@@ -6,10 +6,11 @@ use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
-use TheRealMkadmi\Citadel\Analyzers\BurstinessAnalyzer;
+use Illuminate\Support\Str;
 use TheRealMkadmi\Citadel\Analyzers\IRequestAnalyzer;
 use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
+use TheRealMkadmi\Citadel\Enums\AnalyzerType;
 use TheRealMkadmi\Citadel\Enums\ResponseType;
 
 class ProtectRouteMiddleware
@@ -25,9 +26,15 @@ class ProtectRouteMiddleware
     private const ANALYZER_CACHE_KEY_PREFIX = 'analyzer:';
 
     /**
-     * Analyzers to run on the request.
+     * Middleware group identifiers
+     */
+    private const MIDDLEWARE_GROUP_ACTIVE = 'citadel-active';
+    private const MIDDLEWARE_GROUP_PASSIVE = 'citadel-passive';
+
+    /**
+     * Analyzers grouped by type.
      *
-     * @var array<IRequestAnalyzer>
+     * @var array<string, array<IRequestAnalyzer>>
      */
     protected array $analyzers;
 
@@ -39,7 +46,7 @@ class ProtectRouteMiddleware
     /**
      * Create a new middleware instance.
      *
-     * @param  array<IRequestAnalyzer>  $analyzers  The analyzers to run
+     * @param  array<string, array<IRequestAnalyzer>>  $analyzers  The analyzers grouped by type
      * @param  DataStore  $dataStore  The data store implementation
      */
     public function __construct(array $analyzers, DataStore $dataStore)
@@ -54,8 +61,7 @@ class ProtectRouteMiddleware
     public function handle(Request $request, Closure $next): mixed
     {
         // Skip all checks if middleware is disabled or global protection is disabled
-        if (! Config::get(CitadelConfig::KEY_MIDDLEWARE_ENABLED, true) ||
-            ! Config::get(CitadelConfig::KEY_MIDDLEWARE_ACTIVE_ENABLED, true)) {
+        if (! Config::get(CitadelConfig::KEY_MIDDLEWARE_ENABLED, true)) {
             return $next($request);
         }
 
@@ -77,8 +83,11 @@ class ProtectRouteMiddleware
             return $this->blockRequest($request);
         }
 
-        // Get applicable analyzers based on request characteristics
-        $applicableAnalyzers = $this->getApplicableAnalyzers($request);
+        // Determine which analyzers to use based on the current route middleware
+        $applicableAnalyzers = $this->getAnalyzersByMiddlewareGroup($request);
+
+        // Get analyzers applicable for the request characteristics
+        $applicableAnalyzers = $this->filterApplicableAnalyzers($request, $applicableAnalyzers);
 
         // Skip if no analyzers are applicable
         if (empty($applicableAnalyzers)) {
@@ -110,9 +119,12 @@ class ProtectRouteMiddleware
             'thresholdScore' => $thresholdScore,
             'allScores' => $scores->toArray()
         ]);
+
+        // Check if we're in active mode
+        $isInActiveMode = $this->isActiveMiddleware($request);
         
-        // Block if either the total score or any individual analyzer score exceeds threshold
-        if ($totalScore >= $thresholdScore || $maxIndividualScore >= $thresholdScore) {
+        // Only block requests when using active middleware
+        if ($isInActiveMode && ($totalScore >= $thresholdScore || $maxIndividualScore >= $thresholdScore)) {
             // Log detailed information about the blocking
             $this->logBlocking($request, $scores->toArray(), $totalScore, $thresholdScore);
 
@@ -132,25 +144,76 @@ class ProtectRouteMiddleware
             return $this->blockRequest($request);
         }
 
-        // Log scores for suspicious requests (even if below threshold)
+        // Log scores for suspicious requests (even if below threshold or in passive mode)
         $warningThreshold = Config::get(CitadelConfig::KEY_MIDDLEWARE_WARNING_THRESHOLD, 80);
         if ($totalScore >= $warningThreshold || $maxIndividualScore >= $warningThreshold) {
-            $this->logWarning($request, $scores->toArray(), $totalScore);
+            if ($isInActiveMode) {
+                $this->logWarning($request, $scores->toArray(), $totalScore);
+            } else {
+                $this->logPassiveWarning($request, $scores->toArray(), $totalScore);
+            }
         }
 
-        // Request passed all checks, proceed
+        // Request passed all checks or we're in passive mode, proceed with the request
         return $next($request);
     }
 
     /**
-     * Get analyzers applicable to the current request based on its characteristics
-     *
-     * @param  Request  $request  The HTTP request
+     * Determine which analyzers to use based on the middleware group
+     * 
+     * @param Request $request
      * @return array<IRequestAnalyzer>
      */
-    protected function getApplicableAnalyzers(Request $request): array
+    protected function getAnalyzersByMiddlewareGroup(Request $request): array
     {
-        return collect($this->analyzers)
+        if ($this->isActiveMiddleware($request)) {
+            // Active middleware includes both active and passive analyzers
+            return array_merge(
+                $this->analyzers[AnalyzerType::ACTIVE->value] ?? [],
+                $this->analyzers[AnalyzerType::PASSIVE->value] ?? []
+            );
+        } else {
+            // Passive middleware only includes passive analyzers
+            return $this->analyzers[AnalyzerType::PASSIVE->value] ?? [];
+        }
+    }
+    
+    /**
+     * Check if the current request is using the active middleware group
+     *
+     * @param Request $request
+     * @return bool
+     */
+    protected function isActiveMiddleware(Request $request): bool
+    {
+        // Get current middleware groups for the route
+        $route = $request->route();
+        if (!$route) {
+            return false;
+        }
+        
+        $middleware = $route->gatherMiddleware();
+        
+        // Check if the active middleware group is applied
+        foreach ($middleware as $middlewareItem) {
+            if (Str::startsWith($middlewareItem, self::MIDDLEWARE_GROUP_ACTIVE)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Filter analyzers applicable to the current request based on its characteristics
+     *
+     * @param  Request  $request  The HTTP request
+     * @param  array<IRequestAnalyzer>  $analyzers  The analyzers to filter
+     * @return array<IRequestAnalyzer>
+     */
+    protected function filterApplicableAnalyzers(Request $request, array $analyzers): array
+    {
+        return collect($analyzers)
             ->filter(function ($analyzer) use ($request) {
                 // If analyzer scans payload, only include it when there's a body to scan
                 if ($analyzer->scansPayload()) {
@@ -298,6 +361,22 @@ class ProtectRouteMiddleware
     protected function logWarning(Request $request, array $scores, float $totalScore): void
     {
         Log::info('Citadel: Suspicious activity detected', [
+            'tracking_id' => $request->getFingerprint(),
+            'scores' => $scores,
+            'total_score' => $totalScore,
+            'ip' => $request->ip(),
+            'url' => $request->fullUrl(),
+            'method' => $request->method(),
+            'user_agent' => $request->userAgent(),
+        ]);
+    }
+    
+    /**
+     * Log a warning for suspicious requests detected in passive mode.
+     */
+    protected function logPassiveWarning(Request $request, array $scores, float $totalScore): void
+    {
+        Log::info('Citadel (Passive): Suspicious activity detected', [
             'tracking_id' => $request->getFingerprint(),
             'scores' => $scores,
             'total_score' => $totalScore,

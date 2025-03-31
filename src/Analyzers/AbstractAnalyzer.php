@@ -6,6 +6,7 @@ namespace TheRealMkadmi\Citadel\Analyzers;
 
 use Illuminate\Http\Request;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
+use TheRealMkadmi\Citadel\Enums\AnalyzerType;
 
 abstract class AbstractAnalyzer implements IRequestAnalyzer
 {
@@ -20,15 +21,9 @@ abstract class AbstractAnalyzer implements IRequestAnalyzer
     protected bool $enabled = true;
 
     /**
-     * Indicates if this analyzer scans request payload content.
+     * Whether this takes active action against the request or the client to decide
      */
-    protected bool $scansPayload = false;
-
-    /**
-     * Determines if this analyzer is active (makes external requests)
-     * or passive (only analyzes current request data).
-     */
-    protected bool $active = false;
+    protected AnalyzerType $analyzerType = AnalyzerType::PASSIVE;
 
     /**
      * Cache TTL in seconds.
@@ -56,16 +51,25 @@ abstract class AbstractAnalyzer implements IRequestAnalyzer
      */
     public function scansPayload(): bool
     {
-        return $this->scansPayload;
+        // Scans payload is determined by the analyzer implementation
+        // Override in specific analyzers as needed
+        return false;
     }
 
     /**
-     * Check if this analyzer is active (makes external requests)
-     * or passive (only analyzes current request data).
+     * Check if this analyzer is active (blocks requests) or passive (only monitors).
      */
     public function isActive(): bool
     {
-        return $this->active;
+        return $this->analyzerType === AnalyzerType::ACTIVE || $this->analyzerType === AnalyzerType::BOTH;
+    }
+
+    /**
+     * Get the analyzer type enum value.
+     */
+    public function getAnalyzerType(): AnalyzerType
+    {
+        return $this->analyzerType;
     }
 
     /**

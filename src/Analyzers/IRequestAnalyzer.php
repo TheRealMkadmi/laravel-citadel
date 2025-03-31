@@ -3,6 +3,7 @@
 namespace TheRealMkadmi\Citadel\Analyzers;
 
 use Illuminate\Http\Request;
+use TheRealMkadmi\Citadel\Enums\AnalyzerType;
 
 interface IRequestAnalyzer
 {
@@ -25,4 +26,9 @@ interface IRequestAnalyzer
      * Check if this analyzer is active (blocks requests) or passive (only monitors).
      */
     public function isActive(): bool;
+    
+    /**
+     * Get the analyzer type enum value.
+     */
+    public function getAnalyzerType(): AnalyzerType;
 }

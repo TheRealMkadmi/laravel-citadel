@@ -10,6 +10,7 @@ use Illuminate\Support\Str;
 use Reefki\DeviceDetector\DeviceDetector;
 use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
+use TheRealMkadmi\Citadel\Enums\AnalyzerType;
 
 class DeviceAnalyzer extends AbstractAnalyzer
 {
@@ -49,14 +50,9 @@ class DeviceAnalyzer extends AbstractAnalyzer
     protected array $botPatterns = [];
 
     /**
-     * Indicates if this analyzer scans payload content.
+     * Whether this takes active action against the request or the client to decide
      */
-    protected bool $scansPayload = false;
-
-    /**
-     * This analyzer doesn't make external network requests.
-     */
-    protected bool $active = false;
+    protected AnalyzerType $analyzerType = AnalyzerType::PASSIVE;
 
     /**
      * Local device detection instance

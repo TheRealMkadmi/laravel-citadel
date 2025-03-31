@@ -32,7 +32,6 @@ enum BanType: string
     {
         // Direct match
         $directMatch = self::tryFrom($value);
-        $directMatch = self::tryFrom($value);
         if ($directMatch !== null) {
             return $directMatch;
         }

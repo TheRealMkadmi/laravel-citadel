@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use TheRealMkadmi\Citadel\Clients\IncolumitasApiClient;
 use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
+use TheRealMkadmi\Citadel\Enums\AnalyzerType;
 
 class IpAnalyzer extends AbstractAnalyzer
 {
@@ -26,15 +27,12 @@ class IpAnalyzer extends AbstractAnalyzer
      */
     protected array $countryScores;
 
+    
     /**
-     * Indicates if this analyzer scans payload content.
+     * Whether this takes active action against the request or the client to decide
      */
-    protected bool $scansPayload = false;
+    protected AnalyzerType $analyzerType = AnalyzerType::PASSIVE;
 
-    /**
-     * This analyzer makes external network requests.
-     */
-    protected bool $active = true;
 
     /**
      * Constructor.

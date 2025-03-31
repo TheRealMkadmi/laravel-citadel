@@ -9,6 +9,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Str;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
+use TheRealMkadmi\Citadel\Enums\AnalyzerType;
 
 class SpamminessAnalyzer extends AbstractAnalyzer
 {
@@ -32,15 +33,12 @@ class SpamminessAnalyzer extends AbstractAnalyzer
      */
     protected array $analysisCache = [];
 
+    
     /**
-     * Indicates if this analyzer scans payload content.
+     * Whether this takes active action against the request or the client to decide
      */
-    protected bool $scansPayload = true;
+    protected AnalyzerType $analyzerType = AnalyzerType::PASSIVE;
 
-    /**
-     * This analyzer doesn't make external network requests.
-     */
-    protected bool $active = false;
 
     public function __construct(DataStore $dataStore)
     {
