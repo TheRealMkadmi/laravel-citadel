@@ -59,6 +59,16 @@ abstract class AbstractDataStore implements DataStore
     abstract public function zAdd(string $key, float|int $score, mixed $member, ?int $ttl = null): bool|int;
 
     /**
+     * Remove a range of members from sorted set by rank (position).
+     *
+     * @param  string  $key  The sorted set key
+     * @param  int  $start  Start position
+     * @param  int  $stop  Stop position (inclusive)
+     * @return int Number of elements removed
+     */
+    abstract public function zRemRangeByRank(string $key, int $start, int $stop): int;
+
+    /**
      * Execute multiple commands in a pipeline.
      *
      * @param  callable  $callback  Function to define pipeline operations

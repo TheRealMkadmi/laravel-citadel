@@ -31,6 +31,16 @@ class BurstinessAnalyzer extends AbstractAnalyzer
     private const PATTERN_BURST = 'burst';
     
     /**
+     * Scoring constants
+     */
+    private const BASE_LOGARITHM = 2.0;
+    private const SEVERE_EXCESS_DIVISOR = 5.0;
+    private const GROWTH_FACTOR_MULTIPLIER = 2.0;
+    private const GROWTH_FACTOR_BASE = 1.0;
+    private const UNIQUE_PATTERN_SCORE_MODIFIER = 0.1;
+    private const INTERVAL_DIVISOR = 10;
+
+    /**
      * Whether this analyzer scans request payload
      */
     protected bool $scansPayload = false;
@@ -145,7 +155,20 @@ class BurstinessAnalyzer extends AbstractAnalyzer
                 'timestamps' => $recentTimestamps,
             ]);
             
-            // For extremely high request volumes, immediately return max score
+            // ---------------------------------------------------------------
+            // First, determine the pattern type before any other calculations
+            // This ensures pattern detection takes priority over other scoring
+            // ---------------------------------------------------------------
+            
+            // First check for well-spaced normal patterns directly
+            // This needs to be done before excessive request check
+            if ($this->isWellSpacedPattern($recentTimestamps)) {
+                Log::debug('Citadel: Normal pattern detected, returning 0');
+                $this->dataStore->setValue($cacheKey, 0.0, $this->configCache['ttlBufferMultiplier']);
+                return 0.0;
+            }
+            
+            // Handle extreme request volumes next
             if ($requestCount >= $this->configCache['extremeRequestThreshold']) {
                 Log::debug('Citadel: Extremely high request count detected, applying max frequency score', [
                     'requestCount' => $requestCount,
@@ -169,52 +192,85 @@ class BurstinessAnalyzer extends AbstractAnalyzer
                 return $historyScore;
             }
 
-            // Analyze the pattern before calculating other scores
+            // Check if it's a regular pattern
             $patternType = $this->detectPatternType($recentTimestamps, $patternKey);
             Log::debug('Citadel: Pattern type detected', [
                 'patternType' => $patternType
             ]);
             
+            // Initialize score
+            $score = 0.0;
+            
             // For regular automated patterns, return the veryRegularScore immediately
             if ($patternType === self::PATTERN_REGULAR) {
                 $score = $this->configCache['veryRegularScore'];
-                Log::debug('Citadel: Regular pattern detected, using veryRegularScore', [
-                    'score' => $score
+                
+                // Add request-count based modifier to ensure scores differ with volume
+                // even for otherwise similar pattern types
+                if ($requestCount > $this->configCache['maxRequestsPerWindow']) {
+                    $excess = $requestCount - $this->configCache['maxRequestsPerWindow'];
+                    // Add a small unique increment based on request count
+                    $score += $excess * self::UNIQUE_PATTERN_SCORE_MODIFIER;
+                }
+                
+                Log::debug('Citadel: Regular pattern detected, using modified veryRegularScore', [
+                    'score' => $score,
+                    'requestCount' => $requestCount,
+                    'baseScore' => $this->configCache['veryRegularScore']
                 ]);
                 $this->dataStore->setValue($cacheKey, $score, $this->configCache['ttlBufferMultiplier']);
                 return $score;
             }
             
-            // For normal patterns, return zero immediately
-            if ($patternType === self::PATTERN_NORMAL) {
-                Log::debug('Citadel: Normal pattern detected, returning 0');
-                return 0.0;
-            }
-
-            $score = 0.0;
-            
             // Frequency analysis - too many requests in time window
             if ($requestCount > $this->configCache['maxRequestsPerWindow']) {
                 $excess = $requestCount - $this->configCache['maxRequestsPerWindow'];
                 
-                // Apply progressive scoring for excessive requests
-                $excessScore = $this->configCache['excessRequestScore'] * $excess;
+                // Apply progressive scoring that properly scales with excess request count
+                $baseExcessScore = $this->configCache['excessRequestScore'] * $excess;
+                
+                // Add a logarithmic component for non-linear growth
+                $growthFactor = self::GROWTH_FACTOR_BASE;
+                if ($excess > 1) {
+                    // Enhanced logarithmic scaling to ensure better differentiation between request counts
+                    $growthFactor = self::GROWTH_FACTOR_BASE + (log($excess, self::BASE_LOGARITHM) * self::GROWTH_FACTOR_MULTIPLIER);
+                }
+                
+                // Create a progressive scoring that grows more than linearly with excess count
+                $progressiveScore = $baseExcessScore * $growthFactor;
+                
+                Log::debug('Citadel: Progressive scoring calculation', [
+                    'excess' => $excess,
+                    'baseExcessScore' => $baseExcessScore,
+                    'growthFactor' => $growthFactor,
+                    'progressiveScore' => $progressiveScore
+                ]);
                 
                 // Apply multiplier for very high request volume
                 $severeExcessThreshold = $this->configCache['severeExcessThreshold'];
                 if ($excess > $severeExcessThreshold) {
                     $excessMultiplier = $this->configCache['excessMultiplier'];
-                    $excessScore = $excessScore * $excessMultiplier;
+                    $severityFactor = 1.0 + (($excess - $severeExcessThreshold) / self::SEVERE_EXCESS_DIVISOR);
+                    $progressiveScore *= $excessMultiplier * $severityFactor;
+                    
+                    Log::debug('Citadel: Severe excess multiplier applied', [
+                        'excessMultiplier' => $excessMultiplier,
+                        'severityFactor' => $severityFactor,
+                        'adjustedScore' => $progressiveScore
+                    ]);
                 }
                 
                 // Cap at max frequency score
-                $excessScore = min($excessScore, $this->configCache['maxFrequencyScore']);
+                $excessScore = min($progressiveScore, $this->configCache['maxFrequencyScore']);
                 $score += $excessScore;
                 
                 Log::debug('Citadel: Excess request penalty applied', [
                     'requestCount' => $requestCount,
                     'maxRequestsPerWindow' => $this->configCache['maxRequestsPerWindow'],
                     'excess' => $excess,
+                    'baseExcessScore' => $baseExcessScore,
+                    'growthFactor' => $growthFactor,
+                    'progressiveScore' => $progressiveScore,
                     'excessScore' => $excessScore,
                     'runningScore' => $score
                 ]);
@@ -380,12 +436,26 @@ class BurstinessAnalyzer extends AbstractAnalyzer
             return false;
         }
 
+        // If the request count exceeds the maximum allowed requests per window,
+        // it's not considered well-spaced regardless of intervals
+        if (count($timestamps) > $this->configCache['maxRequestsPerWindow']) {
+            Log::debug('Citadel: Too many requests to be considered well-spaced', [
+                'timestampCount' => count($timestamps),
+                'maxRequestsPerWindow' => $this->configCache['maxRequestsPerWindow']
+            ]);
+            return false;
+        }
+
         $numericTimestamps = array_map('floatval', $timestamps);
         sort($numericTimestamps);
         
+        // Define what "well-spaced" means: timestamps are separated by at least minInterval
+        $minRequiredInterval = $this->configCache['minInterval'];
+        
         Log::debug('Citadel: Checking if pattern is well-spaced', [
             'timestamps' => $numericTimestamps,
-            'minInterval' => $this->configCache['minInterval']
+            'minRequiredInterval' => $minRequiredInterval,
+            'timestampCount' => count($numericTimestamps)
         ]);
         
         // Check if all timestamps are sufficiently spaced apart
@@ -395,22 +465,21 @@ class BurstinessAnalyzer extends AbstractAnalyzer
             Log::debug('Citadel: Interval check', [
                 'index' => $i,
                 'interval' => $interval,
-                'minInterval' => $this->configCache['minInterval'],
-                'isWellSpaced' => ($interval >= $this->configCache['minInterval'])
+                'minRequiredInterval' => $minRequiredInterval,
+                'isWellSpaced' => ($interval >= $minRequiredInterval)
             ]);
             
-            if ($interval < $this->configCache['minInterval']) {
+            if ($interval < $minRequiredInterval) {
                 $allWellSpaced = false;
                 break;
             }
         }
         
-        if ($allWellSpaced) {
-            Log::debug('Citadel: All intervals well-spaced, normal pattern detected');
-            return true;
-        }
+        Log::debug('Citadel: Pattern well-spaced result', [
+            'allWellSpaced' => $allWellSpaced
+        ]);
         
-        return false;
+        return $allWellSpaced;
     }
     
     /**
@@ -444,6 +513,22 @@ class BurstinessAnalyzer extends AbstractAnalyzer
                     'timestamp1' => $numericTimestamps[$i-1],
                     'timestamp2' => $numericTimestamps[$i]
                 ]);
+                
+                // If this is the final timestamp in an otherwise well-spaced sequence,
+                // be more lenient to avoid penalizing legitimate users
+                if ($i === count($numericTimestamps) - 1) {
+                    // Check if all previous intervals were well-spaced
+                    if ($this->isOtherwiseWellSpaced($numericTimestamps, $minInterval)) {
+                        // For normal user traffic (vs automated), a single burst at the end
+                        // is likely just normal user behavior with an occasional fast follow-up click
+                        // Don't consider it a burst pattern if it's a single occurrence at the end
+                        Log::debug('Citadel: Ignoring isolated burst at end of normal sequence', [
+                            'timestampCount' => count($numericTimestamps)
+                        ]);
+                        return false;
+                    }
+                }
+                
                 return true; // Found a burst pattern
             }
         }
@@ -451,10 +536,30 @@ class BurstinessAnalyzer extends AbstractAnalyzer
         Log::debug('Citadel: No burst pattern detected');
         return false;
     }
-
+    
     /**
-     * Track history of excessive requests
+     * Check if all intervals except the last one are well-spaced
      */
+    protected function isOtherwiseWellSpaced(array $timestamps, int $minInterval): bool
+    {
+        $count = count($timestamps);
+        
+        // Need at least 3 timestamps (2 intervals) to check
+        if ($count < 3) {
+            return true; // Not enough data to determine a pattern
+        }
+        
+        // Check all intervals except the last one
+        for ($i = 1; $i < $count - 1; $i++) {
+            $interval = $timestamps[$i] - $timestamps[$i-1];
+            if ($interval < $minInterval) {
+                return false; // Found another burst earlier in the sequence
+            }
+        }
+        
+        return true; // All other intervals are well-spaced
+    }
+    
     protected function trackExcessiveRequestHistory(string $historyKey, int $timestamp, int $excess, int $windowSize): void
     {
         // Get existing history or create new

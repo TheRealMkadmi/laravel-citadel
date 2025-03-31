@@ -133,8 +133,21 @@ class RedisDataStore extends AbstractDataStore
     public function zRange(string $key, int $start, int $stop, bool $withScores = false): array
     {
         $prefixedKey = $this->getPrefixedKey($key);
-
         return Redis::zrange($prefixedKey, $start, $stop, $withScores);
+    }
+
+    /**
+     * Remove a range of members from sorted set by rank (position).
+     *
+     * @param  string  $key  The sorted set key
+     * @param  int  $start  Start position
+     * @param  int  $stop  Stop position (inclusive)
+     * @return int Number of elements removed
+     */
+    public function zRemRangeByRank(string $key, int $start, int $stop): int
+    {
+        $prefixedKey = $this->getPrefixedKey($key);
+        return Redis::zremrangebyrank($prefixedKey, $start, $stop);
     }
 
     /**

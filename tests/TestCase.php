@@ -22,8 +22,23 @@ class TestCase extends Orchestra
 
         // Ensure we're using Array cache driver for all tests
         Config::set(CitadelConfig::KEY_CACHE_DRIVER, ArrayDataStore::STORE_IDENTIFIER);
-        Config::set(CitadelConfig::KEY_CACHE.'.prefer_redis', false);
+        Config::set(CitadelConfig::KEY_CACHE . '.prefer_redis', false);
         Config::set('cache.default', 'array');
+
+        Config::set('logging.default', 'stack');
+        Config::set('logging.channels.stack', [
+            'driver' => 'stack',
+            'channels' => ['single', 'stderr'], // Or ['daily', 'stderr'] for rotation
+            'ignore_exceptions' => false,
+        ]);
+        Config::set('logging.channels.single.path', storage_path('logs/laravel.log'));
+        Config::set('logging.channels.stderr', [
+            'driver' => 'monolog',
+            'handler' => \Monolog\Handler\StreamHandler::class,
+            'with' => [
+                'stream' => 'php://stderr',
+            ],
+        ]);
     }
 
     protected function getPackageProviders($app)
@@ -68,23 +83,23 @@ class TestCase extends Orchestra
         bool $useCookie = false
     ): Request {
         $request = Request::create($url, $method, $parameters);
-        
+
         if (!$fingerprint) {
             return $request;
         }
-        
+
         // Set the fingerprint header if requested
         if ($useHeader) {
-            $headerName = Config::get(CitadelConfig::KEY_HEADER.'.name', 'X-Fingerprint');
+            $headerName = Config::get(CitadelConfig::KEY_HEADER . '.name', 'X-Fingerprint');
             $request->headers->set($headerName, $fingerprint);
         }
-        
+
         // Set the fingerprint cookie if requested
         if ($useCookie) {
-            $cookieName = Config::get(CitadelConfig::KEY_COOKIE.'.name', 'persistentFingerprint_visitor_id');
+            $cookieName = Config::get(CitadelConfig::KEY_COOKIE . '.name', 'persistentFingerprint_visitor_id');
             $request->cookies->set($cookieName, $fingerprint);
         }
-        
+
         // If neither header nor cookie was set, simulate the behaviors that would
         // cause Citadel::generateFingerprint to produce this specific fingerprint
         if (!$useHeader && !$useCookie) {
@@ -93,7 +108,7 @@ class TestCase extends Orchestra
             $request->server->set('REMOTE_ADDR', $fingerprint);
             $request->headers->set('User-Agent', 'Test-Agent-' . $fingerprint);
         }
-        
+
         return $request;
     }
 }

@@ -94,6 +94,113 @@ class ArrayDataStoreTest extends TestCase
     }
 
     #[Test]
+    public function it_can_remove_range_by_rank()
+    {
+        $key = 'rank-removal-set';
+
+        // Add members with scores
+        $this->dataStore->zAdd($key, 1.0, 'member1');
+        $this->dataStore->zAdd($key, 2.0, 'member2');
+        $this->dataStore->zAdd($key, 3.0, 'member3');
+        $this->dataStore->zAdd($key, 4.0, 'member4');
+        $this->dataStore->zAdd($key, 5.0, 'member5');
+
+        // Test removing middle elements (indexes 1 through 3)
+        $removed = $this->dataStore->zRemRangeByRank($key, 1, 3);
+        $this->assertEquals(3, $removed);
+        $this->assertEquals(2, $this->dataStore->zCard($key));
+        
+        // Check remaining members
+        $members = $this->dataStore->zRange($key, 0, -1);
+        $this->assertEquals(['member1', 'member5'], $members);
+
+        // Reset the set
+        $this->dataStore->removeValue($key);
+        $this->dataStore->zAdd($key, 1.0, 'member1');
+        $this->dataStore->zAdd($key, 2.0, 'member2');
+        $this->dataStore->zAdd($key, 3.0, 'member3');
+        
+        // Test removing with negative indices
+        $removed = $this->dataStore->zRemRangeByRank($key, -2, -1);
+        $this->assertEquals(2, $removed);
+        $this->assertEquals(1, $this->dataStore->zCard($key));
+        $members = $this->dataStore->zRange($key, 0, -1);
+        $this->assertEquals(['member1'], $members);
+    }
+
+    #[Test]
+    public function it_handles_empty_set_in_range_removal()
+    {
+        $key = 'empty-set';
+
+        // Try to remove from empty set
+        $removed = $this->dataStore->zRemRangeByRank($key, 0, 1);
+        $this->assertEquals(0, $removed);
+        $this->assertEquals(0, $this->dataStore->zCard($key));
+    }
+
+    #[Test]
+    public function it_handles_invalid_range_in_removal()
+    {
+        $key = 'invalid-range-set';
+
+        // Add test data
+        $this->dataStore->zAdd($key, 1.0, 'member1');
+        $this->dataStore->zAdd($key, 2.0, 'member2');
+        $this->dataStore->zAdd($key, 3.0, 'member3');
+
+        // Test start > stop
+        $removed = $this->dataStore->zRemRangeByRank($key, 2, 1);
+        $this->assertEquals(0, $removed);
+        $this->assertEquals(3, $this->dataStore->zCard($key));
+
+        // Test out of bounds range
+        $removed = $this->dataStore->zRemRangeByRank($key, 10, 20);
+        $this->assertEquals(0, $removed);
+        $this->assertEquals(3, $this->dataStore->zCard($key));
+    }
+
+    #[Test]
+    public function it_can_remove_all_elements_by_rank()
+    {
+        $key = 'remove-all-set';
+
+        // Add test data
+        $this->dataStore->zAdd($key, 1.0, 'member1');
+        $this->dataStore->zAdd($key, 2.0, 'member2');
+        $this->dataStore->zAdd($key, 3.0, 'member3');
+
+        // Remove all elements
+        $removed = $this->dataStore->zRemRangeByRank($key, 0, -1);
+        $this->assertEquals(3, $removed);
+        $this->assertEquals(0, $this->dataStore->zCard($key));
+        $this->assertFalse($this->dataStore->hasValue($key));
+    }
+
+    #[Test]
+    public function it_maintains_order_after_partial_removal()
+    {
+        $key = 'order-test-set';
+
+        // Add members with non-sequential scores
+        $this->dataStore->zAdd($key, 10.0, 'member1');
+        $this->dataStore->zAdd($key, 5.0, 'member2');
+        $this->dataStore->zAdd($key, 15.0, 'member3');
+        $this->dataStore->zAdd($key, 1.0, 'member4');
+        $this->dataStore->zAdd($key, 20.0, 'member5');
+
+        // Remove middle elements
+        $removed = $this->dataStore->zRemRangeByRank($key, 1, 3);
+        $this->assertEquals(3, $removed);
+
+        // Check remaining elements are in correct order
+        $membersWithScores = $this->dataStore->zRange($key, 0, -1, true);
+        $this->assertCount(2, $membersWithScores);
+        $this->assertEquals(1.0, $membersWithScores['member4']);
+        $this->assertEquals(20.0, $membersWithScores['member5']);
+    }
+
+    #[Test]
     public function it_can_work_with_sorted_sets()
     {
         $key = 'test-sorted-set';
@@ -328,6 +435,12 @@ class ArrayDataStoreTest extends TestCase
             'ttl-test',
             'forever-test',
             'data-types-test',
+            'rank-removal-set',
+            'empty-set',
+            'invalid-range-set',
+            'remove-all-set',
+            'order-test-set',
+            'pipeline-rank-test'
         ];
         
         foreach ($keysToClean as $key) {

@@ -185,6 +185,62 @@ class OctaneDataStore extends AbstractDataStore
     }
 
     /**
+     * Remove a range of members from sorted set by rank (position).
+     *
+     * @param  string  $key  The sorted set key
+     * @param  int  $start  Start position
+     * @param  int  $stop  Stop position (inclusive)
+     * @return int Number of elements removed
+     */
+    public function zRemRangeByRank(string $key, int $start, int $stop): int
+    {
+        $zset = $this->getValue($key, []);
+
+        if (empty($zset)) {
+            return 0;
+        }
+
+        // Sort by score and get members
+        asort($zset);
+        $members = array_keys($zset);
+
+        // Handle negative indices
+        if ($start < 0) {
+            $start = count($members) + $start;
+        }
+        if ($stop < 0) {
+            $stop = count($members) + $stop;
+        }
+
+        // Ensure indices are within bounds
+        $start = max(0, $start);
+        $stop = min(count($members) - 1, $stop);
+
+        // If start is greater than stop, no elements will be removed
+        if ($start > $stop) {
+            return 0;
+        }
+
+        // Get members to remove
+        $membersToRemove = array_slice($members, $start, $stop - $start + 1);
+        $removedCount = count($membersToRemove);
+
+        // Remove the members
+        foreach ($membersToRemove as $member) {
+            unset($zset[$member]);
+        }
+
+        // Store updated set or remove if empty
+        if (empty($zset)) {
+            $this->removeValue($key);
+        } else {
+            $this->setValue($key, $zset);
+        }
+
+        return $removedCount;
+    }
+
+    /**
      * Execute multiple commands in a pipeline.
      *
      * @param  callable  $callback  The function that will receive the pipeline object
@@ -239,6 +295,12 @@ class OctaneDataStore extends AbstractDataStore
                 return $this;
             }
 
+            public function zremrangebyrank(string $key, int $start, int $stop): self
+            {
+                $this->commands[] = ['zremrangebyrank', $key, $start, $stop];
+                return $this;
+            }
+
             public function getCommands(): array
             {
                 return $this->commands;
@@ -260,6 +322,9 @@ class OctaneDataStore extends AbstractDataStore
                     break;
                 case 'zremrangebyscore':
                     $results[] = $this->zRemRangeByScore(...$args);
+                    break;
+                case 'zremrangebyrank':
+                    $results[] = $this->zRemRangeByRank(...$args);
                     break;
                 case 'expire':
                     // Handle expiry along with value operations in zAdd

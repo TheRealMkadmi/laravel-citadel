@@ -171,6 +171,63 @@ class ArrayDataStore extends AbstractDataStore
     }
 
     /**
+     * Remove a range of members from sorted set by rank (position).
+     *
+     * @param  string  $key  The sorted set key
+     * @param  int  $start  Start position
+     * @param  int  $stop  Stop position (inclusive)
+     * @return int Number of elements removed
+     */
+    public function zRemRangeByRank(string $key, int $start, int $stop): int
+    {
+        $prefixedKey = $this->getPrefixedKey($key);
+        $zset = $this->getValue($key, []);
+
+        if (empty($zset)) {
+            return 0;
+        }
+
+        // Get current members sorted by score
+        asort($zset);
+        $members = array_keys($zset);
+
+        // Handle negative indices (count from the end)
+        if ($start < 0) {
+            $start = count($members) + $start;
+        }
+        if ($stop < 0) {
+            $stop = count($members) + $stop;
+        }
+
+        // Ensure indices are within bounds
+        $start = max(0, $start);
+        $stop = min(count($members) - 1, $stop);
+
+        // If start is greater than stop, no elements will be removed
+        if ($start > $stop) {
+            return 0;
+        }
+
+        // Get members to remove
+        $membersToRemove = array_slice($members, $start, $stop - $start + 1);
+        $removedCount = count($membersToRemove);
+
+        // Remove the members
+        foreach ($membersToRemove as $member) {
+            unset($zset[$member]);
+        }
+
+        // Store updated set
+        if (empty($zset)) {
+            $this->removeValue($key);
+        } else {
+            $this->setValue($key, $zset);
+        }
+
+        return $removedCount;
+    }
+
+    /**
      * Execute multiple commands in a pipeline.
      *
      * @param  callable  $callback  The function that will receive the pipeline object
@@ -182,7 +239,6 @@ class ArrayDataStore extends AbstractDataStore
         $pipeline = new class($this)
         {
             private ArrayDataStore $dataStore;
-
             private array $commands = [];
 
             public function __construct(ArrayDataStore $dataStore)
@@ -193,35 +249,36 @@ class ArrayDataStore extends AbstractDataStore
             public function zadd(string $key, float|int $score, mixed $member): self
             {
                 $this->commands[] = ['zadd', $key, $score, $member];
-
                 return $this;
             }
 
             public function zremrangebyscore(string $key, float|int|string $min, float|int|string $max): self
             {
                 $this->commands[] = ['zremrangebyscore', $key, $min, $max];
-
                 return $this;
             }
 
             public function expire(string $key, int $ttl): self
             {
                 $this->commands[] = ['expire', $key, $ttl];
-
                 return $this;
             }
 
             public function zcard(string $key): self
             {
                 $this->commands[] = ['zcard', $key];
+                return $this;
+            }
 
+            public function zremrangebyrank(string $key, int $start, int $stop): self
+            {
+                $this->commands[] = ['zremrangebyrank', $key, $start, $stop];
                 return $this;
             }
 
             public function zrange(string $key, int $start, int $stop, bool $withScores = false): self
             {
                 $this->commands[] = ['zrange', $key, $start, $stop, $withScores];
-
                 return $this;
             }
 
@@ -247,8 +304,10 @@ class ArrayDataStore extends AbstractDataStore
                 case 'zremrangebyscore':
                     $results[] = $this->zRemRangeByScore(...$args);
                     break;
+                case 'zremrangebyrank':
+                    $results[] = $this->zRemRangeByRank(...$args);
+                    break;
                 case 'expire':
-                    // Handle expiry along with value operations in zAdd
                     $results[] = $this->expire(...$args);
                     break;
                 case 'zcard':
@@ -272,8 +331,14 @@ class ArrayDataStore extends AbstractDataStore
     public function expire(string $key, int $ttl): bool
     {
         $prefixedKey = $this->getPrefixedKey($key);
+        
+        if (!$this->cacheStore->has($prefixedKey)) {
+            return false;
+        }
 
-        return $this->cacheStore->has($prefixedKey);
+        // Get current value and re-store with new TTL
+        $value = $this->cacheStore->get($prefixedKey);
+        return $this->cacheStore->put($prefixedKey, $value, $ttl);
     }
 
     /**
