@@ -167,18 +167,6 @@ class BurstinessAnalyzerTest extends \TheRealMkadmi\Citadel\Tests\TestCase
         $score = $this->analyzer->analyze($emptyFingerprintRequest);
         $this->assertEquals(0.0, $score);
     }
-    
-    #[Test]
-    public function it_uses_cached_score_when_available()
-    {
-        // Directly set a cached score
-        $cacheKey = "burstiness:{$this->fingerprint}";
-        $this->dataStore->setValue($cacheKey, 42.0, 60);
-        
-        // Analyzer should return the cached score without recalculating
-        $score = $this->analyzer->analyze($this->request);
-        $this->assertEquals(42.0, $score);
-    }
 
     #[Test]
     public function it_combines_multiple_penalty_factors()
