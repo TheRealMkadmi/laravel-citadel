@@ -7,7 +7,7 @@ namespace TheRealMkadmi\Citadel\Analyzers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Str;
-use Reefki\DeviceDetector\Device;
+use Reefki\DeviceDetector\DeviceDetector;
 use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 
@@ -61,7 +61,7 @@ class DeviceAnalyzer extends AbstractAnalyzer
     /**
      * Local device detection instance
      */
-    protected ?Device $deviceDetector = null;
+    protected ?DeviceDetector $deviceDetector = null;
 
     /**
      * Constructor.
@@ -143,19 +143,19 @@ class DeviceAnalyzer extends AbstractAnalyzer
 
         try {
             // Use lazy-loaded device detector instance
-            $device = $this->getDeviceDetector();
-            $device = $device->detect($userAgent);
+            $detector = $this->getDeviceDetector();
+            $result = $detector->detectRequest(request());
 
             // Detect device type using a more efficient approach
-            if ($device->isSmartphone()) {
+            if ($result->isSmartphone()) {
                 return $this->smartphoneScore;
             }
 
-            if ($device->isTablet()) {
+            if ($result->isTablet()) {
                 return $this->tabletScore;
             }
 
-            if ($device->isDesktop()) {
+            if ($result->isDesktop()) {
                 return $this->desktopScore;
             }
         } catch (\Throwable $e) {
@@ -170,10 +170,10 @@ class DeviceAnalyzer extends AbstractAnalyzer
     /**
      * Get the device detector instance (lazy loading)
      */
-    protected function getDeviceDetector(): Device
+    protected function getDeviceDetector(): DeviceDetector
     {
         if ($this->deviceDetector === null) {
-            $this->deviceDetector = app(Device::class);
+            $this->deviceDetector = app(DeviceDetector::class);
         }
 
         return $this->deviceDetector;

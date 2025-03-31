@@ -2,10 +2,13 @@
 
 namespace TheRealMkadmi\Citadel;
 
+use Illuminate\Cache\Repository as CacheRepository;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Route;
+use Laravel\Octane\Contracts\Server;
+use Reefki\DeviceDetector\DeviceDetector;
 use Spatie\LaravelPackageTools\Commands\InstallCommand;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
@@ -128,6 +131,11 @@ class CitadelServiceProvider extends PackageServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/citadel.php', 'citadel');
+
+        // Register the DeviceDetector service
+        $this->app->singleton(DeviceDetector::class, function ($app) {
+            return new DeviceDetector($app->make(CacheRepository::class));
+        });
 
         // Register the DataStore singleton first since other components depend on it
         $this->registerDataStore();

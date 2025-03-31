@@ -314,7 +314,7 @@ class BurstinessAnalyzer extends AbstractAnalyzer
                 $this->dataStore->setValue($cacheKey, $totalScore, $this->configCache['ttlBufferMultiplier']);
             }
 
-            return (float) $totalScore;
+            return $totalScore;
         } catch (\Exception $e) {
             Log::error('Citadel: BurstinessAnalyzer exception', [
                 'message' => $e->getMessage(),
