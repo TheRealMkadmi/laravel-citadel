@@ -25,20 +25,20 @@ class TestCase extends Orchestra
         Config::set(CitadelConfig::KEY_CACHE.'.prefer_redis', false);
         Config::set('cache.default', 'array');
 
-        Config::set('logging.default', 'stack');
-        Config::set('logging.channels.stack', [
-            'driver' => 'stack',
-            'channels' => ['single', 'stderr'], // Or ['daily', 'stderr'] for rotation
-            'ignore_exceptions' => false,
-        ]);
-        Config::set('logging.channels.single.path', storage_path('logs/laravel.log'));
-        Config::set('logging.channels.stderr', [
-            'driver' => 'monolog',
-            'handler' => \Monolog\Handler\StreamHandler::class,
-            'with' => [
-                'stream' => 'php://stderr',
-            ],
-        ]);
+        // Config::set('logging.default', 'stack');
+        // Config::set('logging.channels.stack', [
+        //     'driver' => 'stack',
+        //     'channels' => ['single', 'stderr'], // Or ['daily', 'stderr'] for rotation
+        //     'ignore_exceptions' => false,
+        // ]);
+        // Config::set('logging.channels.single.path', storage_path('logs/laravel.log'));
+        // Config::set('logging.channels.stderr', [
+        //     'driver' => 'monolog',
+        //     'handler' => \Monolog\Handler\StreamHandler::class,
+        //     'with' => [
+        //         'stream' => 'php://stderr',
+        //     ],
+        // ]);
     }
 
     protected function getPackageProviders($app)
@@ -50,6 +50,9 @@ class TestCase extends Orchestra
 
     public function getEnvironmentSetUp($app)
     {
+        // Call parent setup first to ensure base environment is configured
+        parent::getEnvironmentSetUp($app);
+
         // Set up environment to avoid Redis
         $app['config']->set('database.redis.client', null);
 
@@ -59,6 +62,26 @@ class TestCase extends Orchestra
             'driver' => 'array',
             'serialize' => false,
         ]);
+        
+        // Ensure BurstinessAnalyzer is enabled for tests that might use it
+        $app['config']->set(CitadelConfig::KEY_BURSTINESS.'.enable_burstiness_analyzer', true);
+        
+        // Define common test routes used across feature tests
+        $this->defineTestRoutes($app);
+    }
+    
+    /**
+     * Define common test routes used across feature tests.
+     */
+    protected function defineTestRoutes($app): void
+    {
+        $app['router']->get('/test-protected', function () {
+            return response()->json(['success' => true, 'message' => 'Protected route accessed']);
+        })->middleware('citadel-protect');
+
+        $app['router']->get('/test-unprotected', function () {
+            return response()->json(['success' => true, 'message' => 'Unprotected route accessed']);
+        });
     }
 
     /**

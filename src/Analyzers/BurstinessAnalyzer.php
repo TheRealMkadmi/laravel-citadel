@@ -74,7 +74,7 @@ class BurstinessAnalyzer extends AbstractAnalyzer
     /**
      * Whether this analyzer is active
      */
-    protected bool $active = false;
+    protected bool $active = true;
 
     /**
      * Cache of configuration values
