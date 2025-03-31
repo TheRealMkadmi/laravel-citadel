@@ -9,6 +9,12 @@ enum AnalyzerType: string {
     case PASSIVE = "passive";
     case BOTH = "both";
 
+    /**
+     * Analyzer attribute flags
+     */
+    public const SCANS_PAYLOAD = 'scans_payload';
+    public const INVOKES_EXTERNAL_RESOURCE = 'invokes_external_resource';
+
     public static function getValues(): array {
         return [
             self::ACTIVE->value,

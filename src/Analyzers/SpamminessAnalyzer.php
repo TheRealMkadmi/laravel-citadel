@@ -39,6 +39,13 @@ class SpamminessAnalyzer extends AbstractAnalyzer
      */
     protected AnalyzerType $analyzerType = AnalyzerType::PASSIVE;
 
+    /**
+     * SpamminessAnalyzer scans request payload
+     */
+    public function scansPayload(): bool
+    {
+        return true;
+    }
 
     public function __construct(DataStore $dataStore)
     {

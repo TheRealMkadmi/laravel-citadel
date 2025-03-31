@@ -21,6 +21,11 @@ interface IRequestAnalyzer
      * Check if this analyzer scans payload content.
      */
     public function scansPayload(): bool;
+    
+    /**
+     * Check if this analyzer invokes external resources.
+     */
+    public function invokesExternalResource(): bool;
 
     /**
      * Check if this analyzer is active (blocks requests) or passive (only monitors).

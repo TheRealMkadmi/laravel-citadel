@@ -26,11 +26,6 @@ abstract class AbstractAnalyzer implements IRequestAnalyzer
     protected AnalyzerType $analyzerType = AnalyzerType::PASSIVE;
 
     /**
-     * Cache TTL in seconds.
-     */
-    protected int $cacheTtl = 3600;
-
-    /**
      * Constructor.
      */
     public function __construct(DataStore $dataStore)
@@ -52,6 +47,16 @@ abstract class AbstractAnalyzer implements IRequestAnalyzer
     public function scansPayload(): bool
     {
         // Scans payload is determined by the analyzer implementation
+        // Override in specific analyzers as needed
+        return false;
+    }
+
+    /**
+     * Check if this analyzer invokes external resources.
+     */
+    public function invokesExternalResource(): bool
+    {
+        // External resource usage is determined by the analyzer implementation
         // Override in specific analyzers as needed
         return false;
     }

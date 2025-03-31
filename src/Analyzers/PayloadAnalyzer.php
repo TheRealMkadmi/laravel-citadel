@@ -34,6 +34,13 @@ class PayloadAnalyzer extends AbstractAnalyzer
      */
     protected AnalyzerType $analyzerType = AnalyzerType::PASSIVE;
 
+    /**
+     * PayloadAnalyzer scans request payload
+     */
+    public function scansPayload(): bool
+    {
+        return true;
+    }
 
     /**
      * Cached entropy calculations

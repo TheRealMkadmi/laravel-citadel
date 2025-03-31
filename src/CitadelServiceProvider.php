@@ -299,9 +299,10 @@ class CitadelServiceProvider extends PackageServiceProvider
         
         $active = [];
         $passive = [];
-        $payload = [];
+        $payloadScanners = [];
+        $externalResourceUsers = [];
 
-        // Group analyzers by their type using the AnalyzerType enum
+        // Group analyzers by their attributes and type
         foreach ($analyzerClasses as $class) {
             /** @var IRequestAnalyzer $analyzer */
             $analyzer = $this->app->make($class);
@@ -310,9 +311,13 @@ class CitadelServiceProvider extends PackageServiceProvider
                 continue;
             }
 
-            // Group by payload scanning capability
+            // Group by specific capabilities
             if ($analyzer->scansPayload()) {
-                $payload[] = $analyzer;
+                $payloadScanners[] = $analyzer;
+            }
+            
+            if ($analyzer->invokesExternalResource()) {
+                $externalResourceUsers[] = $analyzer;
             }
 
             // Group by analyzer type
@@ -337,7 +342,8 @@ class CitadelServiceProvider extends PackageServiceProvider
         return [
             AnalyzerType::ACTIVE->value => $active,
             AnalyzerType::PASSIVE->value => $passive,
-            'payload' => $payload,
+            AnalyzerType::SCANS_PAYLOAD => $payloadScanners,
+            AnalyzerType::INVOKES_EXTERNAL_RESOURCE => $externalResourceUsers
         ];
     }
 

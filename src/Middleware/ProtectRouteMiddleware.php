@@ -216,16 +216,14 @@ class ProtectRouteMiddleware
     {
         return collect($analyzers)
             ->filter(function ($analyzer) use ($request) {
-                // If analyzer scans payload, only include it when there's a body to scan
-                if ($analyzer->scansPayload()) {
-                    // Check if request has any content
-                    $hasBody = ! empty($request->all()) || ! empty($request->getContent());
-
-                    return $hasBody;
+                // Always include non-payload analyzers
+                if (!$analyzer->scansPayload()) {
+                    return true;
                 }
-
-                // Include all other analyzers
-                return true;
+                
+                // For payload analyzers, include only when there's a body to scan
+                $hasBody = !empty($request->all()) || !empty($request->getContent());
+                return $hasBody;
             })
             ->values()
             ->all();

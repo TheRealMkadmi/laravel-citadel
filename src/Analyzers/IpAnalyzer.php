@@ -33,6 +33,13 @@ class IpAnalyzer extends AbstractAnalyzer
      */
     protected AnalyzerType $analyzerType = AnalyzerType::PASSIVE;
 
+    /**
+     * IpAnalyzer invokes external resources
+     */
+    public function invokesExternalResource(): bool
+    {
+        return true;
+    }
 
     /**
      * Constructor.
