@@ -156,17 +156,45 @@ class BurstinessAnalyzer extends AbstractAnalyzer
             ]);
             
             // ---------------------------------------------------------------
-            // First, determine the pattern type before any other calculations
-            // This ensures pattern detection takes priority over other scoring
+            // First, check for historical violations or existing pattern data
+            // These take precedence over other checks
             // ---------------------------------------------------------------
             
-            // First check for well-spaced normal patterns directly
-            // This needs to be done before excessive request check
-            if ($this->isWellSpacedPattern($recentTimestamps)) {
-                Log::debug('Citadel: Normal pattern detected, returning 0');
-                // Only cache zero scores for a very short time
-                $this->dataStore->setValue($cacheKey, 0.0, 1);
-                return 0.0;
+            // Handle historical penalties
+            $historyScore = $this->getHistoricalScore($historyKey);
+            if ($historyScore > 0) {
+                Log::debug('Citadel: Using historical score', [
+                    'historyScore' => $historyScore,
+                    'historyKey' => $historyKey
+                ]);
+                // Store the calculated score with a short TTL
+                $this->dataStore->setValue($cacheKey, $historyScore, $this->configCache['ttlBufferMultiplier']);
+                return $historyScore;
+            }
+            
+            // Check if it's a regular pattern from stored data
+            $patternData = $this->dataStore->getValue($patternKey);
+            if (is_array($patternData) && isset($patternData['cv_history']) && is_array($patternData['cv_history'])) {
+                $cvHistory = $patternData['cv_history'];
+                if (count($cvHistory) > 0) {
+                    $avgCV = array_sum($cvHistory) / count($cvHistory);
+                    if ($avgCV < $this->configCache['veryRegularThreshold']) {
+                        $score = $this->configCache['veryRegularScore'];
+                        
+                        // Add request-count based modifier to ensure scores differ with volume
+                        if ($requestCount > $this->configCache['maxRequestsPerWindow']) {
+                            $excess = $requestCount - $this->configCache['maxRequestsPerWindow'];
+                            $score += $excess * self::UNIQUE_PATTERN_SCORE_MODIFIER;
+                        }
+                        
+                        Log::debug('Citadel: Regular pattern detected from stored history, using veryRegularScore', [
+                            'score' => $score,
+                            'avgCV' => $avgCV
+                        ]);
+                        $this->dataStore->setValue($cacheKey, $score, $this->configCache['ttlBufferMultiplier']);
+                        return $score;
+                    }
+                }
             }
             
             // Handle extreme request volumes next
@@ -181,16 +209,12 @@ class BurstinessAnalyzer extends AbstractAnalyzer
                 return $this->configCache['maxFrequencyScore'];
             }
             
-            // Handle historical penalties
-            $historyScore = $this->getHistoricalScore($historyKey);
-            if ($historyScore > 0) {
-                Log::debug('Citadel: Using historical score', [
-                    'historyScore' => $historyScore,
-                    'historyKey' => $historyKey
-                ]);
-                // Store the calculated score with a short TTL
-                $this->dataStore->setValue($cacheKey, $historyScore, $this->configCache['ttlBufferMultiplier']);
-                return $historyScore;
+            // Now check for well-spaced patterns
+            if ($this->isWellSpacedPattern($recentTimestamps)) {
+                Log::debug('Citadel: Normal pattern detected, returning 0');
+                // Only cache zero scores for a very short time
+                $this->dataStore->setValue($cacheKey, 0.0, 1);
+                return 0.0;
             }
 
             // Check if it's a regular pattern
@@ -434,56 +458,84 @@ class BurstinessAnalyzer extends AbstractAnalyzer
      */
     protected function isWellSpacedPattern(array $timestamps): bool
     {
-        // Need at least 2 timestamps to check spacing
-        if (count($timestamps) < 2) {
-            return false;
-        }
+        $count = count($timestamps);
+        $maxRequests = $this->configCache['maxRequestsPerWindow'];
+        $minInterval = $this->configCache['minInterval'];
 
-        // If the request count exceeds the maximum allowed requests per window,
-        // it's not considered well-spaced regardless of intervals
-        if (count($timestamps) > $this->configCache['maxRequestsPerWindow']) {
+        // Basic checks: Not enough data or too many requests
+        if ($count < 2) {
+            return true; // Not enough data to determine a pattern, assume normal
+        }
+        if ($count > $maxRequests) {
             Log::debug('Citadel: Too many requests to be considered well-spaced', [
-                'timestampCount' => count($timestamps),
-                'maxRequestsPerWindow' => $this->configCache['maxRequestsPerWindow']
+                'timestampCount' => $count,
+                'maxRequestsPerWindow' => $maxRequests
             ]);
             return false;
         }
 
-        // For multiple requests, require reasonable spacing
         $numericTimestamps = array_map('floatval', $timestamps);
         sort($numericTimestamps);
-        
-        // Define what "well-spaced" means: timestamps are separated by at least minInterval
-        $minRequiredInterval = $this->configCache['minInterval'];
-        
+
         Log::debug('Citadel: Checking if pattern is well-spaced', [
             'timestamps' => $numericTimestamps,
-            'minRequiredInterval' => $minRequiredInterval,
-            'timestampCount' => count($numericTimestamps)
+            'minRequiredInterval' => $minInterval,
+            'timestampCount' => $count
         ]);
-        
-        // Check if all timestamps are sufficiently spaced apart
-        $allWellSpaced = true;
-        for ($i = 1; $i < count($numericTimestamps); $i++) {
-            $interval = $numericTimestamps[$i] - $numericTimestamps[$i-1];
+
+        $allIntervalsGood = true;
+        $shortIntervalFound = false;
+        $shortIntervalIndex = -1;
+
+        // Iterate through all intervals between timestamps
+        for ($i = 1; $i < $count; $i++) {
+            $interval = $numericTimestamps[$i] - $numericTimestamps[$i - 1];
+            $isIntervalWellSpaced = ($interval >= $minInterval);
+
             Log::debug('Citadel: Interval check', [
                 'index' => $i,
                 'interval' => $interval,
-                'minRequiredInterval' => $minRequiredInterval,
-                'isWellSpaced' => ($interval >= $minRequiredInterval)
+                'minRequiredInterval' => $minInterval,
+                'isWellSpaced' => $isIntervalWellSpaced
             ]);
-            
-            if ($interval < $minRequiredInterval) {
-                $allWellSpaced = false;
-                break;
+
+            if (!$isIntervalWellSpaced) {
+                // If we find a second short interval, it's definitely not well-spaced
+                if ($shortIntervalFound) {
+                    Log::debug('Citadel: Multiple short intervals found, not well-spaced.');
+                    return false;
+                }
+                // Record the first short interval found
+                $allIntervalsGood = false;
+                $shortIntervalFound = true;
+                $shortIntervalIndex = $i;
             }
         }
-        
-        Log::debug('Citadel: Pattern well-spaced result', [
-            'allWellSpaced' => $allWellSpaced
+
+        // Case 1: All intervals were >= minInterval. Clearly well-spaced.
+        if ($allIntervalsGood) {
+            Log::debug('Citadel: All intervals are well-spaced.');
+            return true;
+        }
+
+        // Case 2: Only one short interval was found, and it was the *last* one.
+        // This represents the current request being close to the previous one,
+        // but the history before that was normal, and the request count is within limits.
+        // Consider this well-spaced for now; subsequent close requests will trigger penalties.
+        if ($shortIntervalFound && $shortIntervalIndex === ($count - 1)) {
+            Log::debug('Citadel: Only the last interval was short, considered well-spaced for now.');
+            return true;
+        }
+
+        // Case 3: A short interval occurred earlier, or multiple short intervals occurred.
+        // This is not a well-spaced pattern.
+        Log::debug('Citadel: Pattern not considered well-spaced.', [
+            'allIntervalsGood' => $allIntervalsGood,
+            'shortIntervalFound' => $shortIntervalFound,
+            'shortIntervalIndex' => $shortIntervalIndex,
+            'count' => $count
         ]);
-        
-        return $allWellSpaced;
+        return false;
     }
     
     /**
