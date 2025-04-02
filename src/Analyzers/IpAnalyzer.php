@@ -46,9 +46,9 @@ class IpAnalyzer extends AbstractAnalyzer
         parent::__construct($dataStore);
 
         // Load configuration settings
-        $this->enabled = config(CitadelConfig::KEY_IP . '.enable_ip_analyzer', true);
-        $this->cacheTtl = config(CitadelConfig::KEY_CACHE . '.ip_analysis_ttl', 7200);
-        $this->weights = config(CitadelConfig::KEY_IP . '.weights', []);
+        $this->enabled = config(CitadelConfig::KEY_IP.'.enable_ip_analyzer', true);
+        $this->cacheTtl = config(CitadelConfig::KEY_CACHE.'.ip_analysis_ttl', 7200);
+        $this->weights = config(CitadelConfig::KEY_IP.'.weights', []);
 
         // Initialize API client
         $this->apiClient = $apiClient ?? new IncolumitasApiClient([
@@ -66,6 +66,7 @@ class IpAnalyzer extends AbstractAnalyzer
     {
         if (! $this->enabled) {
             Log::debug('[Citadel IP Analyzer] Analysis disabled');
+
             return 0.0;
         }
 
@@ -73,6 +74,7 @@ class IpAnalyzer extends AbstractAnalyzer
         $ip = $request->ip();
         if (! $ip) {
             Log::debug('[Citadel IP Analyzer] No IP address found in request');
+
             return 0.0;
         }
 
@@ -81,22 +83,25 @@ class IpAnalyzer extends AbstractAnalyzer
         $cachedScore = $this->dataStore->getValue($cacheKey);
         if ($cachedScore !== null) {
             Log::debug("[Citadel IP Analyzer] Using cached score for {$ip}: {$cachedScore}");
+
             return (float) $cachedScore;
         }
 
         // Check if this is a private or reserved IP (not worth scoring)
         if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
             Log::debug("[Citadel IP Analyzer] IP {$ip} is private or reserved, returning score 0");
+
             return 0.0;
         }
 
         // Check IP characteristics through API
         $ipData = $this->apiClient->checkIp($ip);
         Log::debug("[Citadel IP Analyzer] API response for {$ip}:", ['data' => $ipData]);
-        
+
         if (! $ipData) {
             // No data available, default to 0 score
             Log::debug("[Citadel IP Analyzer] No data available for {$ip}");
+
             return 0.0;
         }
 
@@ -158,11 +163,11 @@ class IpAnalyzer extends AbstractAnalyzer
         if (isset($ipData['ip'])) {
             return in_array($ipData['ip'], ['8.8.8.8', '8.8.4.4']);
         }
-        
+
         // If we can't check by IP directly, check the known pattern from the API
         // Google DNS IPs are identified as datacenter + vpn + abuser
         // This matches the test expectations for the datacenter score
-        return 
+        return
             (isset($ipData['is_datacenter']) && $ipData['is_datacenter'] === true) &&
             (isset($ipData['is_vpn']) && $ipData['is_vpn'] === true) &&
             (isset($ipData['is_abuser']) && $ipData['is_abuser'] === true);

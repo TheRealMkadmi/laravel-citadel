@@ -13,7 +13,7 @@ class SpamminessAnalyzerTest extends TestCase
     #[Test]
     public function it_detects_gibberish_text()
     {
-        $dataStore = new ArrayDataStore();
+        $dataStore = new ArrayDataStore;
         $analyzer = new SpamminessAnalyzer($dataStore);
 
         $request = new Request([], [], [], [], [], ['HTTP_USER_AGENT' => 'TestAgent']);
@@ -27,7 +27,7 @@ class SpamminessAnalyzerTest extends TestCase
     #[Test]
     public function it_scores_repetitive_content()
     {
-        $dataStore = new ArrayDataStore();
+        $dataStore = new ArrayDataStore;
         $analyzer = new SpamminessAnalyzer($dataStore);
 
         $request = new Request([], [], [], [], [], ['HTTP_USER_AGENT' => 'TestAgent']);
@@ -41,7 +41,7 @@ class SpamminessAnalyzerTest extends TestCase
     #[Test]
     public function it_caches_analysis_results()
     {
-        $dataStore = new ArrayDataStore();
+        $dataStore = new ArrayDataStore;
         $analyzer = new SpamminessAnalyzer($dataStore);
 
         $request = new Request([], [], [], [], [], ['HTTP_USER_AGENT' => 'TestAgent']);

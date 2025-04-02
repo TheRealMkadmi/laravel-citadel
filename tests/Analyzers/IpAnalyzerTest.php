@@ -16,12 +16,12 @@ class IpAnalyzerTest extends TestCase
      * The data store instance used for testing.
      */
     protected ArrayDataStore $dataStore;
-    
+
     /**
      * The IpAnalyzer instance.
      */
     protected IpAnalyzer $analyzer;
-    
+
     /**
      * Set up test environment.
      */
@@ -30,10 +30,10 @@ class IpAnalyzerTest extends TestCase
         parent::setUp();
 
         // Create a real data store instance
-        $this->dataStore = new ArrayDataStore();
-        
+        $this->dataStore = new ArrayDataStore;
+
         // Configure test weights using constants from CitadelConfig
-        Config::set(CitadelConfig::KEY_IP . '.weights', [
+        Config::set(CitadelConfig::KEY_IP.'.weights', [
             'bogon' => 80.0,
             'datacenter' => 30.0,
             'tor' => 60.0,
@@ -44,8 +44,8 @@ class IpAnalyzerTest extends TestCase
             'mobile' => -10.0,
             'crawler' => 20.0,
         ]);
-        Config::set(CitadelConfig::KEY_IP . '.enable_ip_analyzer', true);
-        
+        Config::set(CitadelConfig::KEY_IP.'.enable_ip_analyzer', true);
+
         // Create a real API client with shorter timeout for testing
         $apiClient = new IncolumitasApiClient([
             'timeout' => 5,
@@ -53,7 +53,7 @@ class IpAnalyzerTest extends TestCase
             'max_retries' => 1,
             'retry_delay' => 200,
         ]);
-        
+
         // Create the analyzer with real dependencies
         $this->analyzer = new IpAnalyzer($this->dataStore, $apiClient);
     }
@@ -69,10 +69,10 @@ class IpAnalyzerTest extends TestCase
             [],
             ['REMOTE_ADDR' => '10.0.0.1']
         );
-        
+
         // Analyze with actual analyzer (no mocking)
         $score = $this->analyzer->analyze($request);
-        
+
         $this->assertEquals(0, $score, 'Expected IpAnalyzer to return zero for private IPs.');
     }
 
@@ -94,17 +94,17 @@ class IpAnalyzerTest extends TestCase
             [],
             ['REMOTE_ADDR' => '8.8.8.8']
         );
-        
+
         // First request should query the API
         $score1 = $this->analyzer->analyze($request1);
-        
+
         // Second request should use cached results
         $score2 = $this->analyzer->analyze($request2);
-        
+
         $this->assertEquals($score1, $score2, 'Expected IpAnalyzer to cache analysis results.');
-        
+
         // Google's public DNS should be exactly identified as a datacenter IP
-        $datacenterWeight = config(CitadelConfig::KEY_IP . '.weights.datacenter');
+        $datacenterWeight = config(CitadelConfig::KEY_IP.'.weights.datacenter');
         $this->assertEquals($datacenterWeight, $score1, 'Expected Google DNS to have exactly the datacenter weight score');
     }
 
@@ -119,10 +119,10 @@ class IpAnalyzerTest extends TestCase
             [],
             ['REMOTE_ADDR' => '127.0.0.1']
         );
-        
+
         // Analyze with actual analyzer (no mocking)
         $score = $this->analyzer->analyze($request);
-        
+
         // Localhost is a private IP, should return 0
         $this->assertEquals(0, $score, 'Expected localhost to return zero score');
     }
@@ -138,10 +138,10 @@ class IpAnalyzerTest extends TestCase
             [],
             ['REMOTE_ADDR' => '::1']
         );
-        
+
         // Analyze with actual analyzer (no mocking)
         $score = $this->analyzer->analyze($request);
-        
+
         // IPv6 localhost is a private IP, should return 0
         $this->assertEquals(0, $score, 'Expected IPv6 localhost to return zero score');
     }
@@ -157,13 +157,13 @@ class IpAnalyzerTest extends TestCase
             [],
             ['REMOTE_ADDR' => '8.8.8.8']
         );
-        
+
         // Analyze with actual analyzer (no mocking)
         $score = $this->analyzer->analyze($request);
-        
+
         // Verify that the score matches what we expect for a datacenter
         // The datacenter weight in setUp() is 30.0
-        $datacenterWeight = config(CitadelConfig::KEY_IP . '.weights.datacenter');
+        $datacenterWeight = config(CitadelConfig::KEY_IP.'.weights.datacenter');
         $this->assertEquals($datacenterWeight, $score, 'Expected Google DNS to be correctly identified as a datacenter IP');
     }
 }

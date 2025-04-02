@@ -13,7 +13,7 @@ class PayloadAnalyzerTest extends TestCase
     #[Test]
     public function it_detects_sql_injection_patterns()
     {
-        $dataStore = new ArrayDataStore();
+        $dataStore = new ArrayDataStore;
         $analyzer = new PayloadAnalyzer($dataStore);
 
         $request = new Request([], [], [], [], [], ['HTTP_USER_AGENT' => 'TestAgent']);
@@ -27,7 +27,7 @@ class PayloadAnalyzerTest extends TestCase
     #[Test]
     public function it_scores_high_entropy_payloads()
     {
-        $dataStore = new ArrayDataStore();
+        $dataStore = new ArrayDataStore;
         $analyzer = new PayloadAnalyzer($dataStore);
 
         $request = new Request([], [], [], [], [], ['HTTP_USER_AGENT' => 'TestAgent']);
@@ -41,7 +41,7 @@ class PayloadAnalyzerTest extends TestCase
     #[Test]
     public function it_caches_analysis_results()
     {
-        $dataStore = new ArrayDataStore();
+        $dataStore = new ArrayDataStore;
         $analyzer = new PayloadAnalyzer($dataStore);
 
         $request = new Request([], [], [], [], [], ['HTTP_USER_AGENT' => 'TestAgent']);

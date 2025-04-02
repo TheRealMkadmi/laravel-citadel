@@ -185,10 +185,10 @@ class ProtectRouteMiddleware
                 $identifier = $analyzer->getIdentifier();
                 $cacheKey = self::ANALYZER_CACHE_KEY_PREFIX."{$fingerprint}:{$identifier}";
                 $score = 0.0;
-            
+
                 // Try to get from cache first
                 $cachedScore = $this->dataStore->getValue($cacheKey);
-            
+
                 if ($cachedScore !== null) {
                     $score = (float) $cachedScore;
                     Log::debug('Citadel: Using cached score', [
@@ -198,7 +198,7 @@ class ProtectRouteMiddleware
                 } else {
                     // Calculate fresh score
                     $score = $analyzer->analyze($request);
-            
+
                     // Cache non-zero scores
                     if ($score > 0.0) {
                         $ttl = Config::get(CitadelConfig::KEY_MIDDLEWARE_CACHE_TTL, 3600);
@@ -210,7 +210,7 @@ class ProtectRouteMiddleware
                         ]);
                     }
                 }
-            
+
                 $scores[$identifier] = $score;
             } catch (\Throwable $e) {
                 // Log error but continue with other analyzers
