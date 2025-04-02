@@ -25,20 +25,20 @@ class TestCase extends Orchestra
         Config::set(CitadelConfig::KEY_CACHE.'.prefer_redis', false);
         Config::set('cache.default', 'array');
 
-        // Config::set('logging.default', 'stack');
-        // Config::set('logging.channels.stack', [
-        //     'driver' => 'stack',
-        //     'channels' => ['single', 'stderr'], // Or ['daily', 'stderr'] for rotation
-        //     'ignore_exceptions' => false,
-        // ]);
-        // Config::set('logging.channels.single.path', storage_path('logs/laravel.log'));
-        // Config::set('logging.channels.stderr', [
-        //     'driver' => 'monolog',
-        //     'handler' => \Monolog\Handler\StreamHandler::class,
-        //     'with' => [
-        //         'stream' => 'php://stderr',
-        //     ],
-        // ]);
+        Config::set('logging.default', 'stack');
+        Config::set('logging.channels.stack', [
+            'driver' => 'stack',
+            'channels' => ['single', 'stderr'], // Or ['daily', 'stderr'] for rotation
+            'ignore_exceptions' => false,
+        ]);
+        Config::set('logging.channels.single.path', storage_path('logs/laravel.log'));
+        Config::set('logging.channels.stderr', [
+            'driver' => 'monolog',
+            'handler' => \Monolog\Handler\StreamHandler::class,
+            'with' => [
+                'stream' => 'php://stderr',
+            ],
+        ]);
     }
 
     protected function getPackageProviders($app)
@@ -101,6 +101,7 @@ class TestCase extends Orchestra
         string $method = 'GET',
         string $url = 'https://example.com/test',
         array $parameters = [],
+        array $server = [],
         bool $useHeader = true,
         bool $useCookie = false
     ): Request {
@@ -122,15 +123,11 @@ class TestCase extends Orchestra
             $request->cookies->set($cookieName, $fingerprint);
         }
 
-        // If neither header nor cookie was set, simulate the behaviors that would
-        // cause Citadel::generateFingerprint to produce this specific fingerprint
-        if (! $useHeader && ! $useCookie) {
-            // Construct the request with specific IP and User-Agent
-            // that would generate the requested fingerprint
-            $request->server->set('REMOTE_ADDR', $fingerprint);
-            $request->headers->set('User-Agent', 'Test-Agent-'.$fingerprint);
+        if ($server) {
+            foreach ($server as $key => $value) {
+                $request->server->set($key, $value);
+            }
         }
-
         return $request;
     }
 }

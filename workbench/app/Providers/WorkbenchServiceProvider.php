@@ -25,6 +25,7 @@ class WorkbenchServiceProvider extends ServiceProvider
             CitadelConfig::KEY_CACHE_PREFIX => 'citadel:',
             CitadelConfig::KEY_CACHE_DEFAULT_TTL => 3600,
             CitadelConfig::KEY_BURSTINESS_TTL_BUFFER_MULTIPLIER => 2,
+            'app.key' => 'base64:'.base64_encode('AckfSECXIvnK5r28GVIWUAxmbBSjTsmF'),
         ]);
     }
 

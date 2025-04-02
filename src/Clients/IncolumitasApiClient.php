@@ -74,7 +74,7 @@ class IncolumitasApiClient
     {
         try {
             $response = $this->createRequest()
-                ->get("ip/{$ip}");
+                ->get("?q={$ip}");
 
             if ($response->successful()) {
                 return $response->json();
