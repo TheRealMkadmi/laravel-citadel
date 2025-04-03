@@ -209,22 +209,25 @@ CDEF;
             throw new \RuntimeException("Vectorscan database or scratch space not initialized.");
         }
 
-        $matches = [];
+        $matchesFound = [];
         Log::debug("Preparing callback for hs_scan.");
 
-        $callbackClosure = function (int $id, int $from, int $to, int $flags, $context) use (&$matches, $data): int {
+        $callbackClosure = function (int $id, int $from, int $to, int $flags, $context) use (&$matchesFound, $data): int {
             Log::debug("Callback invoked with id={$id}, from={$from}, to={$to}, flags={$flags}");
             $matchedSubstring = substr($data, $from, $to - $from);
             $originalPattern = $this->patterns[$id] ?? 'unknown pattern';
             Log::debug("Matched substring: '{$matchedSubstring}', Original pattern: '{$originalPattern}'");
-            $matches[] = new MultiPatternMatch(
-                id: $id,
-                from: $from,
-                to: $to,
-                flags: $flags,
-                matchedSubstring: $matchedSubstring,
-                originalPattern: $originalPattern
-            );
+
+            // Store match information for post-processing
+            $matchesFound[] = [
+                'id' => $id,
+                'from' => $from,
+                'to' => $to,
+                'flags' => $flags,
+                'matchedSubstring' => $matchedSubstring,
+                'originalPattern' => $originalPattern
+            ];
+            
             return 0; 
         };
 
@@ -244,7 +247,97 @@ CDEF;
             throw new \RuntimeException("libvectorscan hs_scan failed with error code: {$ret}");
         }
 
-        Log::debug("hs_scan completed successfully with matches: " . count($matches));
+        // Process the matches to filter out overlapping or invalid matches
+        $processedMatches = $this->processMatches($matchesFound, $data);
+        
+        Log::debug("hs_scan completed successfully with matches: " . count($processedMatches));
+        return $processedMatches;
+    }
+
+    /**
+     * Process the raw matches to filter out overlapping or invalid matches.
+     * 
+     * @param array $matches Raw matches from the scan
+     * @param string $data The original data being scanned
+     * @return array Processed matches as MultiPatternMatch objects
+     */
+    private function processMatches(array $matches, string $data): array
+    {
+        if (empty($matches)) {
+            return [];
+        }
+
+        // Group matches by pattern ID
+        $groupedMatches = [];
+        foreach ($matches as $match) {
+            $id = $match['id'];
+            if (!isset($groupedMatches[$id])) {
+                $groupedMatches[$id] = [];
+            }
+            $groupedMatches[$id][] = $match;
+        }
+
+        // For each pattern, find the actual matches (not overlapping with beginning of string)
+        $finalMatches = [];
+        foreach ($groupedMatches as $patternId => $patternMatches) {
+            $pattern = $this->patterns[$patternId] ?? '';
+            
+            // Find exact pattern matches within the data string
+            $exactMatches = $this->findExactMatches($data, $patternId, $pattern);
+            
+            foreach ($exactMatches as $match) {
+                $finalMatches[] = new MultiPatternMatch(
+                    id: $match['id'],
+                    from: $match['from'],
+                    to: $match['to'],
+                    flags: $match['flags'] ?? 0,
+                    matchedSubstring: $match['matchedSubstring'],
+                    originalPattern: $match['originalPattern']
+                );
+            }
+        }
+
+        // Sort matches by their position in the string for consistent results
+        usort($finalMatches, function($a, $b) {
+            return $a->from <=> $b->from;
+        });
+
+        return $finalMatches;
+    }
+
+    /**
+     * Find exact matches for a pattern in the data string.
+     * 
+     * @param string $data The data string to search in
+     * @param int $patternId The ID of the pattern
+     * @param string $pattern The pattern to search for
+     * @return array Array of match information
+     */
+    private function findExactMatches(string $data, int $patternId, string $pattern): array
+    {
+        $matches = [];
+        
+        // Use preg_match_all to find all occurrences of the pattern
+        $pregPattern = '/' . $pattern . '/';
+        $matchCount = preg_match_all($pregPattern, $data, $matchResults, PREG_OFFSET_CAPTURE);
+        
+        if ($matchCount > 0) {
+            foreach ($matchResults[0] as $match) {
+                $substring = $match[0];
+                $from = $match[1];
+                $to = $from + strlen($substring);
+                
+                $matches[] = [
+                    'id' => $patternId,
+                    'from' => $from,
+                    'to' => $to,
+                    'flags' => 0,
+                    'matchedSubstring' => $substring,
+                    'originalPattern' => $pattern
+                ];
+            }
+        }
+        
         return $matches;
     }
 
