@@ -25,6 +25,7 @@ use TheRealMkadmi\Citadel\DataStore\OctaneDataStore;
 use TheRealMkadmi\Citadel\DataStore\RedisDataStore;
 use TheRealMkadmi\Citadel\Http\Controllers\CitadelApiController;
 use TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers\MultiPatternMatcher;
+use TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers\PcreMultiPatternMatcher;
 use TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers\VectorScanMultiPaternMatcher;
 use TheRealMkadmi\Citadel\Middleware\ApiAuthMiddleware;
 use TheRealMkadmi\Citadel\Middleware\BanMiddleware;
@@ -368,11 +369,37 @@ class CitadelServiceProvider extends PackageServiceProvider
             
             // Create appropriate pattern matcher instance
             return match ($implementation) {
-                'vectorscan' => new VectorScanMultiPaternMatcher($patterns),
-                // Add other implementations here as needed
-                default => new VectorScanMultiPaternMatcher($patterns),
+                'pcre' => $this->createPcrePatternMatcher($patterns),
+                'vectorscan' => $this->createVectorscanPatternMatcher($patterns),
+                default => $this->createVectorscanPatternMatcher($patterns),
             };
         });
+    }
+
+    /**
+     * Create a PCRE-based pattern matcher.
+     *
+     * @param array<int, string> $patterns Array of pattern strings
+     * @return MultiPatternMatcher
+     */
+    protected function createPcrePatternMatcher(array $patterns): MultiPatternMatcher
+    {
+        // Get PCRE configuration from config
+        $pcreConfig = config('citadel.pcre', []);
+        
+        // Create and return the PCRE pattern matcher
+        return new PcreMultiPatternMatcher($patterns, $pcreConfig);
+    }
+
+    /**
+     * Create a Vectorscan-based pattern matcher.
+     *
+     * @param array<int, string> $patterns Array of pattern strings
+     * @return MultiPatternMatcher
+     */
+    protected function createVectorscanPatternMatcher(array $patterns): MultiPatternMatcher
+    {
+        return new VectorScanMultiPaternMatcher($patterns);
     }
 
     /**

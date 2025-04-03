@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Config;
 use TheRealMkadmi\Citadel\Lib\VectorScan\PatternMatch;
 
-final class VectorScanMultiPaternMatcher
+final class VectorScanMultiPaternMatcher implements MultiPatternMatcher
 {
     // Vectorscan (libvectorscan) constants.
     private const HS_FLAG_SINGLEMATCH = 0x01;
@@ -47,9 +47,9 @@ final class VectorScanMultiPaternMatcher
      * 
      * @return array<int, string>
      */
-    public function getPatterns(): array
+    public function getPatterns(): Collection
     {
-        return $this->patterns;
+        return collect($this->patterns);
     }
 
     /**

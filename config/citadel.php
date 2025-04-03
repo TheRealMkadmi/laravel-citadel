@@ -352,13 +352,32 @@ return [
     |--------------------------------------------------------------------------
     |
     | Configure the pattern matcher implementation and settings.
-    | - implementation: The pattern matcher implementation to use ('vectorscan' or other implementations)
+    | - implementation: The pattern matcher implementation to use ('vectorscan', 'pcre', or other implementations)
     | - patterns_file: The path to the file containing regex patterns
     | 
     */
     'pattern_matcher' => [
         'implementation' => env('CITADEL_PATTERN_MATCHER_IMPL', 'vectorscan'),
         'patterns_file' => env('CITADEL_PATTERNS_FILE', __DIR__ . '/../data/http-payload-regex.list'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | PCRE Pattern Matcher Settings
+    |--------------------------------------------------------------------------
+    |
+    | Configure the PHP's built-in PCRE pattern matcher settings.
+    | - pattern_delimiter: The delimiter to use for patterns (default: '/')
+    | - pattern_modifiers: Default modifiers for patterns (default: 'si')
+    | - max_matches_per_pattern: Maximum matches to return per pattern (default: 10)
+    | - timeout_ms: Maximum execution time in milliseconds (default: 1000)
+    |
+    */
+    'pcre' => [
+        'pattern_delimiter' => env('CITADEL_PCRE_PATTERN_DELIMITER', '/'),
+        'pattern_modifiers' => env('CITADEL_PCRE_PATTERN_MODIFIERS', 'si'),
+        'max_matches_per_pattern' => env('CITADEL_PCRE_MAX_MATCHES', 10),
+        'timeout_ms' => env('CITADEL_PCRE_TIMEOUT_MS', 1000),
     ],
 
     /*
