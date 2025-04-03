@@ -1,13 +1,5 @@
 <?php
 
-/**
- * Todo: document this 
- * For a weird reason, can't install vectorscan from the package manager. Here's a workaround: 
- * wget https://security.ubuntu.com/ubuntu/pool/universe/v/vectorscan/libvectorscan5_5.4.11-2ubuntu1_amd64.deb
- * dpkg -i libvectorscan5_5.4.11-2ubuntu1_amd64.deb
- * apt install -f
- */
-
 declare(strict_types=1);
 
 namespace TheRealMkadmi\Citadel\PatternMatchers;
@@ -18,69 +10,34 @@ use Illuminate\Support\Facades\Config;
 
 final class VectorScanMultiPatternMatcher implements MultiPatternMatcher
 {
-    // Class constants for vectorscan flags and modes
     private const HS_FLAG_SINGLEMATCH = 0x01;
     private const HS_MODE_BLOCK = 1; 
-
-    // Library path constants
     private const DEFAULT_LIBRARY_NAME_LINUX = 'libhs.so.5';
     private const DEFAULT_LIBRARY_NAME_DARWIN = 'libhs.dylib';
     private const DEFAULT_LIBRARY_NAME_WINDOWS = 'libhs.dll';
-
-    // Config key for library path
     private const CONFIG_LIBRARY_PATH_KEY = 'vectorscan.library_path';
 
-    /** @var FFI */
     private FFI $ffi;
-
-    /** @var \FFI\CData Pointer to hs_database_t */
     private $db;
-
-    /** @var \FFI\CData Pointer to hs_scratch_t */
     private $scratch;
-
-    /** @var array<int, string> */
     private array $patterns;
 
-    /**
-     * Constructor.
-     *
-     * @param array<int, string> $patterns An array of regex pattern strings.
-     * @throws \RuntimeException if libvectorscan is not found or compilation fails.
-     */
     public function __construct(array $patterns)
     {
-        // Ensure patterns array is numerically indexed starting from 0
         $this->patterns = array_values($patterns);
         $this->loadVectorscanLibrary();
         $this->compilePatterns();
     }
 
-    /**
-     * Get the patterns used by this matcher.
-     * 
-     * @return array<int, string>
-     */
     public function getPatterns(): array
     {
         return $this->patterns;
     }
 
-    /**
-     * Locate and load the libvectorscan shared library.
-     *
-     * Uses Laravel configuration (vectorscan.library_path) if available;
-     * otherwise, chooses a default based on PHP_OS_FAMILY.
-     *
-     * @return void
-     * @throws \RuntimeException if the library cannot be found.
-     */
     private function loadVectorscanLibrary(): void
     {
-        // First try to get the library path from config
         $libraryPath = Config::get(self::CONFIG_LIBRARY_PATH_KEY);
 
-        // If no config found, use OS-specific default name
         if (!$libraryPath) {
             $libraryPath = match (PHP_OS_FAMILY) {
                 'Windows' => self::DEFAULT_LIBRARY_NAME_WINDOWS,
@@ -89,7 +46,6 @@ final class VectorScanMultiPatternMatcher implements MultiPatternMatcher
             };
         }
 
-        // Search for the library file
         $searchPaths = [
             $libraryPath,
             '/usr/lib/x86_64-linux-gnu/' . basename($libraryPath),
@@ -116,7 +72,6 @@ final class VectorScanMultiPatternMatcher implements MultiPatternMatcher
         Log::info("Loading libvectorscan library from: {$foundPath}");
 
         try {
-            // Use try-catch to provide better error messages if FFI loading fails
             $cdef = <<<'CDEF'
             typedef int hs_error_t;
             typedef struct hs_database hs_database_t;
@@ -170,12 +125,6 @@ CDEF;
         }
     }
 
-    /**
-     * Compile the provided patterns into a libvectorscan database and allocate scratch.
-     *
-     * @return void
-     * @throws \RuntimeException if compilation or scratch allocation fails.
-     */
     private function compilePatterns(): void
     {
         Log::debug('Starting vectorscan pattern compilation.');
@@ -184,23 +133,22 @@ CDEF;
             Log::warning('Vectorscan compilation attempted with zero patterns.');
         }
 
-        // Allocate C arrays for expressions, flags, and ids
         $exprs = $this->ffi->new("const char*[$count]");
         $flags = $this->ffi->new("unsigned int[$count]");
         $ids = $this->ffi->new("unsigned int[$count]");
 
-        // Prepare patterns for C FFI
         foreach ($this->patterns as $i => $pattern) {
             Log::debug("Processing pattern #{$i}: {$pattern}");
             $len = strlen($pattern);
             $cPattern = $this->ffi->new("char[" . ($len + 1) . "]", false);
+            Log::debug("Marshalling pattern #{$i} into C-compatible format.");
             FFI::memcpy($cPattern, $pattern, $len);
             $cPattern[$len] = "\0";
 
             $exprs[$i] = $cPattern;
             $flags[$i] = self::HS_FLAG_SINGLEMATCH;
             $ids[$i] = $i;
-            Log::debug("Pattern #{$i} prepared for compilation.");
+            Log::debug("Pattern #{$i} prepared for compilation: exprs[{$i}]={$pattern}, flags[{$i}]=" . self::HS_FLAG_SINGLEMATCH . ", ids[{$i}]={$i}");
         }
 
         $dbPtr = $this->ffi->new("hs_database_t*[1]");
@@ -222,20 +170,17 @@ CDEF;
             $compileError = $errorPtr[0];
             $errorMessage = "Unknown compilation error";
             $patternIndex = -1;
-            // Check if the error pointer is not null before accessing members
             if ($compileError !== null) {
-                // Access struct members using ->
                 if ($compileError->message !== null) {
                     $errorMessage = FFI::string($compileError->message);
                 }
-                // The expression field indicates the index of the pattern that failed
-                $patternIndex = $compileError->expression; // Directly access the int value
+                $patternIndex = $compileError->expression;
 
                 $this->ffi->{"hs_free_compile_error"}($compileError);
             }
             $logMessage = "libvectorscan compilation failed with error code: {$ret}.";
             if ($patternIndex >= 0 && $patternIndex < $count) {
-                $logMessage .= " Error near pattern #{$patternIndex}: '{$this->patterns[$patternIndex]}'.";
+                $logMessage .= " Error near pattern #{$patternIndex}: '{$this->patterns[$patternIndex]}'";
             }
             $logMessage .= " Message: {$errorMessage}";
             Log::error($logMessage);
@@ -258,16 +203,6 @@ CDEF;
         Log::debug('Finished vectorscan pattern compilation and scratch allocation.');
     }
 
-    /**
-     * Scan the given data string and return an array of VectorScanMatch objects.
-     *
-     * Each match object contains the pattern id, start offset, end offset, flags,
-     * and the matching substring.
-     *
-     * @param string $data The data to scan.
-     * @return array<int, MultiPatternMatch>
-     * @throws \RuntimeException if scanning fails.
-     */
     public function scan(string $data): array
     {
         if (!isset($this->db) || !isset($this->scratch)) {
@@ -275,10 +210,13 @@ CDEF;
         }
 
         $matches = [];
+        Log::debug("Preparing callback for hs_scan.");
 
-        $callback = function (int $id, int $from, int $to, int $flags, $context) use (&$matches, $data): int {
+        $callbackClosure = function (int $id, int $from, int $to, int $flags, $context) use (&$matches, $data): int {
+            Log::debug("Callback invoked with id={$id}, from={$from}, to={$to}, flags={$flags}");
             $matchedSubstring = substr($data, $from, $to - $from);
             $originalPattern = $this->patterns[$id] ?? 'unknown pattern';
+            Log::debug("Matched substring: '{$matchedSubstring}', Original pattern: '{$originalPattern}'");
             $matches[] = new MultiPatternMatch(
                 id: $id,
                 from: $from,
@@ -287,33 +225,29 @@ CDEF;
                 matchedSubstring: $matchedSubstring,
                 originalPattern: $originalPattern
             );
-            return 0;
+            return 0; 
         };
 
-        $callbackType = $this->ffi->type("match_event_handler");
-        $cCallback = $this->ffi->cast($callbackType, $callback);
-
+        Log::debug("Calling hs_scan with data length: " . strlen($data));
         $ret = $this->ffi->{"hs_scan"}(
             $this->db,
             $data,
             strlen($data),
             0,
             $this->scratch,
-            $cCallback,
+            $callbackClosure,
             NULL
         );
 
-        if ($ret < 0) {
+        if ($ret < 0 && $ret !== -4) { 
             Log::error("libvectorscan hs_scan failed with error code: {$ret}");
             throw new \RuntimeException("libvectorscan hs_scan failed with error code: {$ret}");
         }
 
+        Log::debug("hs_scan completed successfully with matches: " . count($matches));
         return $matches;
     }
 
-    /**
-     * Destructor to free allocated libvectorscan resources.
-     */
     public function __destruct()
     {
         if (isset($this->scratch)) {
