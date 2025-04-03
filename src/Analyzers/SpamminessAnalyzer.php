@@ -45,6 +45,8 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         '/[!@#$%^&*()_+]{5,}/',     // Many special characters
         '/(\w)\1{4,}/',            // Repeated characters (e.g. "aaaaa")
         '/(.{1,5})\1{3,}/',         // Repeated short patterns
+        '/(?:[^a-z0-9\s]){5,}/i',   // Many non-alphanumeric characters in a row
+        '/[a-z][0-9][a-z][0-9][a-z][0-9]/i', // Alternating letters and numbers
     ];
 
     /**
@@ -306,6 +308,11 @@ class SpamminessAnalyzer extends AbstractAnalyzer
      */
     protected function analyzeTextField(string $text): float
     {
+        // First check if this is normal English text
+        if ($this->isNormalText($text)) {
+            return 0.0;
+        }
+
         $textHash = md5($text);
         if (isset($this->analysisCache[$textHash])) {
             Log::debug('Citadel: SpamminessAnalyzer using cached text analysis', [
@@ -418,6 +425,11 @@ class SpamminessAnalyzer extends AbstractAnalyzer
      */
     protected function detectKeyboardPatterns(string $text): float 
     {
+        // Skip normal English sentences
+        if (preg_match('/^[A-Z][a-z\s,\.\'\-\;\:\"\(\)]+(\s[a-z]+){3,}[\.\?!]?$/', $text)) {
+            return 0.0;
+        }
+
         $lowerText = Str::lower($text);
 
         foreach (self::KEYBOARD_PATTERNS as $pattern) {
@@ -446,38 +458,26 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         }
 
         if ($this->hasSequentialCharacters($lowerText)) {
-            Log::debug('Citadel: SpamminessAnalyzer found sequential characters', [
-                'textSample' => Str::limit($lowerText, 50),
-            ]);
-            return 0.8;
+            // Make sure it's not a normal word that happens to have sequential characters
+            $words = preg_split('/\s+/', $lowerText);
+            $hasNormalWords = false;
+
+            foreach ($words as $word) {
+                if (strlen($word) >= 3 && !$this->hasSequentialCharacters($word)) {
+                    $hasNormalWords = true;
+                    break;
+                }
+            }
+
+            if (!$hasNormalWords) {
+                Log::debug('Citadel: SpamminessAnalyzer found sequential characters', [
+                    'textSample' => Str::limit($lowerText, 50),
+                ]);
+                return 0.8;
+            }
         }
 
         return 0.0;
-    }
-
-    /**
-     * Check if text contains sequential characters (e.g., abcdef, 12345).
-     */
-    protected function hasSequentialCharacters(string $text): bool
-    {
-        $seqLen = 4;
-        $alpha = 'abcdefghijklmnopqrstuvwxyz';
-        for ($i = 0; $i < strlen($alpha) - $seqLen + 1; $i++) {
-            $seq = substr($alpha, $i, $seqLen);
-            if (strpos($text, $seq) !== false) {
-                return true;
-            }
-        }
-
-        $numeric = '0123456789';
-        for ($i = 0; $i < strlen($numeric) - $seqLen + 1; $i++) {
-            $seq = substr($numeric, $i, $seqLen);
-            if (strpos($text, $seq) !== false) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**
@@ -485,6 +485,19 @@ class SpamminessAnalyzer extends AbstractAnalyzer
      */
     protected function detectSpamPatterns(string $text): float
     {
+        // Skip normal English sentences
+        if (preg_match('/^[A-Z][a-z\s,\.\'\-\;\:\"\(\)]+(\s[a-z]+){3,}[\.\?!]?$/', $text)) {
+            return 0.0;
+        }
+
+        // Special case for random alphanumeric strings that should be flagged
+        if (preg_match('/^[a-z0-9]{8,}$/i', $text) && 
+            !preg_match('/^[a-z]+$/i', $text) && 
+            preg_match('/[0-9]/', $text) && 
+            preg_match('/[a-z]/i', $text)) {
+            return 0.8;
+        }
+
         $score = 0.0;
         foreach (self::SPAM_PATTERNS as $pattern) {
             if (preg_match($pattern, $text)) {
@@ -514,6 +527,13 @@ class SpamminessAnalyzer extends AbstractAnalyzer
      */
     protected function calculateRepetitiveContentScore(string $text): float
     {
+        // Skip normal English text
+        if (Str::wordCount($text) >= 5 && 
+            Str::wordCount($text) <= 100 && 
+            preg_match('/^[A-Z][a-z\s,\.\'\-\;\:\"\(\)]+(\s[a-z]+){3,}[\.\?!]?$/', $text)) {
+            return 0.0;
+        }
+
         $len = Str::length($text);
         if ($len === 0) {
             return 0.0;
@@ -579,22 +599,175 @@ class SpamminessAnalyzer extends AbstractAnalyzer
     }
 
     /**
-     * Calculate how much the entropy deviates from the normal text range.
+     * Check if entropy is outside the normal range.
      */
-    protected function calculateEntropyDeviation(float $entropy): float
+    protected function isEntropyAnomalous(float $entropy): bool
     {
-        $minThreshold = $this->textAnalysisConfig['min_entropy_threshold'];
-        $maxThreshold = $this->textAnalysisConfig['max_entropy_threshold'];
+        // Skip for normal English text with reasonable entropy
+        if ($entropy > $this->textAnalysisConfig['min_entropy_threshold'] && 
+            $entropy < $this->textAnalysisConfig['max_entropy_threshold']) {
+            return false;
+        }
 
-        if ($entropy < $minThreshold) {
-            return 1 - ($entropy / $minThreshold);
-        }
-        if ($entropy > $maxThreshold) {
-            return ($entropy - $maxThreshold) / $maxThreshold;
-        }
-        return 0.0;
+        // Very low or very high entropy values are suspicious
+        return $entropy < ($this->textAnalysisConfig['min_entropy_threshold'] * 0.9) ||
+               $entropy > ($this->textAnalysisConfig['max_entropy_threshold'] * 1.1);
     }
 
+    /**
+     * Calculate a statistical gibberish score using multiple numerical techniques.
+     */
+    protected function calculateStatisticalGibberishScore(string $text): float
+    {
+        // Short English words commonly used in normal text
+        $commonWords = ['the', 'and', 'to', 'of', 'a', 'in', 'is', 'that', 'it', 'for', 
+                       'with', 'as', 'be', 'this', 'was', 'on', 'are', 'but', 'have', 'from'];
+
+        // Check for common English words - if several are present, likely not gibberish
+        $wordCount = 0;
+        $lowerText = Str::lower($text);
+        foreach ($commonWords as $word) {
+            if (Str::contains($lowerText, ' ' . $word . ' ') || 
+                Str::startsWith($lowerText, $word . ' ') || 
+                Str::endsWith($lowerText, ' ' . $word)) {
+                $wordCount++;
+            }
+        }
+
+        // If we have several common words, this is likely normal text
+        if ($wordCount >= 3) {
+            return 0.0;
+        }
+
+        // Skip any text that looks like a natural sentence with proper spacing
+        if (preg_match('/^[A-Z][a-z\s,\.]+(\s[a-z]+){5,}[\.\?!]?$/', $text)) {
+            return 0.0;
+        }
+
+        $textLower = Str::lower($text);
+        $textLength = Str::length($textLower);
+        if ($textLength < $this->textAnalysisConfig['min_field_length']) {
+            return 0.0;
+        }
+
+        $scores = [];
+
+        // Detect random alphanumeric strings without spaces
+        if (preg_match('/^[a-z0-9]{8,}$/i', $text) && !preg_match('/^[a-z]+$/i', $text)) {
+            $scores[] = 1.0;
+        }
+
+        $scores[] = $this->vowelAnalysisScore($textLower);
+        $scores[] = $this->consonantSequenceScore($textLower);
+
+        if ($textLength > 20) {
+            $scores[] = $this->characterDistributionScore($textLower);
+            if ($textLength < 1000) {
+                $scores[] = $this->statisticalNgramAnalysis($textLower);
+                $scores[] = $this->zipfLawDeviationAnalysis($textLower);
+            }
+        }
+
+        $validScores = Arr::where($scores, function ($score) {
+            return $score !== null && $score > 0.1; // Ignore very low scores
+        });
+
+        if (empty($validScores)) {
+            return 0.0;
+        }
+
+        $weightedScore = array_sum($validScores) / count($validScores);
+
+        // Apply threshold to reduce false positives on normal text
+        if ($weightedScore < 0.3) {
+            return 0.0;
+        }
+
+        return min(1.0, max(0.0, $weightedScore));
+    }
+
+    /**
+     * Check if text appears to be normal, natural language.
+     */
+    protected function isNormalText(string $text): bool
+    {
+        // Skip empty or very short text
+        if (Str::length($text) < 4) {
+            return false;
+        }
+
+        // Check for proper sentence structure (starts with capital, has spaces between words)
+        if (preg_match('/^[A-Z][a-z\s,\.\'\-\;\:\"\(\)]+(\s[a-z]+){3,}[\.\?!]?$/', $text)) {
+            return true;
+        }
+
+        // Check for presence of common English words
+        $commonWords = ['the', 'and', 'to', 'of', 'a', 'in', 'is', 'that', 'it', 'for', 
+                      'with', 'as', 'be', 'this', 'was', 'on', 'are'];
+
+        $wordCount = 0;
+        $lowerText = Str::lower($text);
+        foreach ($commonWords as $word) {
+            if (Str::contains($lowerText, ' ' . $word . ' ') || 
+                Str::startsWith($lowerText, $word . ' ') || 
+                Str::endsWith($lowerText, ' ' . $word)) {
+                $wordCount++;
+            }
+        }
+
+        // If we find multiple common words and proper spacing, likely normal text
+        if ($wordCount >= 3 && Str::contains($text, ' ') && 
+            !preg_match('/[^\s]{20,}/', $text)) { // No extremely long strings without spaces
+            
+            // Additional check: reasonable word/character ratio
+            $words = explode(' ', $text);
+            $avgWordLength = Str::length($text) / count($words);
+            if ($avgWordLength > 2 && $avgWordLength < 10) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Log the final analysis result and details.
+     */
+    protected function logAnalysisResult(string $text, float $score, array $componentScores = []): void
+    {
+        Log::info('Citadel: SpamminessAnalyzer result', [
+            'textLength'      => strlen($text),
+            'textSample'      => Str::limit($text, 50),
+            'overallScore'    => $score,
+            'componentScores' => $componentScores,
+        ]);
+    }
+
+    /**
+     * Check if text contains sequential characters (e.g., abcdef, 12345).
+     */
+    protected function hasSequentialCharacters(string $text): bool
+    {
+        $seqLen = 4;
+        $alpha = 'abcdefghijklmnopqrstuvwxyz';
+        for ($i = 0; $i < strlen($alpha) - $seqLen + 1; $i++) {
+            $seq = substr($alpha, $i, $seqLen);
+            if (strpos($text, $seq) !== false) {
+                return true;
+            }
+        }
+
+        $numeric = '0123456789';
+        for ($i = 0; $i < strlen($numeric) - $seqLen + 1; $i++) {
+            $seq = substr($numeric, $i, $seqLen);
+            if (strpos($text, $seq) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    
     /**
      * Calculate Shannon entropy of the text.
      */
@@ -621,42 +794,20 @@ class SpamminessAnalyzer extends AbstractAnalyzer
     }
 
     /**
-     * Check if entropy is outside the normal range.
+     * Calculate how much the entropy deviates from the normal text range.
      */
-    protected function isEntropyAnomalous(float $entropy): bool
+    protected function calculateEntropyDeviation(float $entropy): float
     {
-        return $entropy < $this->textAnalysisConfig['min_entropy_threshold'] ||
-               $entropy > $this->textAnalysisConfig['max_entropy_threshold'];
-    }
+        $minThreshold = $this->textAnalysisConfig['min_entropy_threshold'];
+        $maxThreshold = $this->textAnalysisConfig['max_entropy_threshold'];
 
-    /**
-     * Calculate a statistical gibberish score using multiple numerical techniques.
-     */
-    protected function calculateStatisticalGibberishScore(string $text): float
-    {
-        $textLower = Str::lower($text);
-        $textLength = Str::length($textLower);
-        if ($textLength < $this->textAnalysisConfig['min_field_length']) {
-            return 0.0;
+        if ($entropy < $minThreshold) {
+            return 1 - ($entropy / $minThreshold);
         }
-        $scores = [];
-        $scores[] = $this->vowelAnalysisScore($textLower);
-        $scores[] = $this->consonantSequenceScore($textLower);
-        if ($textLength > 20) {
-            $scores[] = $this->characterDistributionScore($textLower);
-            if ($textLength < 1000) {
-                $scores[] = $this->statisticalNgramAnalysis($textLower);
-                $scores[] = $this->zipfLawDeviationAnalysis($textLower);
-            }
+        if ($entropy > $maxThreshold) {
+            return ($entropy - $maxThreshold) / $maxThreshold;
         }
-        $validScores = Arr::where($scores, function ($score) {
-            return $score !== null;
-        });
-        if (empty($validScores)) {
-            return 0.0;
-        }
-        $weightedScore = array_sum($validScores) / count($validScores);
-        return min(1.0, max(0.0, $weightedScore));
+        return 0.0;
     }
 
     /**
@@ -824,18 +975,5 @@ class SpamminessAnalyzer extends AbstractAnalyzer
             return 0.0;
         }
         return $numerator / $denominator;
-    }
-
-    /**
-     * Log the final analysis result and details.
-     */
-    protected function logAnalysisResult(string $text, float $score, array $componentScores = []): void
-    {
-        Log::info('Citadel: SpamminessAnalyzer result', [
-            'textLength'      => strlen($text),
-            'textSample'      => Str::limit($text, 50),
-            'overallScore'    => $score,
-            'componentScores' => $componentScores,
-        ]);
     }
 }
