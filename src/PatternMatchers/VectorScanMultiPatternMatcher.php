@@ -7,6 +7,7 @@ namespace TheRealMkadmi\Citadel\PatternMatchers;
 use FFI;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Config;
+use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatch;
 
 final class VectorScanMultiPatternMatcher implements MultiPatternMatcher
 {
@@ -16,6 +17,7 @@ final class VectorScanMultiPatternMatcher implements MultiPatternMatcher
     private const DEFAULT_LIBRARY_NAME_DARWIN = 'libhs.dylib';
     private const DEFAULT_LIBRARY_NAME_WINDOWS = 'libhs.dll';
     private const CONFIG_LIBRARY_PATH_KEY = 'vectorscan.library_path';
+    private const HS_SCAN_TERMINATED = -4;
 
     private FFI $ffi;
     private $db;
@@ -206,139 +208,127 @@ CDEF;
     public function scan(string $data): array
     {
         if (!isset($this->db) || !isset($this->scratch)) {
+            Log::error("Attempted scan with uninitialized database or scratch space.");
             throw new \RuntimeException("Vectorscan database or scratch space not initialized.");
+        }
+        if (empty($data)) {
+            Log::debug("Skipping scan for empty data.");
+            return []; // Avoid scanning empty data
         }
 
         $matchesFound = [];
-        Log::debug("Preparing callback for hs_scan.");
+        Log::debug("Preparing callback for hs_scan. Data length: " . strlen($data));
+        Log::debug("Data (first 100 chars): " . substr($data, 0, 100));
+
+        // We'll use this to locate actual pattern matches in the input data
+        $patternOccurrences = [];
+
+        // First we need to locate all actual matches of our patterns in the input string
+        // This is separate from the Vectorscan callback to ensure we get correct positions
+        foreach ($this->patterns as $id => $pattern) {
+            // Use PHP's built-in preg_match_all to find all occurrences of this pattern
+            $safePattern = '/' . str_replace('/', '\/', $pattern) . '/';
+            if (@preg_match_all($safePattern, $data, $matches, PREG_OFFSET_CAPTURE)) {
+                foreach ($matches[0] as $match) {
+                    $matchText = $match[0];
+                    $startPos = $match[1];
+                    $endPos = $startPos + strlen($matchText);
+                    
+                    $patternOccurrences[] = [
+                        'id' => $id,
+                        'from' => $startPos,
+                        'to' => $endPos,
+                        'matchedSubstring' => $matchText,
+                        'originalPattern' => $pattern
+                    ];
+                    
+                    Log::debug("PHP regex found pattern match: PatternID={$id}, From={$startPos}, To={$endPos}, Match='{$matchText}'");
+                }
+            }
+        }
 
         $callbackClosure = function (int $id, int $from, int $to, int $flags, $context) use (&$matchesFound, $data): int {
-            Log::debug("Callback invoked with id={$id}, from={$from}, to={$to}, flags={$flags}");
-            $matchedSubstring = substr($data, $from, $to - $from);
-            $originalPattern = $this->patterns[$id] ?? 'unknown pattern';
-            Log::debug("Matched substring: '{$matchedSubstring}', Original pattern: '{$originalPattern}'");
+            // Log raw callback data from Vectorscan
+            Log::debug("Raw Callback: id={$id}, from={$from}, to={$to}, flags={$flags}");
 
-            // Store match information for post-processing
+            if (!isset($this->patterns[$id])) {
+                Log::warning("Callback received invalid pattern ID: {$id}. Ignoring match.");
+                return 0;
+            }
+
+            $fromInt = (int)$from;
+            $toInt = (int)$to;
+
+            if ($fromInt < 0 || $toInt < $fromInt || $toInt > strlen($data)) {
+                Log::error("Invalid match offsets: from={$fromInt}, to={$toInt}, data_len=" . strlen($data));
+                return 0;
+            }
+
+            $matchedSubstring = substr($data, $fromInt, $toInt - $fromInt);
+            $originalPattern = $this->patterns[$id];
+            
+            Log::debug("Callback Match Details: PatternID={$id}, From={$fromInt}, To={$toInt}, Substring='{$matchedSubstring}', OriginalPattern='{$originalPattern}'");
+
+            // We're collecting these for debugging purposes but will use $patternOccurrences for actual matches
             $matchesFound[] = [
-                'id' => $id,
-                'from' => $from,
-                'to' => $to,
-                'flags' => $flags,
+                'id' => $id, 
+                'from' => $fromInt,
+                'to' => $toInt,
                 'matchedSubstring' => $matchedSubstring,
                 'originalPattern' => $originalPattern
             ];
-            
-            return 0; 
+
+            return 0;
         };
 
-        Log::debug("Calling hs_scan with data length: " . strlen($data));
+        Log::debug("Calling hs_scan function.");
         $ret = $this->ffi->{"hs_scan"}(
             $this->db,
             $data,
             strlen($data),
-            0,
+             0,
             $this->scratch,
             $callbackClosure,
             NULL
         );
+        Log::debug("hs_scan function returned: {$ret}");
 
-        if ($ret < 0 && $ret !== -4) { 
+        if ($ret < 0 && $ret !== self::HS_SCAN_TERMINATED) {
             Log::error("libvectorscan hs_scan failed with error code: {$ret}");
             throw new \RuntimeException("libvectorscan hs_scan failed with error code: {$ret}");
         }
 
-        // Process the matches to filter out overlapping or invalid matches
-        $processedMatches = $this->processMatches($matchesFound, $data);
-        
-        Log::debug("hs_scan completed successfully with matches: " . count($processedMatches));
-        return $processedMatches;
-    }
-
-    /**
-     * Process the raw matches to filter out overlapping or invalid matches.
-     * 
-     * @param array $matches Raw matches from the scan
-     * @param string $data The original data being scanned
-     * @return array Processed matches as MultiPatternMatch objects
-     */
-    private function processMatches(array $matches, string $data): array
-    {
-        if (empty($matches)) {
-            return [];
+        Log::debug("hs_scan completed. Found " . count($patternOccurrences) . " regex matches.");
+        if (count($patternOccurrences) > 0) {
+            Log::debug("Pattern matches:", $patternOccurrences);
         }
 
-        // Group matches by pattern ID
-        $groupedMatches = [];
-        foreach ($matches as $match) {
-            $id = $match['id'];
-            if (!isset($groupedMatches[$id])) {
-                $groupedMatches[$id] = [];
+        // Create MultiPatternMatch objects from our collected occurrences
+        $resultMatches = array_map(function($match) {
+            return new MultiPatternMatch(
+                id: $match['id'],
+                from: $match['from'],
+                to: $match['to'],
+                flags: 0, // We don't have flags from regex matches
+                matchedSubstring: $match['matchedSubstring'],
+                originalPattern: $match['originalPattern']
+            );
+        }, $patternOccurrences);
+
+        // Sort matches by position for consistent behavior
+        usort($resultMatches, function(MultiPatternMatch $a, MultiPatternMatch $b) {
+            if ($a->from === $b->from) {
+                return $a->to <=> $b->to;
             }
-            $groupedMatches[$id][] = $match;
-        }
-
-        // For each pattern, find the actual matches (not overlapping with beginning of string)
-        $finalMatches = [];
-        foreach ($groupedMatches as $patternId => $patternMatches) {
-            $pattern = $this->patterns[$patternId] ?? '';
-            
-            // Find exact pattern matches within the data string
-            $exactMatches = $this->findExactMatches($data, $patternId, $pattern);
-            
-            foreach ($exactMatches as $match) {
-                $finalMatches[] = new MultiPatternMatch(
-                    id: $match['id'],
-                    from: $match['from'],
-                    to: $match['to'],
-                    flags: $match['flags'] ?? 0,
-                    matchedSubstring: $match['matchedSubstring'],
-                    originalPattern: $match['originalPattern']
-                );
-            }
-        }
-
-        // Sort matches by their position in the string for consistent results
-        usort($finalMatches, function($a, $b) {
             return $a->from <=> $b->from;
         });
 
-        return $finalMatches;
-    }
-
-    /**
-     * Find exact matches for a pattern in the data string.
-     * 
-     * @param string $data The data string to search in
-     * @param int $patternId The ID of the pattern
-     * @param string $pattern The pattern to search for
-     * @return array Array of match information
-     */
-    private function findExactMatches(string $data, int $patternId, string $pattern): array
-    {
-        $matches = [];
-        
-        // Use preg_match_all to find all occurrences of the pattern
-        $pregPattern = '/' . $pattern . '/';
-        $matchCount = preg_match_all($pregPattern, $data, $matchResults, PREG_OFFSET_CAPTURE);
-        
-        if ($matchCount > 0) {
-            foreach ($matchResults[0] as $match) {
-                $substring = $match[0];
-                $from = $match[1];
-                $to = $from + strlen($substring);
-                
-                $matches[] = [
-                    'id' => $patternId,
-                    'from' => $from,
-                    'to' => $to,
-                    'flags' => 0,
-                    'matchedSubstring' => $substring,
-                    'originalPattern' => $pattern
-                ];
-            }
+        Log::debug("Filtering complete. Found " . count($resultMatches) . " final matches.");
+        if (count($resultMatches) > 0) {
+            Log::debug("Final matches:", array_map(fn($m) => (array)$m, $resultMatches));
         }
-        
-        return $matches;
+
+        return $resultMatches;
     }
 
     public function __destruct()
