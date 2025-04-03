@@ -282,11 +282,29 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         } elseif (is_string($data)) {
             $originalLength = Str::length($data);
             if ($originalLength > 10000) {
-                $data = Str::substr($data, 0, 5000) . Str::substr($data, -5000);
-                Log::debug('Citadel: SpamminessAnalyzer truncated large string', [
+                // Improve truncation to sample beginning, middle, and end of text
+                $beginLength = 4000;
+                $middleLength = 2000;
+                $endLength = 4000;
+                
+                // Get beginning part
+                $beginPart = Str::substr($data, 0, $beginLength);
+                
+                // Get middle part - ensuring we capture content from the middle
+                $middleStart = intval($originalLength / 2) - intval($middleLength / 2);
+                $middlePart = Str::substr($data, $middleStart, $middleLength);
+                
+                // Get end part
+                $endPart = Str::substr($data, -$endLength);
+                
+                // Combine the parts
+                $data = $beginPart . $middlePart . $endPart;
+                
+                Log::debug('Citadel: SpamminessAnalyzer sampled large string', [
                     'originalLength'  => $originalLength,
-                    'truncatedLength' => Str::length($data),
+                    'sampleLength' => Str::length($data),
                     'prefix'          => $prefix,
+                    'samplePoints'    => [0, $middleStart, $originalLength - $endLength],
                 ]);
             }
             $score += $this->analyzeTextField($data);
@@ -308,8 +326,54 @@ class SpamminessAnalyzer extends AbstractAnalyzer
      */
     protected function analyzeTextField(string $text): float
     {
-        // First check if this is normal English text
-        if ($this->isNormalText($text)) {
+        // For very long text, analyze multiple segments independently
+        if (Str::length($text) > 5000) {
+            $segments = $this->splitLongTextIntoSegments($text);
+            $segmentScores = [];
+            
+            foreach ($segments as $segment) {
+                $segmentScores[] = $this->analyzeTextSegment($segment);
+            }
+            
+            // Use the maximum score of any segment
+            return !empty($segmentScores) ? max($segmentScores) : 0.0;
+        }
+        
+        return $this->analyzeTextSegment($text);
+    }
+    
+    /**
+     * Split long text into manageable segments for analysis.
+     */
+    protected function splitLongTextIntoSegments(string $text): array
+    {
+        $length = Str::length($text);
+        $segmentSize = 2000;
+        $segments = [];
+        
+        // Create overlapping segments to ensure we don't miss patterns at segment boundaries
+        for ($i = 0; $i < $length; $i += $segmentSize / 2) {
+            $segment = Str::substr($text, $i, $segmentSize);
+            if (!empty($segment)) {
+                $segments[] = $segment;
+            }
+            
+            // Limit number of segments for performance
+            if (count($segments) >= 10) {
+                break;
+            }
+        }
+        
+        return $segments;
+    }
+    
+    /**
+     * Analyze a single text segment and compute its spamminess score.
+     */
+    protected function analyzeTextSegment(string $text): float
+    {
+        // First check if this is normal English text (except for long text)
+        if (Str::length($text) <= 5000 && $this->isNormalText($text)) {
             return 0.0;
         }
 
@@ -421,6 +485,77 @@ class SpamminessAnalyzer extends AbstractAnalyzer
     }
 
     /**
+     * Check if text appears to be normal, natural language.
+     */
+    protected function isNormalText(string $text): bool
+    {
+        // Skip empty or very short text
+        if (Str::length($text) < 4) {
+            return false;
+        }
+        
+        // Check for spam indicators even in normal-looking text
+        $spamPhrases = [
+            'free offer',
+            'click here',
+            'buy now',
+            'limited time',
+            'act now',
+            'qwertyuiop',
+            'asdfghjkl',
+        ];
+        
+        $lowerText = Str::lower($text);
+        foreach ($spamPhrases as $phrase) {
+            if (Str::contains($lowerText, $phrase)) {
+                return false; // Contains direct spam phrases
+            }
+        }
+        
+        // For very long text, don't immediately classify as normal
+        // This ensures we still analyze long text properly
+        if (Str::length($text) > 5000) {
+            return false;
+        }
+
+        // Check for proper sentence structure (starts with capital, has spaces between words)
+        if (preg_match('/^[A-Z][a-z\s,\.\'\-\;\:\"\(\)]+(\s[a-z]+){3,}[\.\?!]?$/', $text)) {
+            // Check for all caps sections which may indicate spam
+            if (preg_match('/[A-Z]{4,}/', $text)) {
+                return false; 
+            }
+            return true;
+        }
+
+        // Check for presence of common English words
+        $commonWords = ['the', 'and', 'to', 'of', 'a', 'in', 'is', 'that', 'it', 'for', 
+                      'with', 'as', 'be', 'this', 'was', 'on', 'are'];
+
+        $wordCount = 0;
+        foreach ($commonWords as $word) {
+            if (Str::contains($lowerText, ' ' . $word . ' ') || 
+                Str::startsWith($lowerText, $word . ' ') || 
+                Str::endsWith($lowerText, ' ' . $word)) {
+                $wordCount++;
+            }
+        }
+
+        // If we find multiple common words and proper spacing, likely normal text
+        if ($wordCount >= 3 && Str::contains($text, ' ') && 
+            !preg_match('/[^\s]{20,}/', $text)) { // No extremely long strings without spaces
+            
+            // Additional check: reasonable word/character ratio
+            $words = explode(' ', $text);
+            $avgWordLength = Str::length($text) / count($words);
+            if ($avgWordLength > 2 && $avgWordLength < 10) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Detect keyboard patterns that may indicate gibberish.
      */
     protected function detectKeyboardPatterns(string $text): float 
@@ -485,8 +620,27 @@ class SpamminessAnalyzer extends AbstractAnalyzer
      */
     protected function detectSpamPatterns(string $text): float
     {
-        // Skip normal English sentences
-        if (preg_match('/^[A-Z][a-z\s,\.\'\-\;\:\"\(\)]+(\s[a-z]+){3,}[\.\?!]?$/', $text)) {
+        // Check for common spam phrases
+        $spamPhrases = [
+            'free offer',
+            'buy now',
+            'limited time',
+            'act now',
+            'best price',
+            'free gift'
+        ];
+        
+        $lowerText = Str::lower($text);
+        foreach ($spamPhrases as $phrase) {
+            if (Str::contains($lowerText, $phrase)) {
+                return 0.8; // Contains direct spam phrases
+            }
+        }
+        
+        // Skip normal English sentences unless they contain specific patterns
+        if (preg_match('/^[A-Z][a-z\s,\.\'\-\;\:\"\(\)]+(\s[a-z]+){3,}[\.\?!]?$/', $text) && 
+            !preg_match('/[A-Z]{3,}/', $text) && 
+            !preg_match('/[!?]{2,}/', $text)) {
             return 0.0;
         }
 
@@ -684,50 +838,6 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         }
 
         return min(1.0, max(0.0, $weightedScore));
-    }
-
-    /**
-     * Check if text appears to be normal, natural language.
-     */
-    protected function isNormalText(string $text): bool
-    {
-        // Skip empty or very short text
-        if (Str::length($text) < 4) {
-            return false;
-        }
-
-        // Check for proper sentence structure (starts with capital, has spaces between words)
-        if (preg_match('/^[A-Z][a-z\s,\.\'\-\;\:\"\(\)]+(\s[a-z]+){3,}[\.\?!]?$/', $text)) {
-            return true;
-        }
-
-        // Check for presence of common English words
-        $commonWords = ['the', 'and', 'to', 'of', 'a', 'in', 'is', 'that', 'it', 'for', 
-                      'with', 'as', 'be', 'this', 'was', 'on', 'are'];
-
-        $wordCount = 0;
-        $lowerText = Str::lower($text);
-        foreach ($commonWords as $word) {
-            if (Str::contains($lowerText, ' ' . $word . ' ') || 
-                Str::startsWith($lowerText, $word . ' ') || 
-                Str::endsWith($lowerText, ' ' . $word)) {
-                $wordCount++;
-            }
-        }
-
-        // If we find multiple common words and proper spacing, likely normal text
-        if ($wordCount >= 3 && Str::contains($text, ' ') && 
-            !preg_match('/[^\s]{20,}/', $text)) { // No extremely long strings without spaces
-            
-            // Additional check: reasonable word/character ratio
-            $words = explode(' ', $text);
-            $avgWordLength = Str::length($text) / count($words);
-            if ($avgWordLength > 2 && $avgWordLength < 10) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**
