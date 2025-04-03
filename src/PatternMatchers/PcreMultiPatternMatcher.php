@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers;
+namespace TheRealMkadmi\Citadel\PatternMatchers;
 
 use Illuminate\Support\Facades\Log;
 use TheRealMkadmi\Citadel\Enums\ResponseType;

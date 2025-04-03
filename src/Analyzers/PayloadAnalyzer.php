@@ -5,11 +5,9 @@ declare(strict_types=1);
 namespace TheRealMkadmi\Citadel\Analyzers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
-use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
-use TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers\MultiPatternMatcher;
+use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatcher;
 
 final class PayloadAnalyzer extends AbstractAnalyzer
 {

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers;
+namespace TheRealMkadmi\Citadel\PatternMatchers;
 
-use TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers\MultiPatternMatch;
+use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatch;
 
 interface MultiPatternMatcher
 {

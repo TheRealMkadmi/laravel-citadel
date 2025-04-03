@@ -7,9 +7,9 @@ namespace TheRealMkadmi\Citadel\Tests\PatternMatchers;
 use Illuminate\Support\Facades\Config;
 use PHPUnit\Framework\TestCase;
 use TheRealMkadmi\Citadel\CitadelServiceProvider;
-use TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers\MultiPatternMatcher;
-use TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers\PcreMultiPatternMatcher;
-use TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers\VectorScanMultiPaternMatcher;
+use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatcher;
+use TheRealMkadmi\Citadel\PatternMatchers\PcreMultiPatternMatcher;
+use TheRealMkadmi\Citadel\PatternMatchers\VectorScanMultiPaternMatcher;
 use TheRealMkadmi\Citadel\Tests\TestCase as CitadelTestCase;
 
 class MultiPatternMatcherConfigurationTest extends CitadelTestCase

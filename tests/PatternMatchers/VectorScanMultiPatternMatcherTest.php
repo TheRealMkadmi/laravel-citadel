@@ -3,8 +3,8 @@
 namespace TheRealMkadmi\Citadel\Tests\PatternMatchers;
 
 use PHPUnit\Framework\TestCase;
-use TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers\MultiPatternMatch;
-use TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers\VectorScanMultiPaternMatcher;
+use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatch;
+use TheRealMkadmi\Citadel\PatternMatchers\VectorScanMultiPaternMatcher;
 
 /**
  * Tests for the VectorScan implementation of the MultiPatternMatcher interface.

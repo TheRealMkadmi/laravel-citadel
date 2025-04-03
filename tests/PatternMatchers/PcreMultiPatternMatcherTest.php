@@ -3,8 +3,8 @@
 namespace TheRealMkadmi\Citadel\Tests\PatternMatchers;
 
 use PHPUnit\Framework\TestCase;
-use TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers\MultiPatternMatch;
-use TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers\PcreMultiPatternMatcher;
+use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatch;
+use TheRealMkadmi\Citadel\PatternMatchers\PcreMultiPatternMatcher;
 
 class PcreMultiPatternMatcherTest extends TestCase
 {

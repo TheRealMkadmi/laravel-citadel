@@ -1,13 +1,20 @@
 <?php
 
+/**
+ * Todo: document this 
+ * For a weird reason, can't install vectorscan from the package manager. Here's a workaround: 
+ * wget https://security.ubuntu.com/ubuntu/pool/universe/v/vectorscan/libvectorscan5_5.4.11-2ubuntu1_amd64.deb
+ * dpkg -i libvectorscan5_5.4.11-2ubuntu1_amd64.deb
+ * apt install -f
+ */
+
 declare(strict_types=1);
 
-namespace TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers;
+namespace TheRealMkadmi\Citadel\PatternMatchers;
 
 use FFI;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Config;
-use TheRealMkadmi\Citadel\Lib\VectorScan\PatternMatch;
 
 final class VectorScanMultiPaternMatcher implements MultiPatternMatcher
 {
