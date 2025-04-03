@@ -9,8 +9,8 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use TheRealMkadmi\Citadel\DataStore\DataStore;
 use Symfony\Component\HttpFoundation\InputBag;
+use TheRealMkadmi\Citadel\DataStore\DataStore;
 
 class SpamminessAnalyzer extends AbstractAnalyzer
 {
@@ -89,15 +89,15 @@ class SpamminessAnalyzer extends AbstractAnalyzer
     {
         parent::__construct($dataStore);
 
-        $this->enabled = config(self::CONFIG_PREFIX . '.enable_spamminess_analyzer', true);
-        $this->cacheTtl = config(self::CONFIG_PREFIX . '.cache_ttl', 3600);
+        $this->enabled = config(self::CONFIG_PREFIX.'.enable_spamminess_analyzer', true);
+        $this->cacheTtl = config(self::CONFIG_PREFIX.'.cache_ttl', 3600);
 
         $this->loadConfigurationValues();
 
         Log::debug('Citadel: SpamminessAnalyzer initialized', [
-            'enabled'            => $this->enabled,
-            'cacheTtl'           => $this->cacheTtl,
-            'weights'            => $this->weights,
+            'enabled' => $this->enabled,
+            'cacheTtl' => $this->cacheTtl,
+            'weights' => $this->weights,
             'textAnalysisConfig' => $this->textAnalysisConfig,
         ]);
     }
@@ -107,28 +107,28 @@ class SpamminessAnalyzer extends AbstractAnalyzer
      */
     protected function loadConfigurationValues(): void
     {
-        $this->weights = config(self::CONFIG_PREFIX . '.weights', [
-            'gibberish_text'      => 25.0,
-            'repetitive_content'  => 10.0,
-            'suspicious_entropy'  => 20.0,
+        $this->weights = config(self::CONFIG_PREFIX.'.weights', [
+            'gibberish_text' => 25.0,
+            'repetitive_content' => 10.0,
+            'suspicious_entropy' => 20.0,
             'statistical_anomaly' => 30.0,
-            'keyboard_pattern'    => 15.0,
-            'spam_pattern'        => 15.0,
+            'keyboard_pattern' => 15.0,
+            'spam_pattern' => 15.0,
         ]);
 
-        $this->textAnalysisConfig = config(self::CONFIG_PREFIX . '.text_analysis', [
-            'min_entropy_threshold'           => 1.0,
-            'max_entropy_threshold'           => 4.0,
-            'min_field_length'                => 2,
-            'max_repetition_ratio'            => 0.4,
-            'min_vowel_ratio'                 => 0.1,
-            'consonant_sequence_threshold'    => 4,
-            'character_distribution_threshold'=> 0.7,
-            'zipf_deviation_threshold'        => 0.4,
-            'statistical_significance_threshold'=> 0.05,
-            'max_correlation_threshold'       => 0.8,
-            'repetition_threshold'            => self::DEFAULT_REPETITION_THRESHOLD,
-            'compression_ratio_threshold'     => 0.4,
+        $this->textAnalysisConfig = config(self::CONFIG_PREFIX.'.text_analysis', [
+            'min_entropy_threshold' => 1.0,
+            'max_entropy_threshold' => 4.0,
+            'min_field_length' => 2,
+            'max_repetition_ratio' => 0.4,
+            'min_vowel_ratio' => 0.1,
+            'consonant_sequence_threshold' => 4,
+            'character_distribution_threshold' => 0.7,
+            'zipf_deviation_threshold' => 0.4,
+            'statistical_significance_threshold' => 0.05,
+            'max_correlation_threshold' => 0.8,
+            'repetition_threshold' => self::DEFAULT_REPETITION_THRESHOLD,
+            'compression_ratio_threshold' => 0.4,
         ]);
 
         $this->ensureConfigurationDefaults();
@@ -140,37 +140,37 @@ class SpamminessAnalyzer extends AbstractAnalyzer
     protected function ensureConfigurationDefaults(): void
     {
         $requiredWeightKeys = [
-            'gibberish_text'      => 25.0,
-            'repetitive_content'  => 10.0,
-            'suspicious_entropy'  => 20.0,
+            'gibberish_text' => 25.0,
+            'repetitive_content' => 10.0,
+            'suspicious_entropy' => 20.0,
             'statistical_anomaly' => 30.0,
-            'keyboard_pattern'    => 15.0,
-            'spam_pattern'        => 15.0,
+            'keyboard_pattern' => 15.0,
+            'spam_pattern' => 15.0,
         ];
 
         $requiredTextAnalysisKeys = [
-            'min_entropy_threshold'            => 1.0,
-            'max_entropy_threshold'            => 4.0,
-            'min_field_length'                 => 2,
-            'max_repetition_ratio'             => 0.4,
-            'min_vowel_ratio'                  => 0.1,
-            'consonant_sequence_threshold'     => 4,
+            'min_entropy_threshold' => 1.0,
+            'max_entropy_threshold' => 4.0,
+            'min_field_length' => 2,
+            'max_repetition_ratio' => 0.4,
+            'min_vowel_ratio' => 0.1,
+            'consonant_sequence_threshold' => 4,
             'character_distribution_threshold' => 0.7,
-            'zipf_deviation_threshold'         => 0.4,
-            'statistical_significance_threshold'=> 0.05,
-            'max_correlation_threshold'        => 0.8,
-            'repetition_threshold'             => self::DEFAULT_REPETITION_THRESHOLD,
-            'compression_ratio_threshold'      => 0.4,
+            'zipf_deviation_threshold' => 0.4,
+            'statistical_significance_threshold' => 0.05,
+            'max_correlation_threshold' => 0.8,
+            'repetition_threshold' => self::DEFAULT_REPETITION_THRESHOLD,
+            'compression_ratio_threshold' => 0.4,
         ];
 
         foreach ($requiredWeightKeys as $key => $defaultValue) {
-            if (!isset($this->weights[$key])) {
+            if (! isset($this->weights[$key])) {
                 $this->weights[$key] = $defaultValue;
             }
         }
 
         foreach ($requiredTextAnalysisKeys as $key => $defaultValue) {
-            if (!isset($this->textAnalysisConfig[$key])) {
+            if (! isset($this->textAnalysisConfig[$key])) {
                 $this->textAnalysisConfig[$key] = $defaultValue;
             }
         }
@@ -178,8 +178,9 @@ class SpamminessAnalyzer extends AbstractAnalyzer
 
     public function analyze(Request $request): float
     {
-        if (!$this->enabled) {
+        if (! $this->enabled) {
             Log::info('Citadel: SpamminessAnalyzer disabled, returning score 0.0');
+
             return 0.0;
         }
 
@@ -188,7 +189,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
 
         Log::debug('Citadel: SpamminessAnalyzer analyzing request', [
             'fingerprint' => $fingerprint,
-            'cacheKey'    => $cacheKey,
+            'cacheKey' => $cacheKey,
         ]);
 
         $cachedScore = $this->dataStore->getValue($cacheKey);
@@ -197,7 +198,8 @@ class SpamminessAnalyzer extends AbstractAnalyzer
                 'fingerprint' => $fingerprint,
                 'cachedScore' => $cachedScore,
             ]);
-            return (float)$cachedScore;
+
+            return (float) $cachedScore;
         }
 
         $payload = $this->extractRequestData($request);
@@ -208,14 +210,14 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         ]);
 
         $score = $this->processPayload($payload);
-        $maxScore = config(self::CONFIG_PREFIX . '.max_score', 100.0);
+        $maxScore = config(self::CONFIG_PREFIX.'.max_score', 100.0);
         $finalScore = min($score, $maxScore);
 
         Log::info('Citadel: SpamminessAnalyzer final score calculated', [
             'fingerprint' => $fingerprint,
-            'rawScore'    => $score,
-            'maxScore'    => $maxScore,
-            'finalScore'  => $finalScore,
+            'rawScore' => $score,
+            'maxScore' => $maxScore,
+            'finalScore' => $finalScore,
         ]);
 
         $this->dataStore->setValue($cacheKey, $finalScore, $this->cacheTtl);
@@ -236,12 +238,12 @@ class SpamminessAnalyzer extends AbstractAnalyzer
             $jsonData = $jsonMethod->all();
         }
 
-        if (!empty($jsonData)) {
+        if (! empty($jsonData)) {
             $payload = $jsonData;
             Log::debug('Citadel: SpamminessAnalyzer extracted JSON data', [
                 'dataSize' => count($payload),
             ]);
-        } elseif (!empty($request->all())) {
+        } elseif (! empty($request->all())) {
             $payload = $request->all();
             Log::debug('Citadel: SpamminessAnalyzer extracted form data', [
                 'dataSize' => count($payload),
@@ -265,7 +267,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
                 $data = Arr::random($data, 50);
                 Log::debug('Citadel: SpamminessAnalyzer sampling large payload', [
                     'originalSize' => $originalCount,
-                    'sampledSize'  => count($data),
+                    'sampledSize' => count($data),
                 ]);
             }
             foreach ($data as $key => $value) {
@@ -274,7 +276,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
                 $score += $itemScore;
                 if ($itemScore > 0) {
                     Log::debug('Citadel: SpamminessAnalyzer detected suspicious content', [
-                        'path'  => $currentPath,
+                        'path' => $currentPath,
                         'score' => $itemScore,
                     ]);
                 }
@@ -286,34 +288,34 @@ class SpamminessAnalyzer extends AbstractAnalyzer
                 $beginLength = 4000;
                 $middleLength = 2000;
                 $endLength = 4000;
-                
+
                 // Get beginning part
                 $beginPart = Str::substr($data, 0, $beginLength);
-                
+
                 // Get middle part - ensuring we capture content from the middle
                 $middleStart = intval($originalLength / 2) - intval($middleLength / 2);
                 $middlePart = Str::substr($data, $middleStart, $middleLength);
-                
+
                 // Get end part
                 $endPart = Str::substr($data, -$endLength);
-                
+
                 // Combine the parts
-                $data = $beginPart . $middlePart . $endPart;
-                
+                $data = $beginPart.$middlePart.$endPart;
+
                 Log::debug('Citadel: SpamminessAnalyzer sampled large string', [
-                    'originalLength'  => $originalLength,
+                    'originalLength' => $originalLength,
                     'sampleLength' => Str::length($data),
-                    'prefix'          => $prefix,
-                    'samplePoints'    => [0, $middleStart, $originalLength - $endLength],
+                    'prefix' => $prefix,
+                    'samplePoints' => [0, $middleStart, $originalLength - $endLength],
                 ]);
             }
             $score += $this->analyzeTextField($data);
             if ($score > 0) {
                 Log::debug('Citadel: SpamminessAnalyzer text field analysis', [
-                    'prefix'    => $prefix,
-                    'textLength'=> Str::length($data),
-                    'firstChars'=> Str::limit($data, 50),
-                    'score'     => $score,
+                    'prefix' => $prefix,
+                    'textLength' => Str::length($data),
+                    'firstChars' => Str::limit($data, 50),
+                    'score' => $score,
                 ]);
             }
         }
@@ -330,18 +332,18 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         if (Str::length($text) > 5000) {
             $segments = $this->splitLongTextIntoSegments($text);
             $segmentScores = [];
-            
+
             foreach ($segments as $segment) {
                 $segmentScores[] = $this->analyzeTextSegment($segment);
             }
-            
+
             // Use the maximum score of any segment
-            return !empty($segmentScores) ? max($segmentScores) : 0.0;
+            return ! empty($segmentScores) ? max($segmentScores) : 0.0;
         }
-        
+
         return $this->analyzeTextSegment($text);
     }
-    
+
     /**
      * Split long text into manageable segments for analysis.
      */
@@ -350,23 +352,23 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         $length = Str::length($text);
         $segmentSize = 2000;
         $segments = [];
-        
+
         // Create overlapping segments to ensure we don't miss patterns at segment boundaries
         for ($i = 0; $i < $length; $i += $segmentSize / 2) {
             $segment = Str::substr($text, $i, $segmentSize);
-            if (!empty($segment)) {
+            if (! empty($segment)) {
                 $segments[] = $segment;
             }
-            
+
             // Limit number of segments for performance
             if (count($segments) >= 10) {
                 break;
             }
         }
-        
+
         return $segments;
     }
-    
+
     /**
      * Analyze a single text segment and compute its spamminess score.
      */
@@ -380,9 +382,10 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         $textHash = md5($text);
         if (isset($this->analysisCache[$textHash])) {
             Log::debug('Citadel: SpamminessAnalyzer using cached text analysis', [
-                'textHash'    => $textHash,
+                'textHash' => $textHash,
                 'cachedScore' => $this->analysisCache[$textHash],
             ]);
+
             return $this->analysisCache[$textHash];
         }
 
@@ -393,15 +396,16 @@ class SpamminessAnalyzer extends AbstractAnalyzer
 
         Log::debug('Citadel: SpamminessAnalyzer analyzing text field', [
             'textHash' => $textHash,
-            'length'   => $textLength,
-            'content'  => Str::limit($textString, 30),
+            'length' => $textLength,
+            'content' => Str::limit($textString, 30),
         ]);
 
         if ($textLength < $this->textAnalysisConfig['min_field_length']) {
             Log::debug('Citadel: SpamminessAnalyzer text too short, skipping', [
-                'length'     => $textLength,
-                'minRequired'=> $this->textAnalysisConfig['min_field_length'],
+                'length' => $textLength,
+                'minRequired' => $this->textAnalysisConfig['min_field_length'],
             ]);
+
             return 0.0;
         }
 
@@ -410,8 +414,8 @@ class SpamminessAnalyzer extends AbstractAnalyzer
             $weightedScore = $this->weights['keyboard_pattern'] * $keyboardPatternScore;
             $score += $weightedScore;
             Log::debug('Citadel: SpamminessAnalyzer detected keyboard pattern', [
-                'baseScore'  => $keyboardPatternScore,
-                'weight'     => $this->weights['keyboard_pattern'],
+                'baseScore' => $keyboardPatternScore,
+                'weight' => $this->weights['keyboard_pattern'],
                 'weightedScore' => $weightedScore,
                 'textSample' => Str::limit($textString, 50),
             ]);
@@ -422,8 +426,8 @@ class SpamminessAnalyzer extends AbstractAnalyzer
             $weightedScore = $this->weights['spam_pattern'] * $spamPatternScore;
             $score += $weightedScore;
             Log::debug('Citadel: SpamminessAnalyzer detected spam pattern', [
-                'baseScore'  => $spamPatternScore,
-                'weight'     => $this->weights['spam_pattern'],
+                'baseScore' => $spamPatternScore,
+                'weight' => $this->weights['spam_pattern'],
                 'weightedScore' => $weightedScore,
                 'textSample' => Str::limit($textString, 50),
             ]);
@@ -434,8 +438,8 @@ class SpamminessAnalyzer extends AbstractAnalyzer
             $weightedScore = $this->weights['repetitive_content'] * $repetitiveScore;
             $score += $weightedScore;
             Log::debug('Citadel: SpamminessAnalyzer detected repetitive content', [
-                'baseScore'  => $repetitiveScore,
-                'weight'     => $this->weights['repetitive_content'],
+                'baseScore' => $repetitiveScore,
+                'weight' => $this->weights['repetitive_content'],
                 'weightedScore' => $weightedScore,
                 'textSample' => Str::limit($textString, 50),
             ]);
@@ -447,11 +451,11 @@ class SpamminessAnalyzer extends AbstractAnalyzer
             $weightedScore = $this->weights['suspicious_entropy'] * $entropyDeviation;
             $score += $weightedScore;
             Log::debug('Citadel: SpamminessAnalyzer detected anomalous entropy', [
-                'entropy'     => $entropy,
-                'deviation'   => $entropyDeviation,
-                'weight'      => $this->weights['suspicious_entropy'],
+                'entropy' => $entropy,
+                'deviation' => $entropyDeviation,
+                'weight' => $this->weights['suspicious_entropy'],
                 'weightedScore' => $weightedScore,
-                'textSample'  => Str::limit($textString, 50),
+                'textSample' => Str::limit($textString, 50),
             ]);
         }
 
@@ -460,8 +464,8 @@ class SpamminessAnalyzer extends AbstractAnalyzer
             $weightedScore = $this->weights['gibberish_text'] * $gibberishScore;
             $score += $weightedScore;
             Log::debug('Citadel: SpamminessAnalyzer detected statistical gibberish', [
-                'baseScore'  => $gibberishScore,
-                'weight'     => $this->weights['gibberish_text'],
+                'baseScore' => $gibberishScore,
+                'weight' => $this->weights['gibberish_text'],
                 'weightedScore' => $weightedScore,
                 'textSample' => Str::limit($textString, 50),
             ]);
@@ -469,8 +473,8 @@ class SpamminessAnalyzer extends AbstractAnalyzer
 
         $this->analysisCache[$textHash] = $score;
         Log::info('Citadel: SpamminessAnalyzer text analysis complete', [
-            'textHash'   => $textHash,
-            'length'     => $textLength,
+            'textHash' => $textHash,
+            'length' => $textLength,
             'finalScore' => $score,
         ]);
 
@@ -493,7 +497,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         if (Str::length($text) < 4) {
             return false;
         }
-        
+
         // Check for spam indicators even in normal-looking text
         $spamPhrases = [
             'free offer',
@@ -504,14 +508,14 @@ class SpamminessAnalyzer extends AbstractAnalyzer
             'qwertyuiop',
             'asdfghjkl',
         ];
-        
+
         $lowerText = Str::lower($text);
         foreach ($spamPhrases as $phrase) {
             if (Str::contains($lowerText, $phrase)) {
                 return false; // Contains direct spam phrases
             }
         }
-        
+
         // For very long text, don't immediately classify as normal
         // This ensures we still analyze long text properly
         if (Str::length($text) > 5000) {
@@ -522,28 +526,29 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         if (preg_match('/^[A-Z][a-z\s,\.\'\-\;\:\"\(\)]+(\s[a-z]+){3,}[\.\?!]?$/', $text)) {
             // Check for all caps sections which may indicate spam
             if (preg_match('/[A-Z]{4,}/', $text)) {
-                return false; 
+                return false;
             }
+
             return true;
         }
 
         // Check for presence of common English words
-        $commonWords = ['the', 'and', 'to', 'of', 'a', 'in', 'is', 'that', 'it', 'for', 
-                      'with', 'as', 'be', 'this', 'was', 'on', 'are'];
+        $commonWords = ['the', 'and', 'to', 'of', 'a', 'in', 'is', 'that', 'it', 'for',
+            'with', 'as', 'be', 'this', 'was', 'on', 'are'];
 
         $wordCount = 0;
         foreach ($commonWords as $word) {
-            if (Str::contains($lowerText, ' ' . $word . ' ') || 
-                Str::startsWith($lowerText, $word . ' ') || 
-                Str::endsWith($lowerText, ' ' . $word)) {
+            if (Str::contains($lowerText, ' '.$word.' ') ||
+                Str::startsWith($lowerText, $word.' ') ||
+                Str::endsWith($lowerText, ' '.$word)) {
                 $wordCount++;
             }
         }
 
         // If we find multiple common words and proper spacing, likely normal text
-        if ($wordCount >= 3 && Str::contains($text, ' ') && 
-            !preg_match('/[^\s]{20,}/', $text)) { // No extremely long strings without spaces
-            
+        if ($wordCount >= 3 && Str::contains($text, ' ') &&
+            ! preg_match('/[^\s]{20,}/', $text)) { // No extremely long strings without spaces
+
             // Additional check: reasonable word/character ratio
             $words = explode(' ', $text);
             $avgWordLength = Str::length($text) / count($words);
@@ -558,7 +563,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
     /**
      * Detect keyboard patterns that may indicate gibberish.
      */
-    protected function detectKeyboardPatterns(string $text): float 
+    protected function detectKeyboardPatterns(string $text): float
     {
         // Skip normal English sentences
         if (preg_match('/^[A-Z][a-z\s,\.\'\-\;\:\"\(\)]+(\s[a-z]+){3,}[\.\?!]?$/', $text)) {
@@ -571,23 +576,25 @@ class SpamminessAnalyzer extends AbstractAnalyzer
             if (preg_match($pattern, $lowerText, $matches)) {
                 Log::debug('Citadel: SpamminessAnalyzer matched keyboard pattern', [
                     'pattern' => $pattern,
-                    'match'   => $matches[0] ?? 'unknown match',
+                    'match' => $matches[0] ?? 'unknown match',
                 ]);
+
                 return 1.0;
             }
         }
 
         $commonSequences = [
             'qwerty', 'asdfgh', 'zxcvbn', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm',
-            '12345', '67890', '09876', '54321'
+            '12345', '67890', '09876', '54321',
         ];
 
         foreach ($commonSequences as $seq) {
             if (Str::contains($lowerText, $seq)) {
                 Log::debug('Citadel: SpamminessAnalyzer found keyboard sequence', [
-                    'sequence'  => $seq,
-                    'textSample'=> Str::limit($lowerText, 50),
+                    'sequence' => $seq,
+                    'textSample' => Str::limit($lowerText, 50),
                 ]);
+
                 return 1.0;
             }
         }
@@ -598,16 +605,17 @@ class SpamminessAnalyzer extends AbstractAnalyzer
             $hasNormalWords = false;
 
             foreach ($words as $word) {
-                if (strlen($word) >= 3 && !$this->hasSequentialCharacters($word)) {
+                if (strlen($word) >= 3 && ! $this->hasSequentialCharacters($word)) {
                     $hasNormalWords = true;
                     break;
                 }
             }
 
-            if (!$hasNormalWords) {
+            if (! $hasNormalWords) {
                 Log::debug('Citadel: SpamminessAnalyzer found sequential characters', [
                     'textSample' => Str::limit($lowerText, 50),
                 ]);
+
                 return 0.8;
             }
         }
@@ -627,27 +635,27 @@ class SpamminessAnalyzer extends AbstractAnalyzer
             'limited time',
             'act now',
             'best price',
-            'free gift'
+            'free gift',
         ];
-        
+
         $lowerText = Str::lower($text);
         foreach ($spamPhrases as $phrase) {
             if (Str::contains($lowerText, $phrase)) {
                 return 0.8; // Contains direct spam phrases
             }
         }
-        
+
         // Skip normal English sentences unless they contain specific patterns
-        if (preg_match('/^[A-Z][a-z\s,\.\'\-\;\:\"\(\)]+(\s[a-z]+){3,}[\.\?!]?$/', $text) && 
-            !preg_match('/[A-Z]{3,}/', $text) && 
-            !preg_match('/[!?]{2,}/', $text)) {
+        if (preg_match('/^[A-Z][a-z\s,\.\'\-\;\:\"\(\)]+(\s[a-z]+){3,}[\.\?!]?$/', $text) &&
+            ! preg_match('/[A-Z]{3,}/', $text) &&
+            ! preg_match('/[!?]{2,}/', $text)) {
             return 0.0;
         }
 
         // Special case for random alphanumeric strings that should be flagged
-        if (preg_match('/^[a-z0-9]{8,}$/i', $text) && 
-            !preg_match('/^[a-z]+$/i', $text) && 
-            preg_match('/[0-9]/', $text) && 
+        if (preg_match('/^[a-z0-9]{8,}$/i', $text) &&
+            ! preg_match('/^[a-z]+$/i', $text) &&
+            preg_match('/[0-9]/', $text) &&
             preg_match('/[a-z]/i', $text)) {
             return 0.8;
         }
@@ -682,8 +690,8 @@ class SpamminessAnalyzer extends AbstractAnalyzer
     protected function calculateRepetitiveContentScore(string $text): float
     {
         // Skip normal English text
-        if (Str::wordCount($text) >= 5 && 
-            Str::wordCount($text) <= 100 && 
+        if (Str::wordCount($text) >= 5 &&
+            Str::wordCount($text) <= 100 &&
             preg_match('/^[A-Z][a-z\s,\.\'\-\;\:\"\(\)]+(\s[a-z]+){3,}[\.\?!]?$/', $text)) {
             return 0.0;
         }
@@ -723,7 +731,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
             foreach ($words as $word) {
                 $wordFrequencies[$word] = Arr::get($wordFrequencies, $word, 0) + 1;
             }
-            $maxFrequency = !empty($wordFrequencies) ? max($wordFrequencies) : 0;
+            $maxFrequency = ! empty($wordFrequencies) ? max($wordFrequencies) : 0;
             if ($maxFrequency > ($wordCount / 2) && $wordCount > 4) {
                 $wordRepetitionScore = max($wordRepetitionScore, 0.7);
             }
@@ -758,7 +766,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
     protected function isEntropyAnomalous(float $entropy): bool
     {
         // Skip for normal English text with reasonable entropy
-        if ($entropy > $this->textAnalysisConfig['min_entropy_threshold'] && 
+        if ($entropy > $this->textAnalysisConfig['min_entropy_threshold'] &&
             $entropy < $this->textAnalysisConfig['max_entropy_threshold']) {
             return false;
         }
@@ -774,16 +782,16 @@ class SpamminessAnalyzer extends AbstractAnalyzer
     protected function calculateStatisticalGibberishScore(string $text): float
     {
         // Short English words commonly used in normal text
-        $commonWords = ['the', 'and', 'to', 'of', 'a', 'in', 'is', 'that', 'it', 'for', 
-                       'with', 'as', 'be', 'this', 'was', 'on', 'are', 'but', 'have', 'from'];
+        $commonWords = ['the', 'and', 'to', 'of', 'a', 'in', 'is', 'that', 'it', 'for',
+            'with', 'as', 'be', 'this', 'was', 'on', 'are', 'but', 'have', 'from'];
 
         // Check for common English words - if several are present, likely not gibberish
         $wordCount = 0;
         $lowerText = Str::lower($text);
         foreach ($commonWords as $word) {
-            if (Str::contains($lowerText, ' ' . $word . ' ') || 
-                Str::startsWith($lowerText, $word . ' ') || 
-                Str::endsWith($lowerText, ' ' . $word)) {
+            if (Str::contains($lowerText, ' '.$word.' ') ||
+                Str::startsWith($lowerText, $word.' ') ||
+                Str::endsWith($lowerText, ' '.$word)) {
                 $wordCount++;
             }
         }
@@ -807,7 +815,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         $scores = [];
 
         // Detect random alphanumeric strings without spaces
-        if (preg_match('/^[a-z0-9]{8,}$/i', $text) && !preg_match('/^[a-z]+$/i', $text)) {
+        if (preg_match('/^[a-z0-9]{8,}$/i', $text) && ! preg_match('/^[a-z]+$/i', $text)) {
             $scores[] = 1.0;
         }
 
@@ -846,9 +854,9 @@ class SpamminessAnalyzer extends AbstractAnalyzer
     protected function logAnalysisResult(string $text, float $score, array $componentScores = []): void
     {
         Log::info('Citadel: SpamminessAnalyzer result', [
-            'textLength'      => strlen($text),
-            'textSample'      => Str::limit($text, 50),
-            'overallScore'    => $score,
+            'textLength' => strlen($text),
+            'textSample' => Str::limit($text, 50),
+            'overallScore' => $score,
             'componentScores' => $componentScores,
         ]);
     }
@@ -877,7 +885,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
 
         return false;
     }
-    
+
     /**
      * Calculate Shannon entropy of the text.
      */
@@ -900,6 +908,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
             $p = $count / $len;
             $entropy -= $p * log($p, 2);
         }
+
         return $entropy;
     }
 
@@ -917,6 +926,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         if ($entropy > $maxThreshold) {
             return ($entropy - $maxThreshold) / $maxThreshold;
         }
+
         return 0.0;
     }
 
@@ -937,6 +947,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         if ($vowelRatio > 0.6) {
             return min(1.0, ($vowelRatio - 0.6) / 0.4);
         }
+
         return 0.0;
     }
 
@@ -963,6 +974,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         if ($maxConsonantSeq > $threshold) {
             return min(1.0, ($maxConsonantSeq - $threshold) / 4);
         }
+
         return 0.0;
     }
 
@@ -987,6 +999,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         $cv = $mean > 0 ? $stdDev / $mean : 0;
         $threshold = $this->textAnalysisConfig['character_distribution_threshold'];
         $normalizedScore = min(1.0, $cv / $threshold);
+
         return $normalizedScore;
     }
 
@@ -1005,6 +1018,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
             }
             $freq[$ch] = Arr::get($freq, $ch, 0) + 1;
         }
+
         return $freq;
     }
 
@@ -1033,6 +1047,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         $transitionPredictability = $uniqueBigrams / $expectedUniqueBigrams;
         $bigramEntropyScore = min(1.0, $bigramEntropy / 10);
         $finalScore = ($bigramEntropyScore + abs($transitionPredictability - 0.5)) / 2;
+
         return $finalScore;
     }
 
@@ -1057,6 +1072,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
             return 0.0;
         }
         $score = 1 - ($correlation / $this->textAnalysisConfig['max_correlation_threshold']);
+
         return min(1.0, max(0.0, $score));
     }
 
@@ -1073,8 +1089,8 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         $y = array_slice($y, 0, $n);
         $sumX = array_sum($x);
         $sumY = array_sum($y);
-        $sumXSq = array_sum(array_map(fn($val) => pow($val, 2), $x));
-        $sumYSq = array_sum(array_map(fn($val) => pow($val, 2), $y));
+        $sumXSq = array_sum(array_map(fn ($val) => pow($val, 2), $x));
+        $sumYSq = array_sum(array_map(fn ($val) => pow($val, 2), $y));
         $productSum = 0;
         for ($i = 0; $i < $n; $i++) {
             $productSum += $x[$i] * $y[$i];
@@ -1084,6 +1100,7 @@ class SpamminessAnalyzer extends AbstractAnalyzer
         if ($denominator == 0) {
             return 0.0;
         }
+
         return $numerator / $denominator;
     }
 }
