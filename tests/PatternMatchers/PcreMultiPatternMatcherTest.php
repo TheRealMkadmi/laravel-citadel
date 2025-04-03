@@ -27,10 +27,20 @@ class PcreMultiPatternMatcherTest extends TestCase
     {
         $patterns = ['valid\w+', '(invalid['];
         
+        // Tell PHPUnit to expect the RuntimeException but ignore PHP warnings
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Invalid PCRE pattern');
         
-        new PcreMultiPatternMatcher($patterns);
+        // Temporarily disable warning output for this test
+        $errorLevel = error_reporting();
+        error_reporting($errorLevel & ~E_WARNING);
+        
+        try {
+            new PcreMultiPatternMatcher($patterns);
+        } finally {
+            // Restore original error reporting level
+            error_reporting($errorLevel);
+        }
     }
 
     /**

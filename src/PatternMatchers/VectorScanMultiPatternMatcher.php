@@ -71,17 +71,11 @@ final class VectorScanMultiPatternMatcher implements MultiPatternMatcher
     {
         $libraryPath = Config::get('vectorscan.library_path');
         if (!$libraryPath) {
-            switch (PHP_OS_FAMILY) {
-                case 'Windows':
-                    $libraryPath = 'vectorscan.dll';
-                    break;
-                case 'Darwin':
-                    $libraryPath = 'libvectorscan.dylib';
-                    break;
-                default:
-                    $libraryPath = 'libvectorscan.so';
-                    break;
-            }
+            $libraryPath = match (PHP_OS_FAMILY) {
+                'Windows' => 'vectorscan.dll',
+                'Darwin' => 'libvectorscan.dylib',
+                default => 'libvectorscan.so',
+            };
         }
 
         if (!file_exists($libraryPath)) {

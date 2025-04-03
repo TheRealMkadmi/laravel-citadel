@@ -2,9 +2,9 @@
 
 namespace TheRealMkadmi\Citadel\Tests\PatternMatchers;
 
-use PHPUnit\Framework\TestCase;
 use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatch;
 use TheRealMkadmi\Citadel\PatternMatchers\VectorScanMultiPatternMatcher;
+use TheRealMkadmi\Citadel\Tests\TestCase; 
 
 class VectorScanMultiPatternMatcherTest extends TestCase
 {
