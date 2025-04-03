@@ -128,6 +128,7 @@ class TestCase extends Orchestra
                 $request->server->set($key, $value);
             }
         }
+
         return $request;
     }
 }
