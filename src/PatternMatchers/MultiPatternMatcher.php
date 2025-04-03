@@ -14,12 +14,12 @@ interface MultiPatternMatcher
      * @param string $content The content to scan.
      * @return array<int, MultiPatternMatch> An array of matches found in the content.
      */
-    public function scan(string $content): \Illuminate\Support\Collection;
+    public function scan(string $content): array;
 
     /**
      * Get the patterns used by this matcher.
      *
      * @return array<int, string>
      */
-    public function getPatterns(): \Illuminate\Support\Collection;
+    public function getPatterns(): array;
 }

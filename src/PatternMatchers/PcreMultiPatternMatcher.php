@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers;
 
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use TheRealMkadmi\Citadel\Enums\ResponseType;
 
@@ -75,9 +74,9 @@ final class PcreMultiPatternMatcher implements MultiPatternMatcher
      * 
      * @return array<int, string>
      */
-    public function getPatterns(): Collection
+    public function getPatterns(): array
     {
-        return collect($this->patterns);
+        return $this->patterns;
     }
 
     /**
@@ -114,7 +113,7 @@ final class PcreMultiPatternMatcher implements MultiPatternMatcher
      * @return array<int, MultiPatternMatch>
      * @throws \RuntimeException if scanning fails
      */
-    public function scan(string $content): Collection
+    public function scan(string $content): array
     {
         $matches = [];
         
@@ -159,7 +158,7 @@ final class PcreMultiPatternMatcher implements MultiPatternMatcher
             return $a->from <=> $b->from;
         });
         
-        return collect($matches);
+        return $matches;
     }
 
     /**

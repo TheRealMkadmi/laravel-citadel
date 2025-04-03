@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers;
 
 use FFI;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Config;
 use TheRealMkadmi\Citadel\Lib\VectorScan\PatternMatch;
@@ -47,9 +46,9 @@ final class VectorScanMultiPaternMatcher implements MultiPatternMatcher
      * 
      * @return array<int, string>
      */
-    public function getPatterns(): Collection
+    public function getPatterns(): array
     {
-        return collect($this->patterns);
+        return $this->patterns;
     }
 
     /**
@@ -193,16 +192,16 @@ final class VectorScanMultiPaternMatcher implements MultiPatternMatcher
     }
 
     /**
-     * Scan the given data string and return a Collection of VectorScanMatch objects.
+     * Scan the given data string and return an array of VectorScanMatch objects.
      *
      * Each match object contains the pattern id, start offset, end offset, flags,
      * and the matching substring.
      *
      * @param string $data The data to scan.
-     * @return \Illuminate\Support\Collection|MultiPatternMatch[]
+     * @return array<int, MultiPatternMatch>
      * @throws \RuntimeException if scanning fails.
      */
-    public function scan(string $data): Collection
+    public function scan(string $data): array
     {
         if (!isset($this->db) || !isset($this->scratch)) {
             throw new \RuntimeException("Vectorscan database or scratch space not initialized.");
@@ -243,7 +242,7 @@ final class VectorScanMultiPaternMatcher implements MultiPatternMatcher
             throw new \RuntimeException("libvectorscan hs_scan failed with error code: {$ret}");
         }
 
-        return new Collection($matches);
+        return $matches;
     }
 
     /**
