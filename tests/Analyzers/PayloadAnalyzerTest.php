@@ -1,6 +1,6 @@
 <?php
 
-namespace TheRealMkadmi\Citadel\Tests\Feature;
+namespace TheRealMkadmi\Citadel\Tests\Analyzers;
 
 use Illuminate\Http\Request;
 use PHPUnit\Framework\Attributes\Test;
