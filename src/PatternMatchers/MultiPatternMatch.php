@@ -10,7 +10,7 @@ final class MultiPatternMatch
     public int $from;
     public int $to;
     public int $flags;
-    public string $match;
+    public string $matchedSubstring;
     public string $originalPattern; 
 
     public function __construct(int $id, int $from, int $to, int $flags, string $matchedSubstring, string $originalPattern)
@@ -19,7 +19,7 @@ final class MultiPatternMatch
         $this->from            = $from;
         $this->to              = $to;
         $this->flags           = $flags;
-        $this->match           = $matchedSubstring;
+        $this->matchedSubstring = $matchedSubstring;
         $this->originalPattern = $originalPattern; 
     }
 }

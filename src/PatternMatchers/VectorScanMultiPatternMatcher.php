@@ -16,7 +16,7 @@ use FFI;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Config;
 
-final class VectorScanMultiPaternMatcher implements MultiPatternMatcher
+final class VectorScanMultiPatternMatcher implements MultiPatternMatcher
 {
     // Vectorscan (libvectorscan) constants.
     private const HS_FLAG_SINGLEMATCH = 0x01;

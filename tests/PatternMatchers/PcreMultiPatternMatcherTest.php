@@ -65,7 +65,7 @@ class PcreMultiPatternMatcherTest extends TestCase
         $match = $matches[0];
         $this->assertInstanceOf(MultiPatternMatch::class, $match);
         $this->assertEquals(0, $match->id);
-        $this->assertEquals('foo123', $match->match);
+        $this->assertEquals('foo123', $match->matchedSubstring);
         $this->assertEquals($patterns[0], $match->originalPattern);
         $this->assertEquals(20, $match->from);
         $this->assertEquals(26, $match->to);
@@ -88,12 +88,12 @@ class PcreMultiPatternMatcherTest extends TestCase
         // First match should be foo123
         $firstMatch = $matches[0];
         $this->assertEquals(0, $firstMatch->id);
-        $this->assertEquals('foo123', $firstMatch->match);
+        $this->assertEquals('foo123', $firstMatch->matchedSubstring);
         
         // Second match should be bar456
         $secondMatch = $matches[1];
         $this->assertEquals(1, $secondMatch->id);
-        $this->assertEquals('bar456', $secondMatch->match);
+        $this->assertEquals('bar456', $secondMatch->matchedSubstring);
         
         // Ensure matches are ordered by position
         $this->assertLessThan($secondMatch->from, $firstMatch->from);
@@ -114,8 +114,8 @@ class PcreMultiPatternMatcherTest extends TestCase
         $this->assertCount(2, $matches);
         
         // Matches should be sorted by position
-        $this->assertEquals('foobar', $matches[0]->match);
-        $this->assertEquals('oobar', $matches[1]->match);
+        $this->assertEquals('foobar', $matches[0]->matchedSubstring);
+        $this->assertEquals('oobar', $matches[1]->matchedSubstring);
     }
 
     /**
@@ -160,9 +160,9 @@ class PcreMultiPatternMatcherTest extends TestCase
         
         // Should only capture the first 3 matches (ax, ay, az)
         $this->assertCount(3, $matches);
-        $this->assertEquals('ax', $matches[0]->match);
-        $this->assertEquals('ay', $matches[1]->match);
-        $this->assertEquals('az', $matches[2]->match);
+        $this->assertEquals('ax', $matches[0]->matchedSubstring);
+        $this->assertEquals('ay', $matches[1]->matchedSubstring);
+        $this->assertEquals('az', $matches[2]->matchedSubstring);
     }
     
     /**

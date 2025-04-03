@@ -4,13 +4,8 @@ namespace TheRealMkadmi\Citadel\Tests\PatternMatchers;
 
 use PHPUnit\Framework\TestCase;
 use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatch;
-use TheRealMkadmi\Citadel\PatternMatchers\VectorScanMultiPaternMatcher;
+use TheRealMkadmi\Citadel\PatternMatchers\VectorScanMultiPatternMatcher;
 
-/**
- * Tests for the VectorScan implementation of the MultiPatternMatcher interface.
- * 
- * @requires extension ffi
- */
 class VectorScanMultiPatternMatcherTest extends TestCase
 {
     /**
@@ -22,7 +17,7 @@ class VectorScanMultiPatternMatcherTest extends TestCase
         
         // Try to load the vectorscan library - if it fails, skip all tests in this class
         try {
-            new VectorScanMultiPaternMatcher(['test_pattern']);
+            new VectorScanMultiPatternMatcher(['test_pattern']);
         } catch (\RuntimeException $e) {
             self::markTestSkipped('libvectorscan library is not available: ' . $e->getMessage());
         } catch (\Throwable $e) {
@@ -37,7 +32,7 @@ class VectorScanMultiPatternMatcherTest extends TestCase
     public function testConstructorInitializesPatterns(): void
     {
         $patterns = ['foo\w+', 'bar\d+', 'baz\s+'];
-        $matcher = new VectorScanMultiPaternMatcher($patterns);
+        $matcher = new VectorScanMultiPatternMatcher($patterns);
         
         $this->assertIsArray($matcher->getPatterns());
         $this->assertEquals($patterns, $matcher->getPatterns());
@@ -49,7 +44,7 @@ class VectorScanMultiPatternMatcherTest extends TestCase
     public function testScanWithNoMatches(): void
     {
         $patterns = ['foo\d+', 'bar\d+'];
-        $matcher = new VectorScanMultiPaternMatcher($patterns);
+        $matcher = new VectorScanMultiPatternMatcher($patterns);
         
         $content = 'This string contains no matches';
         $matches = $matcher->scan($content);
@@ -64,7 +59,7 @@ class VectorScanMultiPatternMatcherTest extends TestCase
     public function testScanWithSingleMatch(): void
     {
         $patterns = ['foo\d+', 'bar\d+'];
-        $matcher = new VectorScanMultiPaternMatcher($patterns);
+        $matcher = new VectorScanMultiPatternMatcher($patterns);
         
         $content = 'This string contains foo123';
         $matches = $matcher->scan($content);
@@ -75,7 +70,7 @@ class VectorScanMultiPatternMatcherTest extends TestCase
         $match = $matches[0];
         $this->assertInstanceOf(MultiPatternMatch::class, $match);
         $this->assertEquals(0, $match->id);
-        $this->assertEquals('foo123', $match->match);
+        $this->assertEquals('foo123', $match->matchedSubstring);
         $this->assertEquals($patterns[0], $match->originalPattern);
     }
     
@@ -85,7 +80,7 @@ class VectorScanMultiPatternMatcherTest extends TestCase
     public function testScanWithMultipleMatches(): void
     {
         $patterns = ['foo\d+', 'bar\d+'];
-        $matcher = new VectorScanMultiPaternMatcher($patterns);
+        $matcher = new VectorScanMultiPatternMatcher($patterns);
         
         $content = 'This contains foo123 and also bar456';
         $matches = $matcher->scan($content);
@@ -98,10 +93,10 @@ class VectorScanMultiPatternMatcherTest extends TestCase
         $foundBar = false;
         
         foreach ($matches as $match) {
-            if ($match->id === 0 && strpos($match->match, 'foo') === 0) {
+            if ($match->id === 0 && strpos($match->matchedSubstring, 'foo') === 0) {
                 $foundFoo = true;
             }
-            if ($match->id === 1 && strpos($match->match, 'bar') === 0) {
+            if ($match->id === 1 && strpos($match->matchedSubstring, 'bar') === 0) {
                 $foundBar = true;
             }
         }
@@ -116,7 +111,7 @@ class VectorScanMultiPatternMatcherTest extends TestCase
     public function testExceptionWhenNotInitialized(): void
     {
         // Use reflection to create an instance without proper initialization
-        $reflectionClass = new \ReflectionClass(VectorScanMultiPaternMatcher::class);
+        $reflectionClass = new \ReflectionClass(VectorScanMultiPatternMatcher::class);
         $matcher = $reflectionClass->newInstanceWithoutConstructor();
         
         // Scan should throw exception because db and scratch are not initialized
@@ -136,6 +131,6 @@ class VectorScanMultiPatternMatcherTest extends TestCase
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('libvectorscan compilation failed');
         
-        new VectorScanMultiPaternMatcher($patterns);
+        new VectorScanMultiPatternMatcher($patterns);
     }
 }
