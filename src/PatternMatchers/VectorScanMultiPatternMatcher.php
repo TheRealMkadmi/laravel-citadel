@@ -18,9 +18,17 @@ use Illuminate\Support\Facades\Config;
 
 final class VectorScanMultiPatternMatcher implements MultiPatternMatcher
 {
-    // Vectorscan (libvectorscan) constants.
+    // Class constants for vectorscan flags and modes
     private const HS_FLAG_SINGLEMATCH = 0x01;
-    private const HS_MODE_BLOCK = 0;
+    private const HS_MODE_BLOCK = 1; 
+
+    // Library path constants
+    private const DEFAULT_LIBRARY_NAME_LINUX = 'libhs.so.5';
+    private const DEFAULT_LIBRARY_NAME_DARWIN = 'libhs.dylib';
+    private const DEFAULT_LIBRARY_NAME_WINDOWS = 'libhs.dll';
+
+    // Config key for library path
+    private const CONFIG_LIBRARY_PATH_KEY = 'vectorscan.library_path';
 
     /** @var FFI */
     private FFI $ffi;
@@ -69,63 +77,97 @@ final class VectorScanMultiPatternMatcher implements MultiPatternMatcher
      */
     private function loadVectorscanLibrary(): void
     {
-        $libraryPath = Config::get('vectorscan.library_path');
+        // First try to get the library path from config
+        $libraryPath = Config::get(self::CONFIG_LIBRARY_PATH_KEY);
+
+        // If no config found, use OS-specific default name
         if (!$libraryPath) {
             $libraryPath = match (PHP_OS_FAMILY) {
-                'Windows' => 'vectorscan.dll',
-                'Darwin' => 'libvectorscan.dylib',
-                default => 'libvectorscan.so',
+                'Windows' => self::DEFAULT_LIBRARY_NAME_WINDOWS,
+                'Darwin' => self::DEFAULT_LIBRARY_NAME_DARWIN,
+                default => self::DEFAULT_LIBRARY_NAME_LINUX,
             };
         }
 
-        if (!file_exists($libraryPath)) {
-            $fallbackPaths = [
-                $libraryPath,
-                '/usr/local/lib/' . $libraryPath,
-                '/usr/lib/' . $libraryPath,
-            ];
-            $found = false;
-            foreach ($fallbackPaths as $path) {
-                if (file_exists($path)) {
-                    $libraryPath = $path;
-                    $found = true;
-                    break;
-                }
-            }
-            if (!$found) {
-                Log::error('libvectorscan library not found. Checked config and fallback paths.');
-                throw new \RuntimeException('libvectorscan shared library not found.');
+        // Search for the library file
+        $searchPaths = [
+            $libraryPath,
+            '/usr/lib/x86_64-linux-gnu/' . basename($libraryPath),
+            '/lib/' . basename($libraryPath),
+            '/usr/local/lib/' . basename($libraryPath),
+            '/usr/lib/' . basename($libraryPath),
+        ];
+
+        $foundPath = null;
+        foreach ($searchPaths as $path) {
+            if (file_exists($path)) {
+                $foundPath = $path;
+                break;
             }
         }
 
-        Log::info("Loading libvectorscan library from: {$libraryPath}");
+        if (!$foundPath) {
+            $searchPathsStr = implode(', ', $searchPaths);
+            $errorMessage = "libvectorscan shared library not found. Searched paths: {$searchPathsStr}";
+            Log::error($errorMessage);
+            throw new \RuntimeException($errorMessage);
+        }
 
-        $cdef = <<<'CDEF'
+        Log::info("Loading libvectorscan library from: {$foundPath}");
+
+        try {
+            // Use try-catch to provide better error messages if FFI loading fails
+            $cdef = <<<'CDEF'
             typedef int hs_error_t;
             typedef struct hs_database hs_database_t;
             typedef struct hs_scratch hs_scratch_t;
-            typedef struct hs_compile_error hs_compile_error_t; // Added for error handling
+            typedef struct hs_compile_error {
+                char *message;
+                int expression;
+            } hs_compile_error_t;
+            typedef struct hs_platform_info {
+                unsigned int tune;
+                unsigned long long cpu_features;
+                unsigned long long reserved1;
+                unsigned long long reserved2;
+            } hs_platform_info_t;
+            typedef struct hs_expr_info {
+                unsigned int min_width;
+                unsigned int max_width;
+                char unordered_matches;
+                char matches_at_eod;
+                char matches_only_at_eod;
+            } hs_expr_info_t;
             typedef int (*match_event_handler)(unsigned int id, unsigned long long from,
-                                               unsigned long long to, unsigned int flags, void *context);
+                                              unsigned long long to, unsigned int flags, void *context);
             hs_error_t hs_compile_multi(const char *const *expressions,
                                         const unsigned int *flags,
                                         const unsigned int *ids,
                                         unsigned int elements,
                                         unsigned int mode,
-                                        const void *platform,
+                                        const hs_platform_info_t *platform,
                                         hs_database_t **db,
-                                        hs_compile_error_t **error); // Changed error type
+                                        hs_compile_error_t **error);
             hs_error_t hs_alloc_scratch(const hs_database_t *db, hs_scratch_t **scratch);
             hs_error_t hs_scan(const hs_database_t *db, const char *data,
-                               unsigned int length, unsigned int flags,
-                               hs_scratch_t *scratch, match_event_handler onEvent,
-                               void *context);
+                              unsigned int length, unsigned int flags,
+                              hs_scratch_t *scratch, match_event_handler onEvent,
+                              void *context);
             void hs_free_database(hs_database_t *db);
             void hs_free_scratch(hs_scratch_t *scratch);
-            hs_error_t hs_free_compile_error(hs_compile_error_t *error); // Added function to free error
-        CDEF;
+            hs_error_t hs_free_compile_error(hs_compile_error_t *error);
+CDEF;
 
-        $this->ffi = FFI::cdef($cdef, $libraryPath);
+            $this->ffi = FFI::cdef($cdef, $foundPath);
+        } catch (\FFI\Exception $e) {
+            $errorMessage = "Failed to load libvectorscan library: {$e->getMessage()}";
+            Log::error($errorMessage);
+            throw new \RuntimeException($errorMessage, 0, $e);
+        } catch (\Throwable $e) {
+            $errorMessage = "Unexpected error loading libvectorscan library: {$e->getMessage()}";
+            Log::error($errorMessage);
+            throw new \RuntimeException($errorMessage, 0, $e);
+        }
     }
 
     /**
@@ -136,26 +178,35 @@ final class VectorScanMultiPatternMatcher implements MultiPatternMatcher
      */
     private function compilePatterns(): void
     {
+        Log::debug('Starting vectorscan pattern compilation.');
         $count = count($this->patterns);
         if ($count === 0) {
             Log::warning('Vectorscan compilation attempted with zero patterns.');
         }
 
+        // Allocate C arrays for expressions, flags, and ids
         $exprs = $this->ffi->new("const char*[$count]");
         $flags = $this->ffi->new("unsigned int[$count]");
-        $ids   = $this->ffi->new("unsigned int[$count]");
+        $ids = $this->ffi->new("unsigned int[$count]");
 
+        // Prepare patterns for C FFI
         foreach ($this->patterns as $i => $pattern) {
-            $cPattern = $this->ffi->new("char[" . (strlen($pattern) + 1) . "]", false);
-            FFI::memcpy($cPattern, $pattern, strlen($pattern) + 1);
+            Log::debug("Processing pattern #{$i}: {$pattern}");
+            $len = strlen($pattern);
+            $cPattern = $this->ffi->new("char[" . ($len + 1) . "]", false);
+            FFI::memcpy($cPattern, $pattern, $len);
+            $cPattern[$len] = "\0";
+
             $exprs[$i] = $cPattern;
             $flags[$i] = self::HS_FLAG_SINGLEMATCH;
             $ids[$i] = $i;
+            Log::debug("Pattern #{$i} prepared for compilation.");
         }
 
         $dbPtr = $this->ffi->new("hs_database_t*[1]");
         $errorPtr = $this->ffi->new("hs_compile_error_t*[1]");
 
+        Log::debug("Calling hs_compile_multi with {$count} patterns.");
         $ret = $this->ffi->{"hs_compile_multi"}(
             $exprs,
             $flags,
@@ -170,26 +221,41 @@ final class VectorScanMultiPatternMatcher implements MultiPatternMatcher
         if ($ret !== 0) {
             $compileError = $errorPtr[0];
             $errorMessage = "Unknown compilation error";
-            if ($compileError !== null && isset($compileError->message)) {
-                $errorMessage = FFI::string($compileError->message);
-            }
-            Log::error("libvectorscan compilation failed with error code: {$ret}. Message: {$errorMessage}");
+            $patternIndex = -1;
+            // Check if the error pointer is not null before accessing members
             if ($compileError !== null) {
+                // Access struct members using ->
+                if ($compileError->message !== null) {
+                    $errorMessage = FFI::string($compileError->message);
+                }
+                // The expression field indicates the index of the pattern that failed
+                $patternIndex = $compileError->expression; // Directly access the int value
+
                 $this->ffi->{"hs_free_compile_error"}($compileError);
             }
+            $logMessage = "libvectorscan compilation failed with error code: {$ret}.";
+            if ($patternIndex >= 0 && $patternIndex < $count) {
+                $logMessage .= " Error near pattern #{$patternIndex}: '{$this->patterns[$patternIndex]}'.";
+            }
+            $logMessage .= " Message: {$errorMessage}";
+            Log::error($logMessage);
             throw new \RuntimeException("libvectorscan compilation failed: {$errorMessage} (Code: {$ret})");
         }
 
         $this->db = $dbPtr[0];
+        Log::info("libvectorscan patterns compiled successfully.");
 
         $scratchPtr = $this->ffi->new("hs_scratch_t*[1]");
+        Log::debug("Allocating vectorscan scratch space.");
         $ret = $this->ffi->{"hs_alloc_scratch"}($this->db, FFI::addr($scratchPtr[0]));
         if ($ret !== 0) {
             $this->ffi->{"hs_free_database"}($this->db);
-            Log::error("Failed to allocate libvectorscan scratch with error code: {$ret}");
-            throw new \RuntimeException("Failed to allocate libvectorscan scratch with error code: {$ret}");
+            Log::error("Failed to allocate libvectorscan scratch space with error code: {$ret}");
+            throw new \RuntimeException("Failed to allocate libvectorscan scratch space with error code: {$ret}");
         }
         $this->scratch = $scratchPtr[0];
+        Log::info("libvectorscan scratch space allocated successfully.");
+        Log::debug('Finished vectorscan pattern compilation and scratch allocation.');
     }
 
     /**
@@ -224,7 +290,6 @@ final class VectorScanMultiPatternMatcher implements MultiPatternMatcher
             return 0;
         };
 
-        // Create a C type for the callback using CData instead of FFI::callback
         $callbackType = $this->ffi->type("match_event_handler");
         $cCallback = $this->ffi->cast($callbackType, $callback);
 
