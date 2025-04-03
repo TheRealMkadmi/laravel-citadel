@@ -14,6 +14,7 @@ use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 use Symfony\Component\Finder\Finder;
 use TheRealMkadmi\Citadel\Analyzers\IRequestAnalyzer;
+use TheRealMkadmi\Citadel\Analyzers\PayloadAnalyzer;
 use TheRealMkadmi\Citadel\Commands\CitadelBanCommand;
 use TheRealMkadmi\Citadel\Commands\CitadelUnbanCommand;
 use TheRealMkadmi\Citadel\Components\Fingerprint;
@@ -23,6 +24,8 @@ use TheRealMkadmi\Citadel\DataStore\DataStore;
 use TheRealMkadmi\Citadel\DataStore\OctaneDataStore;
 use TheRealMkadmi\Citadel\DataStore\RedisDataStore;
 use TheRealMkadmi\Citadel\Http\Controllers\CitadelApiController;
+use TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers\MultiPatternMatcher;
+use TheRealMkadmi\Citadel\Lib\Inspectors\PatternMatchers\VectorScanMultiPaternMatcher;
 use TheRealMkadmi\Citadel\Middleware\ApiAuthMiddleware;
 use TheRealMkadmi\Citadel\Middleware\BanMiddleware;
 use TheRealMkadmi\Citadel\Middleware\GeofenceMiddleware;
@@ -34,18 +37,16 @@ class CitadelServiceProvider extends PackageServiceProvider
      * Config keys
      */
     private const CONFIG_CACHE_KEY = 'citadel.cache';
-
     private const CONFIG_API_KEY = 'citadel.api';
-
     private const CONFIG_MIDDLEWARE_KEY = 'citadel.middleware';
+    private const CONFIG_PATTERN_MATCHER_KEY = 'citadel.pattern_matcher';
+    private const CONFIG_VECTORSCAN_KEY = 'citadel.vectorscan';
 
     /**
      * Middleware group names
      */
     private const MIDDLEWARE_GROUP_PROTECT = 'citadel-protect';
-
     private const MIDDLEWARE_GROUP_ACTIVE = 'citadel-active';
-
     private const MIDDLEWARE_ALIAS_API_AUTH = 'citadel-api-auth';
 
     public function configurePackage(Package $package): void
@@ -125,6 +126,9 @@ class CitadelServiceProvider extends PackageServiceProvider
 
         // Register the DataStore singleton first since other components depend on it
         $this->registerDataStore();
+
+        // Register the pattern matcher service
+        $this->registerPatternMatcher();
 
         // Register the main Citadel service
         $this->app->singleton(Citadel::class, fn ($app) => new Citadel($app->make(DataStore::class)));
@@ -345,5 +349,69 @@ class CitadelServiceProvider extends PackageServiceProvider
             })
             ->filter()
             ->values();
+    }
+
+    /**
+     * Register the pattern matcher service.
+     *
+     * @return void
+     */
+    protected function registerPatternMatcher(): void
+    {
+        $this->app->singleton(MultiPatternMatcher::class, function ($app) {
+            // Determine implementation based on configuration
+            $implementation = config(self::CONFIG_PATTERN_MATCHER_KEY.'.implementation', 'vectorscan');
+            $patternsFile = config(self::CONFIG_PATTERN_MATCHER_KEY.'.patterns_file', __DIR__ . '/../data/http-payload-regex.list');
+            
+            // Load patterns from file
+            $patterns = $this->loadPatternsFromFile($patternsFile);
+            
+            // Create appropriate pattern matcher instance
+            return match ($implementation) {
+                'vectorscan' => new VectorScanMultiPaternMatcher($patterns),
+                // Add other implementations here as needed
+                default => new VectorScanMultiPaternMatcher($patterns),
+            };
+        });
+    }
+
+    /**
+     * Load patterns from a file.
+     *
+     * @param string $filePath Path to the pattern file
+     * @return array<int, string> Array of pattern strings
+     */
+    protected function loadPatternsFromFile(string $filePath): array
+    {
+        if (!file_exists($filePath)) {
+            $this->app->make('log')->warning("Pattern file not found: {$filePath}");
+            return [];
+        }
+
+        $patterns = [];
+        $lines = file($filePath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        
+        if ($lines === false) {
+            $this->app->make('log')->error("Failed to read pattern file: {$filePath}");
+            return [];
+        }
+        
+        foreach ($lines as $line) {
+            // Skip comments and empty lines
+            $line = trim($line);
+            if (empty($line) || strpos($line, '#') === 0) {
+                continue;
+            }
+            
+            // Extract the pattern from the line (remove leading/trailing parentheses if they exist)
+            if (preg_match('/^\(\?:(.*)\)$/', $line, $matches)) {
+                $patterns[] = $matches[1];
+            } else {
+                $patterns[] = $line;
+            }
+        }
+        
+        $this->app->make('log')->info("Loaded " . count($patterns) . " patterns from {$filePath}");
+        return $patterns;
     }
 }

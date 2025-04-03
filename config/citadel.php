@@ -345,4 +345,32 @@ return [
         'enabled' => env('CITADEL_ENABLE_EXTERNAL_ANALYZERS', true),
         'log_disabled_calls' => env('CITADEL_LOG_DISABLED_EXTERNAL_CALLS', true),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Pattern Matcher Settings
+    |--------------------------------------------------------------------------
+    |
+    | Configure the pattern matcher implementation and settings.
+    | - implementation: The pattern matcher implementation to use ('vectorscan' or other implementations)
+    | - patterns_file: The path to the file containing regex patterns
+    | 
+    */
+    'pattern_matcher' => [
+        'implementation' => env('CITADEL_PATTERN_MATCHER_IMPL', 'vectorscan'),
+        'patterns_file' => env('CITADEL_PATTERNS_FILE', __DIR__ . '/../data/http-payload-regex.list'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Vectorscan Settings
+    |--------------------------------------------------------------------------
+    |
+    | Configure the Vectorscan library settings.
+    | - library_path: The path to the libvectorscan shared library
+    |
+    */
+    'vectorscan' => [
+        'library_path' => env('CITADEL_VECTORSCAN_LIBRARY_PATH', null),
+    ],
 ];
