@@ -28,29 +28,18 @@ final class PayloadAnalyzer extends AbstractAnalyzer
     private MultiPatternMatcher $matcher;
 
     /**
-     * Optionally, a mapping from pattern id to an impact value.
-     *
-     * @var array<int, float>
-     */
-    private array $patternImpacts;
-
-    /**
      * Constructor.
      *
      * @param  DataStore  $dataStore  The datastore for caching.
      * @param  MultiPatternMatcher  $matcher  The preloaded matcher (injected).
-     * @param  array<int, float>  $patternImpacts  Optional mapping of pattern IDs to impact scores.
      */
-    public function __construct(DataStore $dataStore, MultiPatternMatcher $matcher, array $patternImpacts = [])
+    public function __construct(DataStore $dataStore, MultiPatternMatcher $matcher)
     {
         parent::__construct($dataStore);
         $this->matcher = $matcher;
 
         // Set cache TTL from configuration
         $this->cacheTtl = config(self::CONFIG_CACHE_TTL_KEY, 3600);
-
-        // If no mapping is provided, default each pattern to an impact of 1.0
-        $this->patternImpacts = $patternImpacts ?: array_fill(0, count($matcher->getPatterns()), 1.0);
     }
 
     /**
@@ -115,15 +104,12 @@ final class PayloadAnalyzer extends AbstractAnalyzer
         // Perform the scan; get matches
         $matches = $this->matcher->scan($content);
 
-        // Compute a score. We sum the impact values of each match.
-        $score = 0.0;
-        foreach ($matches as $match) {
-            // Ensure pattern impact mapping exists.
-            $impact = $this->patternImpacts[$match->id] ?? 1.0;
-            $score += $impact;
+        // Compute a score based on the number of matches
+        $score = (float)count($matches);
 
-            // Log matches for debugging
-            Log::debug("PayloadAnalyzer matched pattern ID {$match->id}: '{$match->originalPattern}' with impact {$impact}");
+        // Log matches for debugging
+        foreach ($matches as $match) {
+            Log::debug("PayloadAnalyzer matched pattern ID {$match->id}: '{$match->originalPattern}'");
         }
 
         // Cap the score at the configured maximum

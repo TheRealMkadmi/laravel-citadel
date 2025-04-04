@@ -190,27 +190,84 @@ CDEF;
             return; // Early return if no patterns
         }
 
-        // Log all patterns before compilation
-        Log::debug('Patterns to compile: ' . json_encode($this->patterns));
-
+        // Individually compile and validate each pattern first to catch errors early
+        foreach ($this->patterns as $i => $pattern) {
+            Log::debug("Validating pattern #{$i}: {$pattern}");
+            
+            // Setup single pattern compilation
+            $expr = $this->ffi->new("const char*[1]");
+            $flag = $this->ffi->new("unsigned int[1]");
+            $id = $this->ffi->new("unsigned int[1]");
+            
+            $len = strlen($pattern);
+            $cPattern = $this->ffi->new("char[" . ($len + 1) . "]", false);
+            FFI::memcpy($cPattern, $pattern, $len);
+            $cPattern[$len] = "\0";
+            
+            $expr[0] = $cPattern;
+            $flag[0] = self::HS_FLAG_SINGLEMATCH | self::HS_FLAG_DOTALL;
+            $id[0] = $i;
+            
+            // Setup for individual pattern compilation
+            $singleDbPtr = $this->ffi->new("hs_database_t*[1]");
+            $singleErrorPtr = $this->ffi->new("hs_compile_error_t*[1]");
+            
+            // Try to compile just this pattern
+            $ret = $this->ffi->{"hs_compile_multi"}(
+                $expr,
+                $flag,
+                $id,
+                1,
+                self::HS_MODE_BLOCK,
+                NULL,
+                FFI::addr($singleDbPtr[0]),
+                FFI::addr($singleErrorPtr[0])
+            );
+            
+            if ($ret !== self::HS_SUCCESS) {
+                $errorMessage = "Unknown compilation error";
+                
+                if ($singleErrorPtr[0] !== null) {
+                    if ($singleErrorPtr[0]->message !== null) {
+                        $errorMessage = FFI::string($singleErrorPtr[0]->message);
+                    }
+                    $this->ffi->{"hs_free_compile_error"}($singleErrorPtr[0]);
+                }
+                
+                // Free any resources before throwing
+                if ($singleDbPtr[0] !== null) {
+                    $this->ffi->{"hs_free_database"}($singleDbPtr[0]);
+                }
+                
+                $errorMessage = "Pattern #{$i} '{$pattern}' is invalid: {$errorMessage}";
+                Log::error($errorMessage);
+                throw new \RuntimeException($errorMessage);
+            }
+            
+            // Free the test database - we'll recompile everything together later
+            if ($singleDbPtr[0] !== null) {
+                $this->ffi->{"hs_free_database"}($singleDbPtr[0]);
+            }
+            
+            Log::debug("Pattern #{$i} '{$pattern}' passed validation");
+        }
+        
+        Log::debug("All patterns individually validated, proceeding with bulk compilation");
+        
+        // Now compile all patterns together since we know they're all valid
         $exprs = $this->ffi->new("const char*[$count]");
         $flags = $this->ffi->new("unsigned int[$count]");
         $ids = $this->ffi->new("unsigned int[$count]");
 
         foreach ($this->patterns as $i => $pattern) {
-            Log::debug("Processing pattern #{$i}: {$pattern}");
             $len = strlen($pattern);
             $cPattern = $this->ffi->new("char[" . ($len + 1) . "]", false);
-            Log::debug("Marshalling pattern #{$i} into C-compatible format. Length: {$len}");
             FFI::memcpy($cPattern, $pattern, $len);
             $cPattern[$len] = "\0";
 
             $exprs[$i] = $cPattern;
-            // Combine flags to handle regex appropriately
             $flags[$i] = self::HS_FLAG_SINGLEMATCH | self::HS_FLAG_DOTALL;
             $ids[$i] = $i;
-            Log::debug("Pattern #{$i} prepared for compilation: exprs[{$i}]={$pattern}, flags[{$i}]=" . 
-                      (self::HS_FLAG_SINGLEMATCH | self::HS_FLAG_DOTALL) . ", ids[{$i}]={$i}");
         }
 
         $dbPtr = $this->ffi->new("hs_database_t*[1]");
@@ -222,36 +279,28 @@ CDEF;
             $flags,
             $ids,
             $count,
-            self::HS_MODE_BLOCK, // Using the constant mode value of 1
+            self::HS_MODE_BLOCK,
             NULL,
             FFI::addr($dbPtr[0]),
             FFI::addr($errorPtr[0])
         );
 
-        Log::debug("hs_compile_multi returned: {$ret}");
+        // This shouldn't happen since we validated each pattern individually,
+        // but handle it just in case there are interactions between patterns
         if ($ret !== self::HS_SUCCESS) {
             $compileError = $errorPtr[0];
             $errorMessage = "Unknown compilation error";
             $patternIndex = -1;
             
             if ($compileError !== null) {
-                Log::debug("Compile error structure is not null");
                 if ($compileError->message !== null) {
                     $errorMessage = FFI::string($compileError->message);
-                    Log::debug("Error message extracted: {$errorMessage}");
-                } else {
-                    Log::debug("Error message pointer is null");
                 }
                 $patternIndex = $compileError->expression;
-                Log::debug("Pattern index from error: {$patternIndex}");
-
                 $this->ffi->{"hs_free_compile_error"}($compileError);
-                Log::debug("Freed compile error structure");
-            } else {
-                Log::debug("Compile error structure is null");
             }
             
-            $logMessage = "libvectorscan compilation failed with error code: {$ret}.";
+            $logMessage = "Bulk pattern compilation failed with error code: {$ret}.";
             if ($patternIndex >= 0 && $patternIndex < $count) {
                 $problematicPattern = $this->patterns[$patternIndex] ?? 'unknown';
                 $logMessage .= " Error near pattern #{$patternIndex}: '{$problematicPattern}'";
@@ -259,12 +308,7 @@ CDEF;
             $logMessage .= " Message: {$errorMessage}";
             Log::error($logMessage);
 
-            // Log unsupported regex features if applicable
-            if (str_contains($errorMessage, 'unsupported')) {
-                Log::error("The pattern contains unsupported regex features. Please review the pattern syntax., error: $errorMessage ");
-            }
-
-            throw new \RuntimeException("libvectorscan compilation failed: {$errorMessage} (Code: {$ret})");
+            throw new \RuntimeException($logMessage);
         }
 
         $this->db = $dbPtr[0];
