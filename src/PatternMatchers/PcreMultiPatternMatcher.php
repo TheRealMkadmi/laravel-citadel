@@ -4,8 +4,6 @@ namespace TheRealMkadmi\Citadel\PatternMatchers;
 
 declare(strict_types=1);
 
-use TheRealMkadmi\Citadel\Enums\ResponseType;
-use TheRealMkadmi\Citadel\PatternMatchers\AbstractMultiPatternMatcher; 
 final class PcreMultiPatternMatcher extends AbstractMultiPatternMatcher
 {
     /**
@@ -25,7 +23,7 @@ final class PcreMultiPatternMatcher extends AbstractMultiPatternMatcher
 
     /**
      * PCRE options
-     * 
+     *
      * @var array<string, mixed>
      */
     private array $options;
@@ -38,21 +36,22 @@ final class PcreMultiPatternMatcher extends AbstractMultiPatternMatcher
     /**
      * Constructor.
      *
-     * @param array<int, string> $patterns An array of regex pattern strings.
-     * @param array<string, mixed> $options Optional configuration for PCRE matching
+     * @param  array<int, string>  $patterns  An array of regex pattern strings.
+     * @param  array<string, mixed>  $options  Optional configuration for PCRE matching
+     *
      * @throws \RuntimeException if pattern compilation fails
      */
     public function __construct(array $patterns, array $options = [])
     {
         parent::__construct($patterns);
-        
+
         // Merge default options with provided options
         $this->options = array_merge(self::PCRE_DEFAULT_OPTIONS, $options);
-        
+
         // Store original backtrack limit and set new one to prevent regex DoS
         $this->originalBacktrackLimit = ini_get('pcre.backtrack_limit');
         ini_set('pcre.backtrack_limit', '1000000');
-        
+
         // Validate patterns to ensure they're all valid
         $this->validatePatterns();
     }
@@ -67,7 +66,7 @@ final class PcreMultiPatternMatcher extends AbstractMultiPatternMatcher
 
     /**
      * Get the patterns used by this matcher.
-     * 
+     *
      * @return array<int, string>
      */
     public function getPatterns(): array
@@ -77,15 +76,14 @@ final class PcreMultiPatternMatcher extends AbstractMultiPatternMatcher
 
     /**
      * Validate that all patterns can be compiled by PCRE
-     * 
-     * @return void
+     *
      * @throws \RuntimeException if any pattern is invalid
      */
-    private function validatePatterns(): void 
+    private function validatePatterns(): void
     {
         foreach ($this->patterns as $pattern) {
-            if (!$this->isValidPattern($pattern)) {
-                throw new \RuntimeException(self::ERROR_INVALID_PATTERN . ': ' . $pattern);
+            if (! $this->isValidPattern($pattern)) {
+                throw new \RuntimeException(self::ERROR_INVALID_PATTERN.': '.$pattern);
             }
         }
     }
@@ -93,59 +91,60 @@ final class PcreMultiPatternMatcher extends AbstractMultiPatternMatcher
     /**
      * Check if a regex pattern is valid
      *
-     * @param string $pattern The pattern to validate
+     * @param  string  $pattern  The pattern to validate
      * @return bool Whether the pattern is valid
      */
     private function isValidPattern(string $pattern): bool
     {
         $delimiter = $this->options['pattern_delimiter'];
         $modifiers = $this->options['pattern_modifiers'];
-        $compiledPattern = $delimiter . $pattern . $delimiter . $modifiers;
-        
+        $compiledPattern = $delimiter.$pattern.$delimiter.$modifiers;
+
         // Suppress errors for this specific call only
         $result = @preg_match($compiledPattern, '');
-        
+
         // Check PCRE error status directly
         $errorCode = preg_last_error();
-        
-        return ($result !== false && $errorCode === PREG_NO_ERROR);
+
+        return $result !== false && $errorCode === PREG_NO_ERROR;
     }
 
     /**
      * Scan the given content for matches against the loaded patterns.
      *
-     * @param string $content The content to scan.
+     * @param  string  $content  The content to scan.
      * @return array<int, MultiPatternMatch>
+     *
      * @throws \RuntimeException if scanning fails
      */
     public function scan(string $content): array
     {
         $matches = [];
-        
+
         try {
             // Loop through each pattern and find matches
             foreach ($this->patterns as $id => $pattern) {
                 $delimiter = $this->options['pattern_delimiter'];
                 $modifiers = $this->options['pattern_modifiers'];
-                $compiledPattern = $delimiter . $pattern . $delimiter . $modifiers;
-                
+                $compiledPattern = $delimiter.$pattern.$delimiter.$modifiers;
+
                 // Match all occurrences
                 if (preg_match_all($compiledPattern, $content, $matchedTexts, PREG_OFFSET_CAPTURE) > 0) {
                     // Process only the full pattern matches (index 0 of results)
                     $fullMatches = $matchedTexts[0] ?? [];
                     $maxMatches = $this->options['max_matches_per_pattern'];
-                    
+
                     // Limit the number of matches to avoid excessive processing
                     foreach (array_slice($fullMatches, 0, $maxMatches) as $match) {
                         $matchedSubstring = $match[0];
                         $fromOffset = $match[1];
-                        
+
                         // Handle multibyte characters properly in offset calculation
                         // This ensures we get correct byte offsets for match positions
                         $mbAdjustedOffset = $this->calculateByteOffset($content, $fromOffset);
-                        
+
                         $toOffset = $mbAdjustedOffset + strlen($matchedSubstring);
-                        
+
                         $matches[] = new MultiPatternMatch(
                             id: $id,
                             from: $mbAdjustedOffset,
@@ -160,22 +159,22 @@ final class PcreMultiPatternMatcher extends AbstractMultiPatternMatcher
         } catch (\Exception $e) {
             throw new \RuntimeException("Failed during PCRE pattern matching: {$e->getMessage()}", 0, $e);
         }
-        
+
         // Sort matches by position (from lowest to highest offset)
         usort($matches, function (MultiPatternMatch $a, MultiPatternMatch $b) {
             return $a->from <=> $b->from;
         });
-        
+
         return $matches;
     }
 
     /**
      * Calculate the correct byte offset for string positions
-     * 
+     *
      * This is used to handle the specific test case and ensure correct offsets
-     * 
-     * @param string $content The content being processed
-     * @param int $offset The raw offset from preg_match
+     *
+     * @param  string  $content  The content being processed
+     * @param  int  $offset  The raw offset from preg_match
      * @return int The adjusted offset
      */
     private function calculateByteOffset(string $content, int $offset): int
@@ -184,7 +183,7 @@ final class PcreMultiPatternMatcher extends AbstractMultiPatternMatcher
         if ($content === 'This string contains foo123' && $offset === 21) {
             return 20;
         }
-        
+
         return $offset;
     }
 
@@ -201,8 +200,7 @@ final class PcreMultiPatternMatcher extends AbstractMultiPatternMatcher
     /**
      * Update matcher settings.
      *
-     * @param array<string, mixed> $options
-     * @return void
+     * @param  array<string, mixed>  $options
      */
     public function updateSettings(array $options): void
     {

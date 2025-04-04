@@ -2,8 +2,6 @@
 
 namespace TheRealMkadmi\Citadel\PatternMatchers;
 
-use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatcher;
-
 abstract class AbstractMultiPatternMatcher implements MultiPatternMatcher
 {
     protected array $patterns = [];
@@ -11,8 +9,8 @@ abstract class AbstractMultiPatternMatcher implements MultiPatternMatcher
     public function __construct(array $lines)
     {
         $this->patterns = collect($lines)
-            ->map(fn($line) => trim($line))
-            ->filter(fn($line) => !empty($line) && !str_starts_with($line, '#'))
+            ->map(fn ($line) => trim($line))
+            ->filter(fn ($line) => ! empty($line) && ! str_starts_with($line, '#'))
             ->toArray();
     }
 
@@ -20,6 +18,6 @@ abstract class AbstractMultiPatternMatcher implements MultiPatternMatcher
     {
         return $this->patterns;
     }
-    abstract public function scan(string $content): array;
 
+    abstract public function scan(string $content): array;
 }

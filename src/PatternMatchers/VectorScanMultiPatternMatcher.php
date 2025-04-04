@@ -5,50 +5,75 @@ declare(strict_types=1);
 namespace TheRealMkadmi\Citadel\PatternMatchers;
 
 use FFI;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Config;
-use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatch;
+use Illuminate\Support\Facades\Log;
 
 final class VectorScanMultiPatternMatcher extends AbstractMultiPatternMatcher
 {
-    private const HS_SUCCESS          = 0;
-    private const HS_INVALID          = -1;
-    private const HS_NOMEM            = -2;
-    private const HS_SCAN_TERMINATED  = -3;
-    private const HS_COMPILER_ERROR   = -4;
+    private const HS_SUCCESS = 0;
+
+    private const HS_INVALID = -1;
+
+    private const HS_NOMEM = -2;
+
+    private const HS_SCAN_TERMINATED = -3;
+
+    private const HS_COMPILER_ERROR = -4;
+
     private const HS_DB_VERSION_ERROR = -5;
-    private const HS_DB_PLATFORM_ERROR= -6;
-    private const HS_DB_MODE_ERROR    = -7;
-    private const HS_BAD_ALIGN        = -8;
-    private const HS_BAD_ALLOC        = -9;
 
-    private const HS_FLAG_CASELESS    = 1;
-    private const HS_FLAG_DOTALL      = 2;
-    private const HS_FLAG_MULTILINE   = 4;
+    private const HS_DB_PLATFORM_ERROR = -6;
+
+    private const HS_DB_MODE_ERROR = -7;
+
+    private const HS_BAD_ALIGN = -8;
+
+    private const HS_BAD_ALLOC = -9;
+
+    private const HS_FLAG_CASELESS = 1;
+
+    private const HS_FLAG_DOTALL = 2;
+
+    private const HS_FLAG_MULTILINE = 4;
+
     private const HS_FLAG_SINGLEMATCH = 8;
-    private const HS_FLAG_ALLOWEMPTY  = 16;
-    private const HS_FLAG_UTF8        = 32;
-    private const HS_FLAG_UCP         = 64;
-    private const HS_FLAG_PREFILTER   = 128;
-    private const HS_FLAG_SOM_LEFTMOST= 256;
-    private const HS_FLAG_NONE        = 0;
 
-    private const HS_MODE_BLOCK       = 1;
-    private const HS_MODE_STREAM      = 2;
-    private const HS_MODE_VECTORED    = 4;
+    private const HS_FLAG_ALLOWEMPTY = 16;
+
+    private const HS_FLAG_UTF8 = 32;
+
+    private const HS_FLAG_UCP = 64;
+
+    private const HS_FLAG_PREFILTER = 128;
+
+    private const HS_FLAG_SOM_LEFTMOST = 256;
+
+    private const HS_FLAG_NONE = 0;
+
+    private const HS_MODE_BLOCK = 1;
+
+    private const HS_MODE_STREAM = 2;
+
+    private const HS_MODE_VECTORED = 4;
 
     private const DEFAULT_LIBRARY_NAME_LINUX = 'libhs.so.5';
+
     private const DEFAULT_LIBRARY_NAME_DARWIN = 'libhs.dylib';
+
     private const DEFAULT_LIBRARY_NAME_WINDOWS = 'libhs.dll';
+
     private const CONFIG_LIBRARY_PATH_KEY = 'vectorscan.library_path';
 
     private const HS_CALLBACK_CONTINUE = 0;
-    private const HS_SCAN_FLAG_NONE    = 0;
+
+    private const HS_SCAN_FLAG_NONE = 0;
 
     private FFI $ffi;
+
     private $db;
+
     private $scratch;
-    
+
     public function __construct(array $patterns)
     {
         $this->loadVectorscanLibrary();
@@ -60,7 +85,7 @@ final class VectorScanMultiPatternMatcher extends AbstractMultiPatternMatcher
     {
         $libraryPath = Config::get(self::CONFIG_LIBRARY_PATH_KEY);
 
-        if (!$libraryPath) {
+        if (! $libraryPath) {
             $libraryPath = match (PHP_OS_FAMILY) {
                 'Windows' => self::DEFAULT_LIBRARY_NAME_WINDOWS,
                 'Darwin' => self::DEFAULT_LIBRARY_NAME_DARWIN,
@@ -70,10 +95,10 @@ final class VectorScanMultiPatternMatcher extends AbstractMultiPatternMatcher
 
         $searchPaths = [
             $libraryPath,
-            '/usr/lib/x86_64-linux-gnu/' . basename($libraryPath),
-            '/lib/' . basename($libraryPath),
-            '/usr/local/lib/' . basename($libraryPath),
-            '/usr/lib/' . basename($libraryPath),
+            '/usr/lib/x86_64-linux-gnu/'.basename($libraryPath),
+            '/lib/'.basename($libraryPath),
+            '/usr/local/lib/'.basename($libraryPath),
+            '/usr/lib/'.basename($libraryPath),
         ];
 
         $foundPath = null;
@@ -84,7 +109,7 @@ final class VectorScanMultiPatternMatcher extends AbstractMultiPatternMatcher
             }
         }
 
-        if (!$foundPath) {
+        if (! $foundPath) {
             $searchPathsStr = implode(', ', $searchPaths);
             $errorMessage = "libvectorscan shared library not found. Searched paths: {$searchPathsStr}";
             Log::error($errorMessage);
@@ -156,6 +181,7 @@ CDEF;
             Log::warning('Vectorscan compilation attempted with zero patterns.');
             $this->db = null;
             $this->scratch = null;
+
             return; // Early return if no patterns
         }
 
@@ -166,7 +192,7 @@ CDEF;
 
         foreach ($this->patterns as $i => $pattern) {
             $len = strlen($pattern);
-            $cPattern = $this->ffi->new("char[" . ($len + 1) . "]", false);
+            $cPattern = $this->ffi->new('char['.($len + 1).']', false);
             FFI::memcpy($cPattern, $pattern, $len);
             $cPattern[$len] = "\0";
 
@@ -175,24 +201,24 @@ CDEF;
             $ids[$i] = $i;
         }
 
-        $dbPtr = $this->ffi->new("hs_database_t*[1]");
-        $errorPtr = $this->ffi->new("hs_compile_error_t*[1]");
+        $dbPtr = $this->ffi->new('hs_database_t*[1]');
+        $errorPtr = $this->ffi->new('hs_compile_error_t*[1]');
 
-        Log::debug("Calling hs_compile_multi with {$count} patterns. Mode: " . self::HS_MODE_BLOCK);
-        $ret = $this->ffi->{"hs_compile_multi"}(
+        Log::debug("Calling hs_compile_multi with {$count} patterns. Mode: ".self::HS_MODE_BLOCK);
+        $ret = $this->ffi->{'hs_compile_multi'}(
             $exprs,
             $flags,
             $ids,
             $count,
             self::HS_MODE_BLOCK,
-            NULL,
+            null,
             FFI::addr($dbPtr[0]),
             FFI::addr($errorPtr[0])
         );
 
         if ($ret !== self::HS_SUCCESS) {
             $compileError = $errorPtr[0];
-            $errorMessage = "Unknown compilation error";
+            $errorMessage = 'Unknown compilation error';
             $patternIndex = -1;
 
             if ($compileError !== null) {
@@ -200,7 +226,7 @@ CDEF;
                     $errorMessage = FFI::string($compileError->message);
                 }
                 $patternIndex = $compileError->expression;
-                $this->ffi->{"hs_free_compile_error"}($compileError);
+                $this->ffi->{'hs_free_compile_error'}($compileError);
             }
 
             $logMessage = "Pattern compilation failed with error code: {$ret}.";
@@ -215,54 +241,57 @@ CDEF;
         }
 
         $this->db = $dbPtr[0];
-        Log::info("libvectorscan patterns compiled successfully. Database pointer: " . ($this->db ? "valid" : "invalid"));
+        Log::info('libvectorscan patterns compiled successfully. Database pointer: '.($this->db ? 'valid' : 'invalid'));
 
-        $scratchPtr = $this->ffi->new("hs_scratch_t*[1]");
-        Log::debug("Allocating vectorscan scratch space.");
-        $ret = $this->ffi->{"hs_alloc_scratch"}($this->db, FFI::addr($scratchPtr[0]));
+        $scratchPtr = $this->ffi->new('hs_scratch_t*[1]');
+        Log::debug('Allocating vectorscan scratch space.');
+        $ret = $this->ffi->{'hs_alloc_scratch'}($this->db, FFI::addr($scratchPtr[0]));
         if ($ret !== self::HS_SUCCESS) {
             Log::error("Failed to allocate libvectorscan scratch space with error code: {$ret}");
-            $this->ffi->{"hs_free_database"}($this->db);
+            $this->ffi->{'hs_free_database'}($this->db);
             throw new \RuntimeException("Failed to allocate libvectorscan scratch space with error code: {$ret}");
         }
         $this->scratch = $scratchPtr[0];
-        Log::info("libvectorscan scratch space allocated successfully. Scratch pointer: " . ($this->scratch ? "valid" : "invalid"));
+        Log::info('libvectorscan scratch space allocated successfully. Scratch pointer: '.($this->scratch ? 'valid' : 'invalid'));
         Log::debug('Finished vectorscan pattern compilation and scratch allocation.');
     }
 
     public function scan(string $data): array
     {
-        Log::debug("scan() called with data length: " . strlen($data));
-        
-        if (!isset($this->db) || !isset($this->scratch)) {
-            Log::error("Attempted scan with uninitialized database or scratch space. DB: " . (isset($this->db) ? "set" : "null") . 
-                       ", Scratch: " . (isset($this->scratch) ? "set" : "null"));
-            throw new \RuntimeException("Vectorscan database or scratch space not initialized.");
+        Log::debug('scan() called with data length: '.strlen($data));
+
+        if (! isset($this->db) || ! isset($this->scratch)) {
+            Log::error('Attempted scan with uninitialized database or scratch space. DB: '.(isset($this->db) ? 'set' : 'null').
+                       ', Scratch: '.(isset($this->scratch) ? 'set' : 'null'));
+            throw new \RuntimeException('Vectorscan database or scratch space not initialized.');
         }
-        
+
         if (empty($data)) {
-            Log::debug("Skipping scan for empty data.");
+            Log::debug('Skipping scan for empty data.');
+
             return []; // Avoid scanning empty data
         }
 
         $matchesFound = [];
-        Log::debug("Preparing callback for hs_scan. Data length: " . strlen($data) . ", Data preview: '" . 
-                  (strlen($data) > 50 ? substr($data, 0, 50) . "..." : $data) . "'");
+        Log::debug('Preparing callback for hs_scan. Data length: '.strlen($data).", Data preview: '".
+                  (strlen($data) > 50 ? substr($data, 0, 50).'...' : $data)."'");
 
         $callbackClosure = function ($id, $fromRaw, $toRaw, int $flags, $context) use (&$matchesFound, $data): int {
             Log::debug("Full data => {$data}");
             Log::debug("Vectorscan match callback fired: id={$id}, from={$fromRaw}, to={$toRaw}, flags={$flags}");
 
-            if (!isset($this->patterns[$id])) {
-                Log::warning("Callback received invalid pattern ID: {$id}, max valid ID: " . (count($this->patterns) - 1));
+            if (! isset($this->patterns[$id])) {
+                Log::warning("Callback received invalid pattern ID: {$id}, max valid ID: ".(count($this->patterns) - 1));
+
                 return self::HS_CALLBACK_CONTINUE;
             }
 
-            $fromInt = (int)$fromRaw;
-            $toInt = (int)$toRaw;
+            $fromInt = (int) $fromRaw;
+            $toInt = (int) $toRaw;
 
             if ($fromInt < 0 || $toInt < $fromInt || $toInt > strlen($data)) {
-                Log::error("Invalid match offsets: from={$fromInt}, to={$toInt}, data_len=" . strlen($data));
+                Log::error("Invalid match offsets: from={$fromInt}, to={$toInt}, data_len=".strlen($data));
+
                 return self::HS_CALLBACK_CONTINUE;
             }
 
@@ -277,45 +306,46 @@ CDEF;
                 matchedSubstring: $matchText,
                 originalPattern: $this->patterns[$id]
             );
-            
+
             return self::HS_CALLBACK_CONTINUE;
         };
 
-        Log::debug("Calling hs_scan function with database pointer: " . ($this->db ? "valid" : "invalid") . 
-                  " and scratch pointer: " . ($this->scratch ? "valid" : "invalid"));
-        $ret = $this->ffi->{"hs_scan"}(
+        Log::debug('Calling hs_scan function with database pointer: '.($this->db ? 'valid' : 'invalid').
+                  ' and scratch pointer: '.($this->scratch ? 'valid' : 'invalid'));
+        $ret = $this->ffi->{'hs_scan'}(
             $this->db,
             $data,
             strlen($data),
             self::HS_SCAN_FLAG_NONE,
             $this->scratch,
             $callbackClosure,
-            NULL
+            null
         );
 
         if ($ret < self::HS_SUCCESS && $ret !== self::HS_SCAN_TERMINATED) {
-            Log::error("libvectorscan hs_scan failed with error code: {$ret}, HS_SUCCESS={" . self::HS_SUCCESS . 
-                      "}, HS_SCAN_TERMINATED={" . self::HS_SCAN_TERMINATED . "}");
+            Log::error("libvectorscan hs_scan failed with error code: {$ret}, HS_SUCCESS={".self::HS_SUCCESS.
+                      '}, HS_SCAN_TERMINATED={'.self::HS_SCAN_TERMINATED.'}');
             throw new \RuntimeException("libvectorscan hs_scan failed with error code: {$ret}");
         }
 
-        Log::info("libvectorscan hs_scan completed with return code: {$ret}. Found " . count($matchesFound) . " matches.");
+        Log::info("libvectorscan hs_scan completed with return code: {$ret}. Found ".count($matchesFound).' matches.');
 
         foreach ($matchesFound as $index => $match) {
             Log::debug("Match #{$index}: ID={$match->id}, from={$match->from}, to={$match->to}, flags={$match->flags}, matchedSubstring='{$match->matchedSubstring}'");
         }
 
-        Log::debug("Scan complete. Returning " . count($matchesFound) . " matches.");
+        Log::debug('Scan complete. Returning '.count($matchesFound).' matches.');
+
         return $matchesFound;
     }
 
     public function __destruct()
     {
         if (isset($this->scratch)) {
-            $this->ffi->{"hs_free_scratch"}($this->scratch);
+            $this->ffi->{'hs_free_scratch'}($this->scratch);
         }
         if (isset($this->db)) {
-            $this->ffi->{"hs_free_database"}($this->db);
+            $this->ffi->{'hs_free_database'}($this->db);
         }
     }
 }
