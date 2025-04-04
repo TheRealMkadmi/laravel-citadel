@@ -187,74 +187,12 @@ CDEF;
         $count = count($this->patterns);
         if ($count === 0) {
             Log::warning('Vectorscan compilation attempted with zero patterns.');
+            $this->db = null;
+            $this->scratch = null;
             return; // Early return if no patterns
         }
 
-        // Individually compile and validate each pattern first to catch errors early
-        foreach ($this->patterns as $i => $pattern) {
-            Log::debug("Validating pattern #{$i}: {$pattern}");
-            
-            // Setup single pattern compilation
-            $expr = $this->ffi->new("const char*[1]");
-            $flag = $this->ffi->new("unsigned int[1]");
-            $id = $this->ffi->new("unsigned int[1]");
-            
-            $len = strlen($pattern);
-            $cPattern = $this->ffi->new("char[" . ($len + 1) . "]", false);
-            FFI::memcpy($cPattern, $pattern, $len);
-            $cPattern[$len] = "\0";
-            
-            $expr[0] = $cPattern;
-            $flag[0] = self::HS_FLAG_SINGLEMATCH | self::HS_FLAG_DOTALL;
-            $id[0] = $i;
-            
-            // Setup for individual pattern compilation
-            $singleDbPtr = $this->ffi->new("hs_database_t*[1]");
-            $singleErrorPtr = $this->ffi->new("hs_compile_error_t*[1]");
-            
-            // Try to compile just this pattern
-            $ret = $this->ffi->{"hs_compile_multi"}(
-                $expr,
-                $flag,
-                $id,
-                1,
-                self::HS_MODE_BLOCK,
-                NULL,
-                FFI::addr($singleDbPtr[0]),
-                FFI::addr($singleErrorPtr[0])
-            );
-            
-            if ($ret !== self::HS_SUCCESS) {
-                $errorMessage = "Unknown compilation error";
-                
-                if ($singleErrorPtr[0] !== null) {
-                    if ($singleErrorPtr[0]->message !== null) {
-                        $errorMessage = FFI::string($singleErrorPtr[0]->message);
-                    }
-                    $this->ffi->{"hs_free_compile_error"}($singleErrorPtr[0]);
-                }
-                
-                // Free any resources before throwing
-                if ($singleDbPtr[0] !== null) {
-                    $this->ffi->{"hs_free_database"}($singleDbPtr[0]);
-                }
-                
-                $errorMessage = "Pattern #{$i} '{$pattern}' is invalid: {$errorMessage}";
-                Log::error($errorMessage);
-                throw new \RuntimeException($errorMessage);
-            }
-            
-            // Free the test database - we'll recompile everything together later
-            if ($singleDbPtr[0] !== null) {
-                $this->ffi->{"hs_free_database"}($singleDbPtr[0]);
-            }
-            
-            Log::debug("Pattern #{$i} '{$pattern}' passed validation");
-        }
-        
-        Log::debug("All patterns individually validated, proceeding with bulk compilation");
-        
-        // Now compile all patterns together since we know they're all valid
+        // Prepare arrays for bulk compilation
         $exprs = $this->ffi->new("const char*[$count]");
         $flags = $this->ffi->new("unsigned int[$count]");
         $ids = $this->ffi->new("unsigned int[$count]");
@@ -285,13 +223,11 @@ CDEF;
             FFI::addr($errorPtr[0])
         );
 
-        // This shouldn't happen since we validated each pattern individually,
-        // but handle it just in case there are interactions between patterns
         if ($ret !== self::HS_SUCCESS) {
             $compileError = $errorPtr[0];
             $errorMessage = "Unknown compilation error";
             $patternIndex = -1;
-            
+
             if ($compileError !== null) {
                 if ($compileError->message !== null) {
                     $errorMessage = FFI::string($compileError->message);
@@ -299,11 +235,11 @@ CDEF;
                 $patternIndex = $compileError->expression;
                 $this->ffi->{"hs_free_compile_error"}($compileError);
             }
-            
-            $logMessage = "Bulk pattern compilation failed with error code: {$ret}.";
+
+            $logMessage = "Pattern compilation failed with error code: {$ret}.";
             if ($patternIndex >= 0 && $patternIndex < $count) {
-                $problematicPattern = $this->patterns[$patternIndex] ?? 'unknown';
-                $logMessage .= " Error near pattern #{$patternIndex}: '{$problematicPattern}'";
+                $problematicPattern = $this->patterns[$patternIndex] ?? 'unknown pattern';
+                $logMessage .= " Error related to pattern #{$patternIndex}: '{$problematicPattern}'.";
             }
             $logMessage .= " Message: {$errorMessage}";
             Log::error($logMessage);
@@ -346,26 +282,23 @@ CDEF;
         Log::debug("Preparing callback for hs_scan. Data length: " . strlen($data) . ", Data preview: '" . 
                   (strlen($data) > 50 ? substr($data, 0, 50) . "..." : $data) . "'");
 
-        // This callback will be invoked by Vectorscan for each match
         $callbackClosure = function ($id, $fromRaw, $toRaw, int $flags, $context) use (&$matchesFound, $data): int {
             Log::debug("Full data => {$data}");
             Log::debug("Vectorscan match callback fired: id={$id}, from={$fromRaw}, to={$toRaw}, flags={$flags}");
 
             if (!isset($this->patterns[$id])) {
                 Log::warning("Callback received invalid pattern ID: {$id}, max valid ID: " . (count($this->patterns) - 1));
-                return self::HS_CALLBACK_CONTINUE; // Continue scanning
+                return self::HS_CALLBACK_CONTINUE;
             }
 
             $fromInt = (int)$fromRaw;
             $toInt = (int)$toRaw;
 
-            // Validate offset ranges
             if ($fromInt < 0 || $toInt < $fromInt || $toInt > strlen($data)) {
                 Log::error("Invalid match offsets: from={$fromInt}, to={$toInt}, data_len=" . strlen($data));
-                return self::HS_CALLBACK_CONTINUE; // Continue scanning
+                return self::HS_CALLBACK_CONTINUE;
             }
 
-            // Extract just the actual match text from the data
             $matchText = substr($data, $fromInt, $toInt - $fromInt);
             Log::debug("Match extracted: '{$matchText}' for pattern: '{$this->patterns[$id]}'");
 
@@ -378,10 +311,9 @@ CDEF;
                 originalPattern: $this->patterns[$id]
             );
             
-            return self::HS_CALLBACK_CONTINUE; // Continue scanning
+            return self::HS_CALLBACK_CONTINUE;
         };
 
-        // Execute the actual scan using Vectorscan
         Log::debug("Calling hs_scan function with database pointer: " . ($this->db ? "valid" : "invalid") . 
                   " and scratch pointer: " . ($this->scratch ? "valid" : "invalid"));
         $ret = $this->ffi->{"hs_scan"}(
@@ -391,7 +323,7 @@ CDEF;
             self::HS_SCAN_FLAG_NONE,
             $this->scratch,
             $callbackClosure,
-            NULL // No context needed
+            NULL
         );
 
         if ($ret < self::HS_SUCCESS && $ret !== self::HS_SCAN_TERMINATED) {
