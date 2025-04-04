@@ -191,10 +191,30 @@ return [
 
         // Bot detection patterns
         'bot_patterns' => [
-            'bot', 'crawl', 'spider', 'slurp', 'search', 'fetch', 'monitor',
-            'scrape', 'extract', 'scan', 'wget', 'curl', 'http', 'python',
-            'java/', 'libwww', 'perl', 'phantomjs', 'headless', 'automation',
-            'lighthouse', 'pagespeed', 'pingdom', 'gtmetrix',
+            'bot',
+            'crawl',
+            'spider',
+            'slurp',
+            'search',
+            'fetch',
+            'monitor',
+            'scrape',
+            'extract',
+            'scan',
+            'wget',
+            'curl',
+            'http',
+            'python',
+            'java/',
+            'libwww',
+            'perl',
+            'phantomjs',
+            'headless',
+            'automation',
+            'lighthouse',
+            'pagespeed',
+            'pingdom',
+            'gtmetrix',
         ],
     ],
 
@@ -358,7 +378,7 @@ return [
     */
     'pattern_matcher' => [
         'implementation' => env('CITADEL_PATTERN_MATCHER_IMPL', 'vectorscan'),
-        'patterns_file' => env('CITADEL_PATTERNS_FILE', __DIR__.'/../data/http-payload-regex.list'),
+        'patterns_file' => env('CITADEL_PATTERNS_FILE', __DIR__ . '/../resources/payload-inspection-patterns.list'),
     ],
 
     /*

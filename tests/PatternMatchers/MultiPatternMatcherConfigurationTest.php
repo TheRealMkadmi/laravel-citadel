@@ -15,7 +15,7 @@ class MultiPatternMatcherConfigurationTest extends CitadelTestCase
 {
     private const CONFIG_PATTERN_MATCHER_KEY = 'citadel.pattern_matcher';
 
-    private const PATTERN_FILE_RELATIVE_PATH = 'data/http-payload-regex.list';
+    private const PATTERN_FILE_RELATIVE_PATH = 'resources/payload-inspection-patterns.list';
 
     /**
      * Test that the PCRE implementation is correctly selected when configured.
