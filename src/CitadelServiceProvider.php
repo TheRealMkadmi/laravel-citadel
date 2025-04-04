@@ -27,6 +27,7 @@ use TheRealMkadmi\Citadel\Middleware\ApiAuthMiddleware;
 use TheRealMkadmi\Citadel\Middleware\BanMiddleware;
 use TheRealMkadmi\Citadel\Middleware\GeofenceMiddleware;
 use TheRealMkadmi\Citadel\Middleware\ProtectRouteMiddleware;
+use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatcher;
 use TheRealMkadmi\Citadel\PatternMatchers\PcreMultiPatternMatcher;
 use TheRealMkadmi\Citadel\PatternMatchers\VectorScanMultiPatternMatcher;
 
@@ -48,11 +49,11 @@ class CitadelServiceProvider extends PackageServiceProvider
     /**
      * Route names
      */
-    private const ROUTE_NAME_BAN = 'citadel.api.ban';
+    public const ROUTE_NAME_BAN = 'citadel.api.ban';
     
-    private const ROUTE_NAME_UNBAN = 'citadel.api.unban';
+    public const ROUTE_NAME_UNBAN = 'citadel.api.unban';
     
-    private const ROUTE_NAME_STATUS = 'citadel.api.status';
+    public const ROUTE_NAME_STATUS = 'citadel.api.status';
 
     /**
      * Pattern file constants
@@ -77,6 +78,7 @@ class CitadelServiceProvider extends PackageServiceProvider
          */
         $package
             ->name('laravel-citadel')
+            ->hasRoute('api')
             ->hasConfigFile()
             ->hasViews()
             ->hasViewComponents('citadel', Fingerprint::class)
@@ -89,6 +91,7 @@ class CitadelServiceProvider extends PackageServiceProvider
                         $command->info('Installing Laravel Citadel...');
                     })
                     ->publishConfigFile()
+                    ->copyAndRegisterServiceProviderInApp()
                     ->publishAssets()
                     ->askToStarRepoOnGitHub('therealmkadmi/laravel-citadel')
                     ->endWith(function (InstallCommand $command) {
@@ -126,9 +129,6 @@ class CitadelServiceProvider extends PackageServiceProvider
         ]);
 
         $router->aliasMiddleware(self::MIDDLEWARE_ALIAS_API_AUTH, ApiAuthMiddleware::class);
-
-        // Register API routes
-        $this->registerApiRoutes();
     }
 
     /**
@@ -158,49 +158,6 @@ class CitadelServiceProvider extends PackageServiceProvider
 
         // Register API controller
         $this->app->singleton(CitadelApiController::class, fn ($app) => new CitadelApiController($app->make(DataStore::class)));
-    }
-
-    /**
-     * Register API routes.
-     */
-    protected function registerApiRoutes(): void
-    {
-        // Only register API routes if they're enabled in the config
-        if (! config(CitadelConfig::KEY_API_ENABLED, false)) {
-            return;
-        }
-
-        $prefix = config(CitadelConfig::KEY_API_PREFIX, 'api/citadel');
-        $middlewareGroups = ['api'];
-
-        // Add the API auth middleware if a token is configured
-        if (! empty(config(CitadelConfig::KEY_API_TOKEN))) {
-            $middlewareGroups[] = self::MIDDLEWARE_ALIAS_API_AUTH;
-        } else {
-            // Log a warning if API is enabled but no token is configured
-            $this->app->make('log')->warning('Citadel API is enabled but no API token is configured. This is a security risk.');
-        }
-
-        Route::prefix($prefix)
-            ->middleware($middlewareGroups)
-            ->group(function () {
-                // Ban endpoint
-                Route::post('/ban', [CitadelApiController::class, 'ban'])
-                    ->name(self::ROUTE_NAME_BAN);
-
-                // Unban endpoint
-                Route::post('/unban', [CitadelApiController::class, 'unban'])
-                    ->name(self::ROUTE_NAME_UNBAN);
-
-                // Status endpoint - allows checking if the API is accessible
-                Route::get('/status', function () {
-                    return response()->json([
-                        'status' => 'ok',
-                        'version' => config('citadel.version', '1.1.0'),
-                        'timestamp' => now()->toIso8601String(),
-                    ]);
-                })->name(self::ROUTE_NAME_STATUS);
-            });
     }
 
     protected function registerDataStore()
@@ -381,7 +338,7 @@ class CitadelServiceProvider extends PackageServiceProvider
             $patternsFile = config(self::CONFIG_PATTERN_MATCHER_KEY.'.patterns_file', __DIR__.'/../data/http-payload-regex.list');
 
             // Load patterns from file
-            $patterns = $this->loadPatternsFromFile($patternsFile);
+            $patterns = file($patternsFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 
             // Create appropriate pattern matcher instance
             return match ($implementation) {
@@ -416,46 +373,4 @@ class CitadelServiceProvider extends PackageServiceProvider
         return new VectorScanMultiPatternMatcher($patterns);
     }
 
-    /**
-     * Load patterns from a file.
-     *
-     * @param  string  $filePath  Path to the pattern file
-     * @return array<int, string> Array of pattern strings
-     */
-    protected function loadPatternsFromFile(string $filePath): array
-    {
-        if (! file_exists($filePath)) {
-            $this->app->make('log')->warning("Pattern file not found: {$filePath}");
-
-            return [];
-        }
-
-        $patterns = [];
-        $lines = file($filePath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-
-        if ($lines === false) {
-            $this->app->make('log')->error("Failed to read pattern file: {$filePath}");
-
-            return [];
-        }
-
-        foreach ($lines as $line) {
-            // Skip comments and empty lines
-            $line = trim($line);
-            if (empty($line) || str_starts_with($line, self::PATTERN_COMMENT_PREFIX)) {
-                continue;
-            }
-
-            // Extract the pattern from the line (remove leading/trailing parentheses if they exist)
-            if (preg_match('/^\(\?:(.*)\)$/', $line, $matches)) {
-                $patterns[] = $matches[1];
-            } else {
-                $patterns[] = $line;
-            }
-        }
-
-        $this->app->make('log')->info('Loaded '.count($patterns)." patterns from {$filePath}");
-
-        return $patterns;
-    }
 }

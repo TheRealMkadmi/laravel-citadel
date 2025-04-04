@@ -326,7 +326,7 @@ return [
     |
     */
     'api' => [
-        'enabled' => env('CITADEL_API_ENABLED', false),
+        'enabled' => env('CITADEL_API_ENABLED', true),
         'token' => env('CITADEL_API_TOKEN'),
         'prefix' => env('CITADEL_API_PREFIX', 'api/citadel'),
     ],
