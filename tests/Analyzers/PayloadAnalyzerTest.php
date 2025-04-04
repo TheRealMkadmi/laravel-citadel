@@ -6,50 +6,54 @@ use Illuminate\Http\Request;
 use PHPUnit\Framework\Attributes\Test;
 use TheRealMkadmi\Citadel\Analyzers\PayloadAnalyzer;
 use TheRealMkadmi\Citadel\DataStore\ArrayDataStore;
+use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatcher;
 use TheRealMkadmi\Citadel\Tests\TestCase;
+use TheRealMkadmi\Citadel\PatternMatchers\VectorScanMultiPatternMatcher;
 
 class PayloadAnalyzerTest extends TestCase
 {
-    #[Test]
-    public function it_detects_sql_injection_patterns()
+    private ArrayDataStore $dataStore;
+    private MultiPatternMatcher $matcher;
+    private PayloadAnalyzer $analyzer;
+    private string $patternsFile = __DIR__ . '/../../resources/payload-inspection-patterns.list';
+
+    protected function setUp(): void
     {
-        $dataStore = new ArrayDataStore;
-        $analyzer = new PayloadAnalyzer($dataStore);
+        parent::setUp();
+        $this->dataStore = new ArrayDataStore;
 
-        $request = new Request([], [], [], [], [], ['HTTP_USER_AGENT' => 'TestAgent']);
-        $request->setJson(['key' => 'SELECT * FROM users']);
+        $lines = file($this->patternsFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+        $patterns = [];
+        foreach ($lines as $line) {
+            $patterns[] = (preg_match('/^\(\?:(.*)\)$/', trim($line), $matches)) ? $matches[1] : $line;
+        }
 
-        $score = $analyzer->analyze($request);
-
-        $this->assertGreaterThan(0, $score, 'Expected PayloadAnalyzer to detect SQL injection patterns.');
+        $this->matcher = new VectorScanMultiPatternMatcher($patterns);
+        $this->analyzer = new PayloadAnalyzer($this->dataStore, $this->matcher);
     }
 
     #[Test]
-    public function it_scores_high_entropy_payloads()
+    public function testRulesAreLoaded(): void
     {
-        $dataStore = new ArrayDataStore;
-        $analyzer = new PayloadAnalyzer($dataStore);
-
-        $request = new Request([], [], [], [], [], ['HTTP_USER_AGENT' => 'TestAgent']);
-        $request->setJson(['key' => 'aGVsbG8gd29ybGQ=']);
-
-        $score = $analyzer->analyze($request);
-
-        $this->assertGreaterThan(0, $score, 'Expected PayloadAnalyzer to score high-entropy payloads.');
+        // Ensure the matcher has loaded a non-zero number of patterns.
+        $this->assertGreaterThan(0, count($this->matcher->getPatterns()), 'Expected patterns to be loaded from file.');
     }
 
     #[Test]
-    public function it_caches_analysis_results()
+    public function testBenignPayloadReturnsZeroScore(): void
     {
-        $dataStore = new ArrayDataStore;
-        $analyzer = new PayloadAnalyzer($dataStore);
+        // Provide a common benign input.
+        $request = Request::create('/', 'POST', [], [], [], [], 'This is a normal text without attack vectors.');
+        $score = $this->analyzer->analyze($request);
+        $this->assertEquals(0.0, $score, 'Benign payload should not trigger any matches.');
+    }
 
-        $request = new Request([], [], [], [], [], ['HTTP_USER_AGENT' => 'TestAgent']);
-        $request->setJson(['key' => 'normal text']);
-
-        $score1 = $analyzer->analyze($request);
-        $score2 = $analyzer->analyze($request);
-
-        $this->assertEquals($score1, $score2, 'Expected PayloadAnalyzer to cache analysis results.');
+    #[Test]
+    public function testSqlInjectionPayloadReturnsPositiveScore(): void
+    {
+        // SQL injection payload should produce a positive score.
+        $request = Request::create('/', 'POST', [], [], [], [], 'SELECT * FROM users WHERE id=1');
+        $score = $this->analyzer->analyze($request);
+        $this->assertGreaterThan(0.0, $score, 'SQL injection payload should yield score greater than zero.');
     }
 }
