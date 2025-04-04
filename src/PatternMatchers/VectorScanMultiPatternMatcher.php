@@ -8,8 +8,9 @@ use FFI;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Config;
 use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatch;
+use TheRealMkadmi\Citadel\PatternMatchers\AbstractMultiPatternMatcher;
 
-final class VectorScanMultiPatternMatcher implements MultiPatternMatcher
+final class VectorScanMultiPatternMatcher extends AbstractMultiPatternMatcher
 {
     private const HS_SUCCESS          = 0;
     private const HS_INVALID          = -1;
@@ -48,18 +49,12 @@ final class VectorScanMultiPatternMatcher implements MultiPatternMatcher
     private FFI $ffi;
     private $db;
     private $scratch;
-    private array $patterns;
-
+    
     public function __construct(array $patterns)
     {
-        $this->patterns = array_values($patterns);
         $this->loadVectorscanLibrary();
+        parent::__construct($patterns);
         $this->compilePatterns();
-    }
-
-    public function getPatterns(): array
-    {
-        return $this->patterns;
     }
 
     private function loadVectorscanLibrary(): void
@@ -119,33 +114,6 @@ typedef struct hs_scratch hs_scratch_t;
 
 struct hs_stream;
 typedef struct hs_stream hs_stream_t;
-
-#define HS_SUCCESS              0
-#define HS_INVALID              -1
-#define HS_NOMEM                -2
-#define HS_SCAN_TERMINATED      -3
-#define HS_COMPILER_ERROR       -4
-#define HS_DB_VERSION_ERROR     -5
-#define HS_DB_PLATFORM_ERROR    -6
-#define HS_DB_MODE_ERROR        -7
-#define HS_BAD_ALIGN            -8
-#define HS_BAD_ALLOC            -9
-
-#define HS_FLAG_CASELESS        1
-#define HS_FLAG_DOTALL          2
-#define HS_FLAG_MULTILINE       4
-#define HS_FLAG_SINGLEMATCH     8
-#define HS_FLAG_ALLOWEMPTY      16
-#define HS_FLAG_UTF8            32
-#define HS_FLAG_UCP             64
-#define HS_FLAG_PREFILTER       128
-#define HS_FLAG_SOM_LEFTMOST     256
-#define HS_FLAG_NONE            0
-
-#define HS_MODE_BLOCK           1
-#define HS_MODE_NOSTREAM        1
-#define HS_MODE_STREAM          2
-#define HS_MODE_VECTORED        4
 
 hs_error_t hs_alloc_scratch(const hs_database_t *db, hs_scratch_t **scratch);
 hs_error_t hs_free_scratch(hs_scratch_t *scratch);

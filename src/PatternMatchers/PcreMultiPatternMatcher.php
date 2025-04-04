@@ -1,12 +1,12 @@
 <?php
 
-declare(strict_types=1);
-
 namespace TheRealMkadmi\Citadel\PatternMatchers;
 
-use TheRealMkadmi\Citadel\Enums\ResponseType;
+declare(strict_types=1);
 
-final class PcreMultiPatternMatcher implements MultiPatternMatcher
+use TheRealMkadmi\Citadel\Enums\ResponseType;
+use TheRealMkadmi\Citadel\PatternMatchers\AbstractMultiPatternMatcher; 
+final class PcreMultiPatternMatcher extends AbstractMultiPatternMatcher
 {
     /**
      * Constants for PCRE options
@@ -22,13 +22,6 @@ final class PcreMultiPatternMatcher implements MultiPatternMatcher
      * Error message constants
      */
     private const ERROR_INVALID_PATTERN = 'Invalid PCRE pattern';
-
-    /**
-     * Array of regex patterns to match against
-     * 
-     * @var array<int, string>
-     */
-    private array $patterns = [];
 
     /**
      * PCRE options
@@ -51,8 +44,7 @@ final class PcreMultiPatternMatcher implements MultiPatternMatcher
      */
     public function __construct(array $patterns, array $options = [])
     {
-        // Ensure patterns array is numerically indexed starting from 0
-        $this->patterns = array_values($patterns);
+        parent::__construct($patterns);
         
         // Merge default options with provided options
         $this->options = array_merge(self::PCRE_DEFAULT_OPTIONS, $options);

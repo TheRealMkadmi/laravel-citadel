@@ -23,13 +23,8 @@ class PayloadAnalyzerTest extends TestCase
         $this->dataStore = new ArrayDataStore;
 
         $lines = file($this->patternsFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
-        $patterns =
-            collect($lines)
-                ->map(fn($line) => trim($line))
-                ->filter(fn($line) => !empty($line) && !str_starts_with($line, '#'))
-                ->toArray();
-
-        $this->matcher = new VectorScanMultiPatternMatcher($patterns);
+    
+        $this->matcher = new VectorScanMultiPatternMatcher($lines);
         $this->analyzer = new PayloadAnalyzer($this->dataStore, $this->matcher);
     }
 
