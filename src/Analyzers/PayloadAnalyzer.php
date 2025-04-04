@@ -15,14 +15,15 @@ final class PayloadAnalyzer extends AbstractAnalyzer
      * Configuration constants
      */
     private const CONFIG_ENABLED_KEY = 'citadel.payload.enable_payload_analyzer';
+
     private const CONFIG_CACHE_TTL_KEY = 'citadel.payload.cache_ttl';
+
     private const CONFIG_MAX_SCORE_KEY = 'citadel.payload.max_score';
+
     private const CONFIG_THREAT_THRESHOLD_KEY = 'citadel.payload.threat_threshold';
-    
+
     /**
      * The multi-pattern matcher instance.
-     *
-     * @var MultiPatternMatcher
      */
     private MultiPatternMatcher $matcher;
 
@@ -36,18 +37,18 @@ final class PayloadAnalyzer extends AbstractAnalyzer
     /**
      * Constructor.
      *
-     * @param DataStore            $dataStore       The datastore for caching.
-     * @param MultiPatternMatcher  $matcher         The preloaded matcher (injected).
-     * @param array<int, float>    $patternImpacts  Optional mapping of pattern IDs to impact scores.
+     * @param  DataStore  $dataStore  The datastore for caching.
+     * @param  MultiPatternMatcher  $matcher  The preloaded matcher (injected).
+     * @param  array<int, float>  $patternImpacts  Optional mapping of pattern IDs to impact scores.
      */
     public function __construct(DataStore $dataStore, MultiPatternMatcher $matcher, array $patternImpacts = [])
     {
         parent::__construct($dataStore);
         $this->matcher = $matcher;
-        
+
         // Set cache TTL from configuration
         $this->cacheTtl = config(self::CONFIG_CACHE_TTL_KEY, 3600);
-        
+
         // If no mapping is provided, default each pattern to an impact of 1.0
         $this->patternImpacts = $patternImpacts ?: array_fill(0, count($matcher->getPatterns()), 1.0);
     }
@@ -78,8 +79,6 @@ final class PayloadAnalyzer extends AbstractAnalyzer
 
     /**
      * Get a unique identifier for this analyzer.
-     *
-     * @return string
      */
     public function getIdentifier(): string
     {
@@ -89,13 +88,13 @@ final class PayloadAnalyzer extends AbstractAnalyzer
     /**
      * Analyze the HTTP request by scanning its content using the MultiPatternMatcher.
      *
-     * @param Request $request The incoming HTTP request.
+     * @param  Request  $request  The incoming HTTP request.
      * @return float The computed impact score.
      */
     public function analyze(Request $request): float
     {
         // If analyzer is disabled, return 0 score
-        if (!$this->isEnabled()) {
+        if (! $this->isEnabled()) {
             return 0.0;
         }
 
@@ -103,25 +102,26 @@ final class PayloadAnalyzer extends AbstractAnalyzer
 
         // Use a cache key based on the request fingerprint and content hash.
         $requestFingerprint = $request->getFingerprint();
-        $cacheKey = $this->getIdentifier() . ':' . $requestFingerprint . ':' . md5($content);
-        
+        $cacheKey = $this->getIdentifier().':'.$requestFingerprint.':'.md5($content);
+
         if (($cached = $this->dataStore->getValue($cacheKey)) !== null) {
             Log::debug("PayloadAnalyzer cache hit for key: {$cacheKey}");
-            return (float)$cached;
+
+            return (float) $cached;
         }
 
         Log::info("PayloadAnalyzer starting scan for request with key: {$cacheKey}");
-        
+
         // Perform the scan; get matches
         $matches = $this->matcher->scan($content);
-        
+
         // Compute a score. We sum the impact values of each match.
         $score = 0.0;
         foreach ($matches as $match) {
             // Ensure pattern impact mapping exists.
             $impact = $this->patternImpacts[$match->id] ?? 1.0;
             $score += $impact;
-            
+
             // Log matches for debugging
             Log::debug("PayloadAnalyzer matched pattern ID {$match->id}: '{$match->originalPattern}' with impact {$impact}");
         }
@@ -130,11 +130,11 @@ final class PayloadAnalyzer extends AbstractAnalyzer
         $maxScore = config(self::CONFIG_MAX_SCORE_KEY, 100.0);
         $score = min($score, $maxScore);
 
-        Log::info("PayloadAnalyzer completed scan: found " . count($matches) . " matches, final score = {$score}");
+        Log::info('PayloadAnalyzer completed scan: found '.count($matches)." matches, final score = {$score}");
 
         // Cache the result.
         $this->dataStore->setValue($cacheKey, $score, $this->cacheTtl);
-        
+
         return $score;
     }
 }

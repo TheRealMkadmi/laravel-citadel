@@ -7,8 +7,11 @@ namespace TheRealMkadmi\Citadel\PatternMatchers;
 final class MultiPatternMatch
 {
     public int $id;
+
     public int $from;
+
     public int $to;
+
     public int $flags;
     public string $matchedSubstring;
     public string $originalPattern; 

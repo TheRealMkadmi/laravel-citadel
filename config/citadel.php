@@ -354,11 +354,11 @@ return [
     | Configure the pattern matcher implementation and settings.
     | - implementation: The pattern matcher implementation to use ('vectorscan', 'pcre', or other implementations)
     | - patterns_file: The path to the file containing regex patterns
-    | 
+    |
     */
     'pattern_matcher' => [
         'implementation' => env('CITADEL_PATTERN_MATCHER_IMPL', 'vectorscan'),
-        'patterns_file' => env('CITADEL_PATTERNS_FILE', __DIR__ . '/../data/http-payload-regex.list'),
+        'patterns_file' => env('CITADEL_PATTERNS_FILE', __DIR__.'/../data/http-payload-regex.list'),
     ],
 
     /*
