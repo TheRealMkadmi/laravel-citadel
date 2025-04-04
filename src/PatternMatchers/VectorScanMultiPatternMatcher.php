@@ -258,6 +258,12 @@ CDEF;
             }
             $logMessage .= " Message: {$errorMessage}";
             Log::error($logMessage);
+
+            // Log unsupported regex features if applicable
+            if (str_contains($errorMessage, 'unsupported')) {
+                Log::error("The pattern contains unsupported regex features. Please review the pattern syntax., error: $errorMessage ");
+            }
+
             throw new \RuntimeException("libvectorscan compilation failed: {$errorMessage} (Code: {$ret})");
         }
 
