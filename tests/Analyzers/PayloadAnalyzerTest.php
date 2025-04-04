@@ -27,7 +27,6 @@ class PayloadAnalyzerTest extends TestCase
             collect($lines)
                 ->map(fn($line) => trim($line))
                 ->filter(fn($line) => !empty($line) && !str_starts_with($line, '#'))
-                ->map(fn($line) => explode(' ', $line, 2)[0])
                 ->toArray();
 
         $this->matcher = new VectorScanMultiPatternMatcher($patterns);
@@ -41,21 +40,21 @@ class PayloadAnalyzerTest extends TestCase
         $this->assertGreaterThan(0, count($this->matcher->getPatterns()), 'Expected patterns to be loaded from file.');
     }
 
-    // #[Test]
-    // public function testBenignPayloadReturnsZeroScore(): void
-    // {
-    //     // Provide a common benign input.
-    //     $request = Request::create('/', 'POST', [], [], [], [], 'This is a normal text without attack vectors.');
-    //     $score = $this->analyzer->analyze($request);
-    //     $this->assertEquals(0.0, $score, 'Benign payload should not trigger any matches.');
-    // }
+    #[Test]
+    public function testBenignPayloadReturnsZeroScore(): void
+    {
+        // Provide a common benign input.
+        $request = Request::create('/', 'POST', [], [], [], [], 'This is a normal text without attack vectors.');
+        $score = $this->analyzer->analyze($request);
+        $this->assertEquals(0.0, $score, 'Benign payload should not trigger any matches.');
+    }
 
-    // #[Test]
-    // public function testSqlInjectionPayloadReturnsPositiveScore(): void
-    // {
-    //     // SQL injection payload should produce a positive score.
-    //     $request = Request::create('/', 'POST', [], [], [], [], 'SELECT * FROM users WHERE id=1');
-    //     $score = $this->analyzer->analyze($request);
-    //     $this->assertGreaterThan(0.0, $score, 'SQL injection payload should yield score greater than zero.');
-    // }
+    #[Test]
+    public function testSqlInjectionPayloadReturnsPositiveScore(): void
+    {
+        // SQL injection payload should produce a positive score.
+        $request = Request::create('/', 'POST', [], [], [], [], 'SELECT * FROM users WHERE id=1');
+        $score = $this->analyzer->analyze($request);
+        $this->assertGreaterThan(0.0, $score, 'SQL injection payload should yield score greater than zero.');
+    }
 }
