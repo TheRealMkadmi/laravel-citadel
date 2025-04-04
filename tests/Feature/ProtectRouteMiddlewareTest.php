@@ -4,7 +4,6 @@ namespace TheRealMkadmi\Citadel\Tests\Feature;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\Log;
 use PHPUnit\Framework\Attributes\Test;
 use TheRealMkadmi\Citadel\DataStore\ArrayDataStore;
 use TheRealMkadmi\Citadel\Middleware\ProtectRouteMiddleware;
@@ -44,10 +43,10 @@ class ProtectRouteMiddlewareTest extends TestCase
     {
         // Set up the mock fingerprint
         $fingerprintValue = 'test-fingerprint';
-        
+
         // Setup the datastore with banned fingerprint
         $dataStore = new ArrayDataStore;
-        $dataStore->setValue('ban:' . $fingerprintValue, true);
+        $dataStore->setValue('ban:'.$fingerprintValue, true);
 
         // Setup the middleware with our datastore
         $middleware = new ProtectRouteMiddleware([], $dataStore);

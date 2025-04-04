@@ -5,13 +5,11 @@ use TheRealMkadmi\Citadel\CitadelServiceProvider;
 use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\Http\Controllers\CitadelApiController;
 
-
-
 $prefix = config(CitadelConfig::KEY_API_PREFIX, 'api/citadel');
 $middlewareGroups = ['api'];
 
 // Add the API auth middleware if a token is configured
-if (!empty(config(CitadelConfig::KEY_API_TOKEN))) {
+if (! empty(config(CitadelConfig::KEY_API_TOKEN))) {
     $middlewareGroups[] = CitadelServiceProvider::MIDDLEWARE_ALIAS_API_AUTH;
 } else {
     app('log')->warning('Citadel API is enabled but no API token is configured. This is a security risk.');
@@ -38,6 +36,5 @@ Route::prefix($prefix)
         })->name(CitadelServiceProvider::ROUTE_NAME_STATUS);
     });
 
-
-Log::info('Citadel API routes registered with prefix: ' . $prefix);
-Log::info('Citadel API routes middleware groups: ' . implode(', ', $middlewareGroups));
+Log::info('Citadel API routes registered with prefix: '.$prefix);
+Log::info('Citadel API routes middleware groups: '.implode(', ', $middlewareGroups));

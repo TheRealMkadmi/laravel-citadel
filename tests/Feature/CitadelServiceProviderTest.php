@@ -2,11 +2,8 @@
 
 namespace TheRealMkadmi\Citadel\Tests\Feature;
 
-use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\Test;
 use TheRealMkadmi\Citadel\CitadelServiceProvider;
-use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\Tests\TestCase;
 
 class CitadelServiceProviderTest extends TestCase
@@ -38,7 +35,7 @@ class CitadelServiceProviderTest extends TestCase
         $routes = $router->getRoutes();
         $banRoute = $routes->getByName(CitadelServiceProvider::ROUTE_NAME_BAN);
         $this->assertNotNull($banRoute, 'The ban route is not registered.');
-        
+
         $unbanRoute = $routes->getByName(CitadelServiceProvider::ROUTE_NAME_UNBAN);
         $this->assertNotNull($unbanRoute, 'The unban route is not registered.');
 

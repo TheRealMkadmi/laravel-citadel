@@ -378,7 +378,7 @@ return [
     */
     'pattern_matcher' => [
         'implementation' => env('CITADEL_PATTERN_MATCHER_IMPL', 'vectorscan'),
-        'patterns_file' => env('CITADEL_PATTERNS_FILE', __DIR__ . '/../resources/payload-inspection-patterns.list'),
+        'patterns_file' => env('CITADEL_PATTERNS_FILE', __DIR__.'/../resources/payload-inspection-patterns.list'),
     ],
 
     /*

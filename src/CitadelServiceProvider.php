@@ -17,7 +17,6 @@ use TheRealMkadmi\Citadel\Analyzers\IRequestAnalyzer;
 use TheRealMkadmi\Citadel\Commands\CitadelBanCommand;
 use TheRealMkadmi\Citadel\Commands\CitadelUnbanCommand;
 use TheRealMkadmi\Citadel\Components\Fingerprint;
-use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\ArrayDataStore;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 use TheRealMkadmi\Citadel\DataStore\OctaneDataStore;
@@ -45,14 +44,14 @@ class CitadelServiceProvider extends PackageServiceProvider
     private const CONFIG_PATTERN_MATCHER_KEY = 'citadel.pattern_matcher';
 
     private const CONFIG_VECTORSCAN_KEY = 'citadel.vectorscan';
-    
+
     /**
      * Route names
      */
     public const ROUTE_NAME_BAN = 'citadel.api.ban';
-    
+
     public const ROUTE_NAME_UNBAN = 'citadel.api.unban';
-    
+
     public const ROUTE_NAME_STATUS = 'citadel.api.status';
 
     /**
@@ -372,5 +371,4 @@ class CitadelServiceProvider extends PackageServiceProvider
     {
         return new VectorScanMultiPatternMatcher($patterns);
     }
-
 }
