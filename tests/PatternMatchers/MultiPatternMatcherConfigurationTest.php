@@ -9,7 +9,7 @@ use PHPUnit\Framework\TestCase;
 use TheRealMkadmi\Citadel\CitadelServiceProvider;
 use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatcher;
 use TheRealMkadmi\Citadel\PatternMatchers\PcreMultiPatternMatcher;
-use TheRealMkadmi\Citadel\PatternMatchers\VectorScanMultiPaternMatcher;
+use TheRealMkadmi\Citadel\PatternMatchers\VectorScanMultiPatternMatcher;
 use TheRealMkadmi\Citadel\Tests\TestCase as CitadelTestCase;
 
 class MultiPatternMatcherConfigurationTest extends CitadelTestCase
@@ -40,7 +40,7 @@ class MultiPatternMatcherConfigurationTest extends CitadelTestCase
         // Skip if the vectorscan library isn't available
         try {
             // Try to instantiate the Vectorscan implementation with a test pattern
-            new VectorScanMultiPaternMatcher(['test']);
+            new VectorScanMultiPatternMatcher(['test']);
         } catch (\Throwable $e) {
             if (strpos($e->getMessage(), 'libvectorscan shared library not found') !== false) {
                 $this->markTestSkipped('Skipped because libvectorscan is not available');
@@ -54,7 +54,7 @@ class MultiPatternMatcherConfigurationTest extends CitadelTestCase
         $matcher = $this->app->make(MultiPatternMatcher::class);
         
         // Assert that it's the correct implementation
-        $this->assertInstanceOf(VectorScanMultiPaternMatcher::class, $matcher);
+        $this->assertInstanceOf(VectorScanMultiPatternMatcher::class, $matcher);
     }
     
     /**
@@ -64,7 +64,7 @@ class MultiPatternMatcherConfigurationTest extends CitadelTestCase
     {
         // Skip if the vectorscan library isn't available
         try {
-            new VectorScanMultiPaternMatcher(['test']);
+            new VectorScanMultiPatternMatcher(['test']);
         } catch (\Throwable $e) {
             if (strpos($e->getMessage(), 'libvectorscan shared library not found') !== false) {
                 // If Vectorscan is not available, we expect PCRE to be used as a fallback
@@ -90,7 +90,7 @@ class MultiPatternMatcherConfigurationTest extends CitadelTestCase
         $matcher = $this->app->make(MultiPatternMatcher::class);
         
         // Assert that Vectorscan is the default
-        $this->assertInstanceOf(VectorScanMultiPaternMatcher::class, $matcher);
+        $this->assertInstanceOf(VectorScanMultiPatternMatcher::class, $matcher);
     }
     
     /**
@@ -174,7 +174,7 @@ class MultiPatternMatcherConfigurationTest extends CitadelTestCase
      */
     public function testFallbackToPcreWhenVectorscanNotAvailable(): void
     {
-        // This test requires mocking the VectorScanMultiPaternMatcher constructor
+        // This test requires mocking the VectorScanMultiPatternMatcher constructor
         // to simulate that Vectorscan is not available.
         // Since we can't easily mock that constructor, we'll use a more indirect approach.
         
@@ -183,7 +183,7 @@ class MultiPatternMatcherConfigurationTest extends CitadelTestCase
         
         // Try to instantiate the Vectorscan implementation
         try {
-            new VectorScanMultiPaternMatcher(['test']);
+            new VectorScanMultiPatternMatcher(['test']);
         } catch (\Throwable $e) {
             if (strpos($e->getMessage(), 'libvectorscan shared library not found') !== false) {
                 // If Vectorscan is not available, we expect the service provider to fall back to PCRE

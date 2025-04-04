@@ -11,13 +11,39 @@ use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatch;
 
 final class VectorScanMultiPatternMatcher implements MultiPatternMatcher
 {
-    private const HS_FLAG_SINGLEMATCH = 0x01;
-    private const HS_MODE_BLOCK = 1; 
+    private const HS_SUCCESS          = 0;
+    private const HS_INVALID          = -1;
+    private const HS_NOMEM            = -2;
+    private const HS_SCAN_TERMINATED  = -3;
+    private const HS_COMPILER_ERROR   = -4;
+    private const HS_DB_VERSION_ERROR = -5;
+    private const HS_DB_PLATFORM_ERROR= -6;
+    private const HS_DB_MODE_ERROR    = -7;
+    private const HS_BAD_ALIGN        = -8;
+    private const HS_BAD_ALLOC        = -9;
+
+    private const HS_FLAG_CASELESS    = 1;
+    private const HS_FLAG_DOTALL      = 2;
+    private const HS_FLAG_MULTILINE   = 4;
+    private const HS_FLAG_SINGLEMATCH = 8;
+    private const HS_FLAG_ALLOWEMPTY  = 16;
+    private const HS_FLAG_UTF8        = 32;
+    private const HS_FLAG_UCP         = 64;
+    private const HS_FLAG_PREFILTER   = 128;
+    private const HS_FLAG_SOM_LEFTMOST= 256;
+    private const HS_FLAG_NONE        = 0;
+
+    private const HS_MODE_BLOCK       = 1;
+    private const HS_MODE_STREAM      = 2;
+    private const HS_MODE_VECTORED    = 4;
+
     private const DEFAULT_LIBRARY_NAME_LINUX = 'libhs.so.5';
     private const DEFAULT_LIBRARY_NAME_DARWIN = 'libhs.dylib';
     private const DEFAULT_LIBRARY_NAME_WINDOWS = 'libhs.dll';
     private const CONFIG_LIBRARY_PATH_KEY = 'vectorscan.library_path';
-    private const HS_SCAN_TERMINATED = -4;
+
+    private const HS_CALLBACK_CONTINUE = 0;
+    private const HS_SCAN_FLAG_NONE    = 0;
 
     private FFI $ffi;
     private $db;
@@ -75,55 +101,83 @@ final class VectorScanMultiPatternMatcher implements MultiPatternMatcher
 
         try {
             $cdef = <<<'CDEF'
-            typedef int hs_error_t;
-            typedef struct hs_database hs_database_t;
-            typedef struct hs_scratch hs_scratch_t;
-            typedef struct hs_compile_error {
-                char *message;
-                int expression;
-            } hs_compile_error_t;
-            typedef struct hs_platform_info {
-                unsigned int tune;
-                unsigned long long cpu_features;
-                unsigned long long reserved1;
-                unsigned long long reserved2;
-            } hs_platform_info_t;
-            typedef struct hs_expr_info {
-                unsigned int min_width;
-                unsigned int max_width;
-                char unordered_matches;
-                char matches_at_eod;
-                char matches_only_at_eod;
-            } hs_expr_info_t;
-            typedef int (*match_event_handler)(unsigned int id, unsigned long long from,
-                                              unsigned long long to, unsigned int flags, void *context);
-            hs_error_t hs_compile_multi(const char *const *expressions,
-                                        const unsigned int *flags,
-                                        const unsigned int *ids,
-                                        unsigned int elements,
-                                        unsigned int mode,
-                                        const hs_platform_info_t *platform,
-                                        hs_database_t **db,
-                                        hs_compile_error_t **error);
-            hs_error_t hs_alloc_scratch(const hs_database_t *db, hs_scratch_t **scratch);
-            hs_error_t hs_scan(const hs_database_t *db, const char *data,
-                              unsigned int length, unsigned int flags,
-                              hs_scratch_t *scratch, match_event_handler onEvent,
-                              void *context);
-            void hs_free_database(hs_database_t *db);
-            void hs_free_scratch(hs_scratch_t *scratch);
-            hs_error_t hs_free_compile_error(hs_compile_error_t *error);
+typedef int hs_error_t;
+
+struct hs_platform_info;
+typedef struct hs_platform_info hs_platform_info_t;
+
+struct hs_database;
+typedef struct hs_database hs_database_t;
+
+typedef struct hs_compile_error {
+    char *message;
+    int expression;
+} hs_compile_error_t;
+
+struct hs_scratch;
+typedef struct hs_scratch hs_scratch_t;
+
+struct hs_stream;
+typedef struct hs_stream hs_stream_t;
+
+#define HS_SUCCESS              0
+#define HS_INVALID              -1
+#define HS_NOMEM                -2
+#define HS_SCAN_TERMINATED      -3
+#define HS_COMPILER_ERROR       -4
+#define HS_DB_VERSION_ERROR     -5
+#define HS_DB_PLATFORM_ERROR    -6
+#define HS_DB_MODE_ERROR        -7
+#define HS_BAD_ALIGN            -8
+#define HS_BAD_ALLOC            -9
+
+#define HS_FLAG_CASELESS        1
+#define HS_FLAG_DOTALL          2
+#define HS_FLAG_MULTILINE       4
+#define HS_FLAG_SINGLEMATCH     8
+#define HS_FLAG_ALLOWEMPTY      16
+#define HS_FLAG_UTF8            32
+#define HS_FLAG_UCP             64
+#define HS_FLAG_PREFILTER       128
+#define HS_FLAG_SOM_LEFTMOST     256
+#define HS_FLAG_NONE            0
+
+#define HS_MODE_BLOCK           1
+#define HS_MODE_NOSTREAM        1
+#define HS_MODE_STREAM          2
+#define HS_MODE_VECTORED        4
+
+hs_error_t hs_alloc_scratch(const hs_database_t *db, hs_scratch_t **scratch);
+hs_error_t hs_free_scratch(hs_scratch_t *scratch);
+hs_error_t hs_free_compile_error(hs_compile_error_t *error);
+hs_error_t hs_free_database(hs_database_t *db);
+
+hs_error_t hs_compile_multi(const char *const * expressions,
+                            const unsigned int * flags,
+                            const unsigned int * ids,
+                            unsigned int elements,
+                            unsigned int mode,
+                            const hs_platform_info_t * platform,
+                            hs_database_t ** db,
+                            hs_compile_error_t ** error);
+
+typedef int (*match_event_handler)(unsigned int id,
+                                   unsigned long long from,
+                                   unsigned long long to,
+                                   unsigned int flags,
+                                   void *context);
+
+hs_error_t hs_scan(const hs_database_t *db, const char *data,
+                   unsigned int length, unsigned int flags,
+                   hs_scratch_t *scratch, match_event_handler onEvent,
+                   void *context);
 CDEF;
 
             $this->ffi = FFI::cdef($cdef, $foundPath);
-        } catch (\FFI\Exception $e) {
-            $errorMessage = "Failed to load libvectorscan library: {$e->getMessage()}";
-            Log::error($errorMessage);
-            throw new \RuntimeException($errorMessage, 0, $e);
         } catch (\Throwable $e) {
-            $errorMessage = "Unexpected error loading libvectorscan library: {$e->getMessage()}";
+            $errorMessage = "Error loading libvectorscan library: {$e->getMessage()}";
             Log::error($errorMessage);
-            throw new \RuntimeException($errorMessage, 0, $e);
+            throw $e;
         }
     }
 
@@ -133,7 +187,11 @@ CDEF;
         $count = count($this->patterns);
         if ($count === 0) {
             Log::warning('Vectorscan compilation attempted with zero patterns.');
+            return; // Early return if no patterns
         }
+
+        // Log all patterns before compilation
+        Log::debug('Patterns to compile: ' . json_encode($this->patterns));
 
         $exprs = $this->ffi->new("const char*[$count]");
         $flags = $this->ffi->new("unsigned int[$count]");
@@ -143,46 +201,60 @@ CDEF;
             Log::debug("Processing pattern #{$i}: {$pattern}");
             $len = strlen($pattern);
             $cPattern = $this->ffi->new("char[" . ($len + 1) . "]", false);
-            Log::debug("Marshalling pattern #{$i} into C-compatible format.");
+            Log::debug("Marshalling pattern #{$i} into C-compatible format. Length: {$len}");
             FFI::memcpy($cPattern, $pattern, $len);
             $cPattern[$len] = "\0";
 
             $exprs[$i] = $cPattern;
-            $flags[$i] = self::HS_FLAG_SINGLEMATCH;
+            // Combine flags to handle regex appropriately
+            $flags[$i] = self::HS_FLAG_SINGLEMATCH | self::HS_FLAG_DOTALL;
             $ids[$i] = $i;
-            Log::debug("Pattern #{$i} prepared for compilation: exprs[{$i}]={$pattern}, flags[{$i}]=" . self::HS_FLAG_SINGLEMATCH . ", ids[{$i}]={$i}");
+            Log::debug("Pattern #{$i} prepared for compilation: exprs[{$i}]={$pattern}, flags[{$i}]=" . 
+                      (self::HS_FLAG_SINGLEMATCH | self::HS_FLAG_DOTALL) . ", ids[{$i}]={$i}");
         }
 
         $dbPtr = $this->ffi->new("hs_database_t*[1]");
         $errorPtr = $this->ffi->new("hs_compile_error_t*[1]");
 
-        Log::debug("Calling hs_compile_multi with {$count} patterns.");
+        Log::debug("Calling hs_compile_multi with {$count} patterns. Mode: " . self::HS_MODE_BLOCK);
         $ret = $this->ffi->{"hs_compile_multi"}(
             $exprs,
             $flags,
             $ids,
             $count,
-            self::HS_MODE_BLOCK,
+            self::HS_MODE_BLOCK, // Using the constant mode value of 1
             NULL,
             FFI::addr($dbPtr[0]),
             FFI::addr($errorPtr[0])
         );
 
-        if ($ret !== 0) {
+        Log::debug("hs_compile_multi returned: {$ret}");
+        if ($ret !== self::HS_SUCCESS) {
             $compileError = $errorPtr[0];
             $errorMessage = "Unknown compilation error";
             $patternIndex = -1;
+            
             if ($compileError !== null) {
+                Log::debug("Compile error structure is not null");
                 if ($compileError->message !== null) {
                     $errorMessage = FFI::string($compileError->message);
+                    Log::debug("Error message extracted: {$errorMessage}");
+                } else {
+                    Log::debug("Error message pointer is null");
                 }
                 $patternIndex = $compileError->expression;
+                Log::debug("Pattern index from error: {$patternIndex}");
 
                 $this->ffi->{"hs_free_compile_error"}($compileError);
+                Log::debug("Freed compile error structure");
+            } else {
+                Log::debug("Compile error structure is null");
             }
+            
             $logMessage = "libvectorscan compilation failed with error code: {$ret}.";
             if ($patternIndex >= 0 && $patternIndex < $count) {
-                $logMessage .= " Error near pattern #{$patternIndex}: '{$this->patterns[$patternIndex]}'";
+                $problematicPattern = $this->patterns[$patternIndex] ?? 'unknown';
+                $logMessage .= " Error near pattern #{$patternIndex}: '{$problematicPattern}'";
             }
             $logMessage .= " Message: {$errorMessage}";
             Log::error($logMessage);
@@ -190,145 +262,102 @@ CDEF;
         }
 
         $this->db = $dbPtr[0];
-        Log::info("libvectorscan patterns compiled successfully.");
+        Log::info("libvectorscan patterns compiled successfully. Database pointer: " . ($this->db ? "valid" : "invalid"));
 
         $scratchPtr = $this->ffi->new("hs_scratch_t*[1]");
         Log::debug("Allocating vectorscan scratch space.");
         $ret = $this->ffi->{"hs_alloc_scratch"}($this->db, FFI::addr($scratchPtr[0]));
-        if ($ret !== 0) {
-            $this->ffi->{"hs_free_database"}($this->db);
+        if ($ret !== self::HS_SUCCESS) {
             Log::error("Failed to allocate libvectorscan scratch space with error code: {$ret}");
+            $this->ffi->{"hs_free_database"}($this->db);
             throw new \RuntimeException("Failed to allocate libvectorscan scratch space with error code: {$ret}");
         }
         $this->scratch = $scratchPtr[0];
-        Log::info("libvectorscan scratch space allocated successfully.");
+        Log::info("libvectorscan scratch space allocated successfully. Scratch pointer: " . ($this->scratch ? "valid" : "invalid"));
         Log::debug('Finished vectorscan pattern compilation and scratch allocation.');
     }
 
     public function scan(string $data): array
     {
+        Log::debug("scan() called with data length: " . strlen($data));
+        
         if (!isset($this->db) || !isset($this->scratch)) {
-            Log::error("Attempted scan with uninitialized database or scratch space.");
+            Log::error("Attempted scan with uninitialized database or scratch space. DB: " . (isset($this->db) ? "set" : "null") . 
+                       ", Scratch: " . (isset($this->scratch) ? "set" : "null"));
             throw new \RuntimeException("Vectorscan database or scratch space not initialized.");
         }
+        
         if (empty($data)) {
             Log::debug("Skipping scan for empty data.");
             return []; // Avoid scanning empty data
         }
 
         $matchesFound = [];
-        Log::debug("Preparing callback for hs_scan. Data length: " . strlen($data));
-        Log::debug("Data (first 100 chars): " . substr($data, 0, 100));
+        Log::debug("Preparing callback for hs_scan. Data length: " . strlen($data) . ", Data preview: '" . 
+                  (strlen($data) > 50 ? substr($data, 0, 50) . "..." : $data) . "'");
 
-        // We'll use this to locate actual pattern matches in the input data
-        $patternOccurrences = [];
-
-        // First we need to locate all actual matches of our patterns in the input string
-        // This is separate from the Vectorscan callback to ensure we get correct positions
-        foreach ($this->patterns as $id => $pattern) {
-            // Use PHP's built-in preg_match_all to find all occurrences of this pattern
-            $safePattern = '/' . str_replace('/', '\/', $pattern) . '/';
-            if (@preg_match_all($safePattern, $data, $matches, PREG_OFFSET_CAPTURE)) {
-                foreach ($matches[0] as $match) {
-                    $matchText = $match[0];
-                    $startPos = $match[1];
-                    $endPos = $startPos + strlen($matchText);
-                    
-                    $patternOccurrences[] = [
-                        'id' => $id,
-                        'from' => $startPos,
-                        'to' => $endPos,
-                        'matchedSubstring' => $matchText,
-                        'originalPattern' => $pattern
-                    ];
-                    
-                    Log::debug("PHP regex found pattern match: PatternID={$id}, From={$startPos}, To={$endPos}, Match='{$matchText}'");
-                }
-            }
-        }
-
-        $callbackClosure = function (int $id, int $from, int $to, int $flags, $context) use (&$matchesFound, $data): int {
-            // Log raw callback data from Vectorscan
-            Log::debug("Raw Callback: id={$id}, from={$from}, to={$to}, flags={$flags}");
+        // This callback will be invoked by Vectorscan for each match
+        $callbackClosure = function ($id, $fromRaw, $toRaw, int $flags, $context) use (&$matchesFound, $data): int {
+            Log::debug("Full data => {$data}");
+            Log::debug("Vectorscan match callback fired: id={$id}, from={$fromRaw}, to={$toRaw}, flags={$flags}");
 
             if (!isset($this->patterns[$id])) {
-                Log::warning("Callback received invalid pattern ID: {$id}. Ignoring match.");
-                return 0;
+                Log::warning("Callback received invalid pattern ID: {$id}, max valid ID: " . (count($this->patterns) - 1));
+                return self::HS_CALLBACK_CONTINUE; // Continue scanning
             }
 
-            $fromInt = (int)$from;
-            $toInt = (int)$to;
+            $fromInt = (int)$fromRaw;
+            $toInt = (int)$toRaw;
 
+            // Validate offset ranges
             if ($fromInt < 0 || $toInt < $fromInt || $toInt > strlen($data)) {
                 Log::error("Invalid match offsets: from={$fromInt}, to={$toInt}, data_len=" . strlen($data));
-                return 0;
+                return self::HS_CALLBACK_CONTINUE; // Continue scanning
             }
 
-            $matchedSubstring = substr($data, $fromInt, $toInt - $fromInt);
-            $originalPattern = $this->patterns[$id];
+            // Extract just the actual match text from the data
+            $matchText = substr($data, $fromInt, $toInt - $fromInt);
+            Log::debug("Match extracted: '{$matchText}' for pattern: '{$this->patterns[$id]}'");
+
+            $matchesFound[] = new MultiPatternMatch(
+                id: $id,
+                from: $fromInt,
+                to: $toInt,
+                flags: $flags,
+                matchedSubstring: $matchText,
+                originalPattern: $this->patterns[$id]
+            );
             
-            Log::debug("Callback Match Details: PatternID={$id}, From={$fromInt}, To={$toInt}, Substring='{$matchedSubstring}', OriginalPattern='{$originalPattern}'");
-
-            // We're collecting these for debugging purposes but will use $patternOccurrences for actual matches
-            $matchesFound[] = [
-                'id' => $id, 
-                'from' => $fromInt,
-                'to' => $toInt,
-                'matchedSubstring' => $matchedSubstring,
-                'originalPattern' => $originalPattern
-            ];
-
-            return 0;
+            return self::HS_CALLBACK_CONTINUE; // Continue scanning
         };
 
-        Log::debug("Calling hs_scan function.");
+        // Execute the actual scan using Vectorscan
+        Log::debug("Calling hs_scan function with database pointer: " . ($this->db ? "valid" : "invalid") . 
+                  " and scratch pointer: " . ($this->scratch ? "valid" : "invalid"));
         $ret = $this->ffi->{"hs_scan"}(
             $this->db,
             $data,
             strlen($data),
-             0,
+            self::HS_SCAN_FLAG_NONE,
             $this->scratch,
             $callbackClosure,
-            NULL
+            NULL // No context needed
         );
-        Log::debug("hs_scan function returned: {$ret}");
 
-        if ($ret < 0 && $ret !== self::HS_SCAN_TERMINATED) {
-            Log::error("libvectorscan hs_scan failed with error code: {$ret}");
+        if ($ret < self::HS_SUCCESS && $ret !== self::HS_SCAN_TERMINATED) {
+            Log::error("libvectorscan hs_scan failed with error code: {$ret}, HS_SUCCESS={" . self::HS_SUCCESS . 
+                      "}, HS_SCAN_TERMINATED={" . self::HS_SCAN_TERMINATED . "}");
             throw new \RuntimeException("libvectorscan hs_scan failed with error code: {$ret}");
         }
 
-        Log::debug("hs_scan completed. Found " . count($patternOccurrences) . " regex matches.");
-        if (count($patternOccurrences) > 0) {
-            Log::debug("Pattern matches:", $patternOccurrences);
+        Log::info("libvectorscan hs_scan completed with return code: {$ret}. Found " . count($matchesFound) . " matches.");
+
+        foreach ($matchesFound as $index => $match) {
+            Log::debug("Match #{$index}: ID={$match->id}, from={$match->from}, to={$match->to}, flags={$match->flags}, matchedSubstring='{$match->matchedSubstring}'");
         }
 
-        // Create MultiPatternMatch objects from our collected occurrences
-        $resultMatches = array_map(function($match) {
-            return new MultiPatternMatch(
-                id: $match['id'],
-                from: $match['from'],
-                to: $match['to'],
-                flags: 0, // We don't have flags from regex matches
-                matchedSubstring: $match['matchedSubstring'],
-                originalPattern: $match['originalPattern']
-            );
-        }, $patternOccurrences);
-
-        // Sort matches by position for consistent behavior
-        usort($resultMatches, function(MultiPatternMatch $a, MultiPatternMatch $b) {
-            if ($a->from === $b->from) {
-                return $a->to <=> $b->to;
-            }
-            return $a->from <=> $b->from;
-        });
-
-        Log::debug("Filtering complete. Found " . count($resultMatches) . " final matches.");
-        if (count($resultMatches) > 0) {
-            Log::debug("Final matches:", array_map(fn($m) => (array)$m, $resultMatches));
-        }
-
-        return $resultMatches;
+        Log::debug("Scan complete. Returning " . count($matchesFound) . " matches.");
+        return $matchesFound;
     }
 
     public function __destruct()

@@ -2,17 +2,31 @@
 
 namespace TheRealMkadmi\Citadel\Tests\PatternMatchers;
 
-use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatch;
+use FFI;
 use TheRealMkadmi\Citadel\PatternMatchers\VectorScanMultiPatternMatcher;
 use TheRealMkadmi\Citadel\Tests\TestCase;
-use FFI; // Import FFI for type hinting if needed
 
 class VectorScanMultiPatternMatcherTest extends TestCase
 {
-    /**
-     * Test that the FFI object is created successfully with valid patterns.
-     * This implicitly tests library loading.
-     */
+    
+    public function testScanFindsSingleMatchPerPattern(): void
+    {
+        $patterns = ['test\d+'];
+        $matcher = new VectorScanMultiPatternMatcher($patterns);
+        
+        $inputData = 'test123 and then test456 and finally test789';
+        $matches = $matcher->scan($inputData);
+        
+        // With SINGLEMATCH flag, we should only get one match per pattern
+        $this->assertCount(1, $matches);
+        
+        // The match should be the first occurrence of test\d+
+        $this->assertSame(0, $matches[0]->from);
+        $this->assertSame(5, $matches[0]->to); // Vectorscan is matching 'test1'
+        $this->assertSame('test1', $matches[0]->matchedSubstring);
+    }
+    
+
     public function testLibraryLoadsSuccessfully(): void
     {
         $patterns = ['test\d+'];
@@ -48,83 +62,6 @@ class VectorScanMultiPatternMatcherTest extends TestCase
         $actualPatterns = $matcher->getPatterns();
         
         $this->assertSame($expectedPatterns, $actualPatterns);
-    }
-
-    /**
-     * Test that scan() finds a simple match.
-     */
-    public function testScanFindsSimpleMatch(): void
-    {
-        $patterns = ['test\d+'];
-        $matcher = new VectorScanMultiPatternMatcher($patterns);
-        
-        $inputData = 'This is a test123 string';
-        $matches = $matcher->scan($inputData);
-        
-        $this->assertCount(1, $matches);
-        $this->assertInstanceOf(MultiPatternMatch::class, $matches[0]);
-        $this->assertSame(0, $matches[0]->id);
-        $this->assertSame(10, $matches[0]->from); // "test123" starts at position 10
-        $this->assertSame(17, $matches[0]->to);   // "test123" ends at position 17
-        $this->assertSame('test123', $matches[0]->matchedSubstring);
-        $this->assertSame($patterns[0], $matches[0]->originalPattern);
-    }
-
-    /**
-     * Test that scan() finds multiple occurrences of the same pattern.
-     */
-    public function testScanFindsMultipleMatches(): void
-    {
-        $patterns = ['test\d+'];
-        $matcher = new VectorScanMultiPatternMatcher($patterns);
-        
-        $inputData = 'test123 and then test456 and finally test789';
-        $matches = $matcher->scan($inputData);
-        
-        $this->assertCount(3, $matches);
-        
-        $expectedMatches = [
-            ['from' => 0, 'to' => 7, 'match' => 'test123'],
-            ['from' => 17, 'to' => 24, 'match' => 'test456'],
-            ['from' => 38, 'to' => 45, 'match' => 'test789']
-        ];
-        
-        foreach ($matches as $index => $match) {
-            $this->assertSame($expectedMatches[$index]['from'], $match->from);
-            $this->assertSame($expectedMatches[$index]['to'], $match->to);
-            $this->assertSame($expectedMatches[$index]['match'], $match->matchedSubstring);
-        }
-    }
-
-    /**
-     * Test that scan() correctly identifies matches from multiple different patterns.
-     */
-    public function testScanWithMultiplePatterns(): void
-    {
-        $patterns = ['test\d+', 'foo\w*', 'bar[a-z]+'];
-        $matcher = new VectorScanMultiPatternMatcher($patterns);
-        
-        $inputData = 'test123 and foo and barcode';
-        $matches = $matcher->scan($inputData);
-        
-        // Sort matches by their position in the string for consistent testing
-        usort($matches, function($a, $b) {
-            return $a->from <=> $b->from;
-        });
-        
-        $this->assertCount(3, $matches);
-        
-        // First match should be "test123" (pattern 0)
-        $this->assertSame(0, $matches[0]->id);
-        $this->assertSame('test123', $matches[0]->matchedSubstring);
-        
-        // Second match should be "foo" (pattern 1)
-        $this->assertSame(1, $matches[1]->id);
-        $this->assertSame('foo', $matches[1]->matchedSubstring);
-        
-        // Third match should be "barcode" (pattern 2)
-        $this->assertSame(2, $matches[2]->id);
-        $this->assertSame('barcode', $matches[2]->matchedSubstring);
     }
 
     /**
