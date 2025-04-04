@@ -23,9 +23,6 @@ use TheRealMkadmi\Citadel\DataStore\DataStore;
 use TheRealMkadmi\Citadel\DataStore\OctaneDataStore;
 use TheRealMkadmi\Citadel\DataStore\RedisDataStore;
 use TheRealMkadmi\Citadel\Http\Controllers\CitadelApiController;
-use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatcher;
-use TheRealMkadmi\Citadel\PatternMatchers\PcreMultiPatternMatcher;
-use TheRealMkadmi\Citadel\PatternMatchers\VectorScanMultiPaternMatcher;
 use TheRealMkadmi\Citadel\Middleware\ApiAuthMiddleware;
 use TheRealMkadmi\Citadel\Middleware\BanMiddleware;
 use TheRealMkadmi\Citadel\Middleware\GeofenceMiddleware;
@@ -383,14 +380,13 @@ class CitadelServiceProvider extends PackageServiceProvider
     /**
      * Create a PCRE-based pattern matcher.
      *
-     * @param array<int, string> $patterns Array of pattern strings
-     * @return MultiPatternMatcher
+     * @param  array<int, string>  $patterns  Array of pattern strings
      */
     protected function createPcrePatternMatcher(array $patterns): MultiPatternMatcher
     {
         // Get PCRE configuration from config
         $pcreConfig = config('citadel.pcre', []);
-        
+
         // Create and return the PCRE pattern matcher
         return new PcreMultiPatternMatcher($patterns, $pcreConfig);
     }
@@ -398,8 +394,7 @@ class CitadelServiceProvider extends PackageServiceProvider
     /**
      * Create a Vectorscan-based pattern matcher.
      *
-     * @param array<int, string> $patterns Array of pattern strings
-     * @return MultiPatternMatcher
+     * @param  array<int, string>  $patterns  Array of pattern strings
      */
     protected function createVectorscanPatternMatcher(array $patterns): MultiPatternMatcher
     {

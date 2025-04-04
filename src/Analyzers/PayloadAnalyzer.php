@@ -105,7 +105,7 @@ final class PayloadAnalyzer extends AbstractAnalyzer
         $matches = $this->matcher->scan($content);
 
         // Compute a score based on the number of matches
-        $score = (float)count($matches);
+        $score = (float) count($matches);
 
         // Log matches for debugging
         foreach ($matches as $match) {

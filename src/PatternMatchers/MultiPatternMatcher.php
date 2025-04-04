@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace TheRealMkadmi\Citadel\PatternMatchers;
 
-use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatch;
-
 interface MultiPatternMatcher
 {
     /**
