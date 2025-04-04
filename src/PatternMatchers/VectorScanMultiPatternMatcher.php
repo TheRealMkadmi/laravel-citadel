@@ -8,7 +8,6 @@ use FFI;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Config;
 use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatch;
-use TheRealMkadmi\Citadel\PatternMatchers\AbstractMultiPatternMatcher;
 
 final class VectorScanMultiPatternMatcher extends AbstractMultiPatternMatcher
 {
