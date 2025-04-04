@@ -1,8 +1,8 @@
 <?php
 
-namespace TheRealMkadmi\Citadel\PatternMatchers;
-
 declare(strict_types=1);
+
+namespace TheRealMkadmi\Citadel\PatternMatchers;
 
 use TheRealMkadmi\Citadel\Enums\ResponseType;
 use TheRealMkadmi\Citadel\PatternMatchers\AbstractMultiPatternMatcher; 

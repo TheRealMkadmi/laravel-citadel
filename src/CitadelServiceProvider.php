@@ -30,6 +30,7 @@ use TheRealMkadmi\Citadel\Middleware\ApiAuthMiddleware;
 use TheRealMkadmi\Citadel\Middleware\BanMiddleware;
 use TheRealMkadmi\Citadel\Middleware\GeofenceMiddleware;
 use TheRealMkadmi\Citadel\Middleware\ProtectRouteMiddleware;
+use TheRealMkadmi\Citadel\PatternMatchers\VectorScanMultiPatternMatcher;
 
 class CitadelServiceProvider extends PackageServiceProvider
 {
@@ -402,7 +403,7 @@ class CitadelServiceProvider extends PackageServiceProvider
      */
     protected function createVectorscanPatternMatcher(array $patterns): MultiPatternMatcher
     {
-        return new VectorScanMultiPaternMatcher($patterns);
+        return new VectorScanMultiPatternMatcher($patterns);
     }
 
     /**
