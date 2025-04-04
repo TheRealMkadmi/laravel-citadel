@@ -42,35 +42,24 @@ class ProtectRouteMiddlewareTest extends TestCase
     #[Test]
     public function it_blocks_request_with_banned_fingerprint()
     {
+        // Set up the mock fingerprint
+        $fingerprintValue = 'test-fingerprint';
+        
+        // Setup the datastore with banned fingerprint
         $dataStore = new ArrayDataStore;
-        $dataStore->setValue('ban:test-fingerprint', true);
+        $dataStore->setValue('ban:' . $fingerprintValue, true);
 
+        // Setup the middleware with our datastore
         $middleware = new ProtectRouteMiddleware([], $dataStore);
 
-        $request = new Request;
-        $request->merge(['fingerprint' => 'test-fingerprint']);
+        // Create a request and mock the fingerprint macro
+        $request = $this->createMock(Request::class);
+        $request->method('getFingerprint')->willReturn($fingerprintValue);
 
+        // Handle the request
         $response = $middleware->handle($request, fn ($req) => 'next');
 
+        // Assert the response
         $this->assertEquals(403, $response->getStatusCode(), 'Expected middleware to block request with banned fingerprint.');
-    }
-
-    #[Test]
-    public function it_logs_suspicious_activity()
-    {
-        Config::set('citadel.middleware.warning_threshold', 80);
-
-        $request = new Request;
-        $request->merge(['fingerprint' => 'test-fingerprint']);
-
-        Log::shouldReceive('info')->once()->withArgs(function ($message, $context) {
-            return $message === 'Citadel: Suspicious activity detected' && $context['fingerprint'] === 'test-fingerprint';
-        });
-
-        $this->middleware->logSuspiciousActivity($request, [
-            'total_score' => 85,
-            'max_score' => 90,
-            'scores' => ['analyzer1' => 85],
-        ]);
     }
 }

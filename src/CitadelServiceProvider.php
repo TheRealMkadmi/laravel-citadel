@@ -27,6 +27,7 @@ use TheRealMkadmi\Citadel\Middleware\ApiAuthMiddleware;
 use TheRealMkadmi\Citadel\Middleware\BanMiddleware;
 use TheRealMkadmi\Citadel\Middleware\GeofenceMiddleware;
 use TheRealMkadmi\Citadel\Middleware\ProtectRouteMiddleware;
+use TheRealMkadmi\Citadel\PatternMatchers\PcreMultiPatternMatcher;
 use TheRealMkadmi\Citadel\PatternMatchers\VectorScanMultiPatternMatcher;
 
 class CitadelServiceProvider extends PackageServiceProvider
@@ -43,6 +44,20 @@ class CitadelServiceProvider extends PackageServiceProvider
     private const CONFIG_PATTERN_MATCHER_KEY = 'citadel.pattern_matcher';
 
     private const CONFIG_VECTORSCAN_KEY = 'citadel.vectorscan';
+    
+    /**
+     * Route names
+     */
+    private const ROUTE_NAME_BAN = 'citadel.api.ban';
+    
+    private const ROUTE_NAME_UNBAN = 'citadel.api.unban';
+    
+    private const ROUTE_NAME_STATUS = 'citadel.api.status';
+
+    /**
+     * Pattern file constants
+     */
+    private const PATTERN_COMMENT_PREFIX = '#';
 
     /**
      * Middleware group names
@@ -171,11 +186,11 @@ class CitadelServiceProvider extends PackageServiceProvider
             ->group(function () {
                 // Ban endpoint
                 Route::post('/ban', [CitadelApiController::class, 'ban'])
-                    ->name('citadel.api.ban');
+                    ->name(self::ROUTE_NAME_BAN);
 
                 // Unban endpoint
                 Route::post('/unban', [CitadelApiController::class, 'unban'])
-                    ->name('citadel.api.unban');
+                    ->name(self::ROUTE_NAME_UNBAN);
 
                 // Status endpoint - allows checking if the API is accessible
                 Route::get('/status', function () {
@@ -184,7 +199,7 @@ class CitadelServiceProvider extends PackageServiceProvider
                         'version' => config('citadel.version', '1.1.0'),
                         'timestamp' => now()->toIso8601String(),
                     ]);
-                })->name('citadel.api.status');
+                })->name(self::ROUTE_NAME_STATUS);
             });
     }
 
@@ -427,7 +442,7 @@ class CitadelServiceProvider extends PackageServiceProvider
         foreach ($lines as $line) {
             // Skip comments and empty lines
             $line = trim($line);
-            if (empty($line) || strpos($line, '#') === 0) {
+            if (empty($line) || str_starts_with($line, self::PATTERN_COMMENT_PREFIX)) {
                 continue;
             }
 
