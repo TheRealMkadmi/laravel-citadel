@@ -15,18 +15,18 @@ class VectorScanMultiPatternMatcherTest extends TestCase
     {
         parent::setUp();
         $this->testDbPath = storage_path('app/test/vectorscan_test_patterns.db');
-        
+
         // Make sure the test directory exists
-        if (!File::isDirectory(dirname($this->testDbPath))) {
+        if (! File::isDirectory(dirname($this->testDbPath))) {
             File::makeDirectory(dirname($this->testDbPath), 0755, true);
         }
-        
+
         // Cleanup any existing test database file
         if (File::exists($this->testDbPath)) {
             File::delete($this->testDbPath);
         }
     }
-    
+
     protected function tearDown(): void
     {
         // Cleanup the test database file
@@ -155,7 +155,7 @@ class VectorScanMultiPatternMatcherTest extends TestCase
 
         $matcher->scan('test data');
     }
-    
+
     /**
      * Test serialization and deserialization of the pattern database
      */
@@ -163,41 +163,41 @@ class VectorScanMultiPatternMatcherTest extends TestCase
     {
         // Create test patterns - keeping it simple to avoid potential regex issues
         $patterns = ['test\d+'];
-        
+
         // Create a matcher and compile patterns
         $matcher = new VectorScanMultiPatternMatcher($patterns);
-        
+
         // Serialize the database to a test file
         $result = $matcher->serializeDatabase($this->testDbPath);
-        
+
         // Assert serialization success
         $this->assertTrue($result, 'Database serialization should succeed');
         $this->assertTrue(File::exists($this->testDbPath), 'Serialized database file should exist');
-        
+
         // Get file info to verify it's not empty
         $fileSize = File::size($this->testDbPath);
         $this->assertGreaterThan(0, $fileSize, 'Serialized database file should not be empty');
-        
+
         // Get database info to ensure it's valid
         $info = $matcher->getSerializedDatabaseInfo($this->testDbPath);
         $this->assertNotNull($info, 'Should be able to get database info');
-        
+
         // Test in a separate block to isolate any memory issues
         try {
             // Create a new matcher instance with the same patterns but provide the serialized database path
             $deserializedMatcher = new VectorScanMultiPatternMatcher($patterns, $this->testDbPath);
-            
+
             // Perform a scan with the deserialized database to verify functionality
             $inputData = 'test123';
             $matches = $deserializedMatcher->scan($inputData);
-            
+
             // Assert that patterns still work with the deserialized database
             $this->assertNotEmpty($matches, 'Deserializing should produce a working database');
         } catch (\Throwable $e) {
-            $this->fail('Exception during deserialization test: ' . $e->getMessage());
+            $this->fail('Exception during deserialization test: '.$e->getMessage());
         }
     }
-    
+
     /**
      * Test getting information about a serialized database
      */
@@ -207,21 +207,21 @@ class VectorScanMultiPatternMatcherTest extends TestCase
         $patterns = ['test\d+', 'example[a-z]+'];
         $matcher = new VectorScanMultiPatternMatcher($patterns);
         $matcher->serializeDatabase($this->testDbPath);
-        
+
         // Get info about the serialized database
         $info = $matcher->getSerializedDatabaseInfo($this->testDbPath);
-        
+
         // Assert info string contains expected details
         $this->assertNotNull($info, 'Database info should not be null');
         $this->assertIsString($info, 'Database info should be a string');
         $this->assertStringContainsString('Version', $info, 'Info should include version details');
-        
+
         // Test with non-existent file
         $nonExistentPath = storage_path('app/test/non_existent.db');
         $infoResult = $matcher->getSerializedDatabaseInfo($nonExistentPath);
         $this->assertNull($infoResult, 'Info for non-existent file should be null');
     }
-    
+
     /**
      * Test fallback to compilation when loading from a non-existent database
      */
@@ -229,10 +229,10 @@ class VectorScanMultiPatternMatcherTest extends TestCase
     {
         $patterns = ['test\d+'];
         $nonExistentPath = storage_path('app/test/non_existent.db');
-        
+
         // Should fall back to compilation when path doesn't exist
         $matcher = new VectorScanMultiPatternMatcher($patterns, $nonExistentPath);
-        
+
         // Verify the matcher still works (meaning compilation occurred)
         $matches = $matcher->scan('test123');
         $this->assertNotEmpty($matches, 'Matcher should fall back to compilation');

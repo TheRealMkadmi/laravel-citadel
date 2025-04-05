@@ -399,7 +399,7 @@ return [
         | Patterns File
         |--------------------------------------------------------------------------
         |
-        | The file containing the regex patterns to match against. 
+        | The file containing the regex patterns to match against.
         | Each pattern should be on a separate line.
         | Lines starting with # are treated as comments.
         |
@@ -420,18 +420,18 @@ return [
         |
         */
         'serialized_db_path' => env('CITADEL_SERIALIZED_DB_PATH', storage_path('app/citadel/vectorscan_patterns.db')),
-        
+
         /*
         |--------------------------------------------------------------------------
         | Auto Serialization
         |--------------------------------------------------------------------------
         |
-        | When enabled, Citadel will automatically serialize the database after 
+        | When enabled, Citadel will automatically serialize the database after
         | compilation. This can improve startup performance on subsequent runs.
         |
         */
         'auto_serialize' => env('CITADEL_PATTERN_AUTO_SERIALIZE', true),
-        
+
         /*
         |--------------------------------------------------------------------------
         | Hash Validation

@@ -376,15 +376,15 @@ class CitadelServiceProvider extends PackageServiceProvider
         $patternsFilePath = config(self::CONFIG_PATTERN_MATCHER_KEY.'.patterns_file', __DIR__.'/../data/http-payload-regex.list');
         $autoSerialize = config(self::CONFIG_PATTERN_MATCHER_KEY.'.auto_serialize', true);
         $useHashValidation = config(self::CONFIG_PATTERN_MATCHER_KEY.'.use_hash_validation', true);
-        
+
         // Check if serialized file exists and is valid
         $databaseIsValid = false;
         if ($serializedDbPath && file_exists($serializedDbPath)) {
             // Use hash validation if enabled
             if ($useHashValidation) {
                 $databaseIsValid = VectorScanMultiPatternMatcher::isDatabaseValid($serializedDbPath, $patternsFilePath);
-                
-                if (!$databaseIsValid) {
+
+                if (! $databaseIsValid) {
                     Log::info("Serialized pattern database exists but the pattern file hash doesn't match. Recompiling.");
                 }
             } else {
@@ -392,37 +392,37 @@ class CitadelServiceProvider extends PackageServiceProvider
                 $databaseIsValid = true;
             }
         }
-        
+
         // Create VectorScan pattern matcher with patterns and serialized database path if valid
         $matcher = new VectorScanMultiPatternMatcher($patterns, $databaseIsValid ? $serializedDbPath : null);
-        
+
         // Auto-serialize if enabled and database doesn't exist or is invalid
-        if ($autoSerialize && $serializedDbPath && !$databaseIsValid) {
+        if ($autoSerialize && $serializedDbPath && ! $databaseIsValid) {
             $directory = dirname($serializedDbPath);
-            
+
             // Ensure directory exists
-            if (!is_dir($directory)) {
-                if (!mkdir($directory, 0755, true)) {
+            if (! is_dir($directory)) {
+                if (! mkdir($directory, 0755, true)) {
                     Log::error("Failed to create directory for serialized pattern database: {$directory}");
                 }
             }
-            
+
             if (is_writable($directory) || (file_exists($serializedDbPath) && is_writable($serializedDbPath))) {
                 Log::info("Auto-serializing pattern database to {$serializedDbPath}");
-                
+
                 // Use the hash-based serialization method
                 $result = $matcher->serializeDatabaseWithHash($serializedDbPath, $patternsFilePath);
-                
+
                 if ($result) {
-                    Log::info("Successfully serialized pattern database with hash validation");
+                    Log::info('Successfully serialized pattern database with hash validation');
                 } else {
-                    Log::error("Failed to serialize pattern database");
+                    Log::error('Failed to serialize pattern database');
                 }
             } else {
                 Log::error("Cannot serialize pattern database: directory {$directory} is not writable");
             }
         }
-        
+
         return $matcher;
     }
 }

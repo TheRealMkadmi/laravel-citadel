@@ -6,8 +6,8 @@ namespace TheRealMkadmi\Citadel\PatternMatchers;
 
 use FFI;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 
 final class VectorScanMultiPatternMatcher extends AbstractMultiPatternMatcher
 {
@@ -67,10 +67,15 @@ final class VectorScanMultiPatternMatcher extends AbstractMultiPatternMatcher
      * Configuration key constants
      */
     private const CONFIG_LIBRARY_PATH_KEY = 'vectorscan.library_path';
+
     private const CONFIG_DB_PATH_KEY = 'citadel.pattern_matcher.serialized_db_path';
+
     private const CONFIG_USE_HASH_KEY = 'citadel.pattern_matcher.use_hash_validation';
+
     private const CONFIG_PATTERNS_FILE_KEY = 'citadel.pattern_matcher.patterns_file';
+
     private const CONFIG_AUTO_SERIALIZE_KEY = 'citadel.pattern_matcher.auto_serialize';
+
     private const HASH_FILENAME_SUFFIX = '.hash';
 
     private const HS_CALLBACK_CONTINUE = 0;
@@ -85,21 +90,21 @@ final class VectorScanMultiPatternMatcher extends AbstractMultiPatternMatcher
 
     /**
      * Create a new VectorScan pattern matcher instance.
-     * 
-     * @param array $patterns Array of patterns to compile (if not loading from serialized database)
-     * @param string|null $serializedDbPath Optional path to serialized database
+     *
+     * @param  array  $patterns  Array of patterns to compile (if not loading from serialized database)
+     * @param  string|null  $serializedDbPath  Optional path to serialized database
      */
     public function __construct(array $patterns, ?string $serializedDbPath = null)
     {
         $this->patterns = $patterns;
         $this->loadVectorscanLibrary();
-        
+
         // Try to load serialized database if path is provided or configured
         $dbPath = $serializedDbPath ?? config(self::CONFIG_DB_PATH_KEY);
-        
+
         if ($dbPath && file_exists($dbPath)) {
             $loaded = $this->loadDatabase($dbPath);
-            if (!$loaded) {
+            if (! $loaded) {
                 // Fall back to compilation
                 $this->compilePatterns();
             }
@@ -107,7 +112,7 @@ final class VectorScanMultiPatternMatcher extends AbstractMultiPatternMatcher
             // No database file available, compile patterns
             $this->compilePatterns();
         }
-        
+
         $this->allocateScratch();
     }
 
@@ -286,9 +291,9 @@ CDEF;
     private function allocateScratch(): void
     {
         // Ensure database is valid before allocating scratch
-        if (!isset($this->db)) {
-            Log::error("Cannot allocate scratch space: Database is not initialized.");
-            throw new \RuntimeException("Cannot allocate scratch space: Database is not initialized.");
+        if (! isset($this->db)) {
+            Log::error('Cannot allocate scratch space: Database is not initialized.');
+            throw new \RuntimeException('Cannot allocate scratch space: Database is not initialized.');
         }
 
         $scratchPtr = $this->ffi->new('hs_scratch_t*[1]');
@@ -306,7 +311,7 @@ CDEF;
     /**
      * Load a serialized database from a file.
      *
-     * @param string $dbPath Path to the serialized database file
+     * @param  string  $dbPath  Path to the serialized database file
      * @return bool True if database was loaded successfully, false otherwise
      */
     private function loadDatabase(string $dbPath): bool
@@ -314,8 +319,9 @@ CDEF;
         Log::debug("Attempting to load serialized database from path: {$dbPath}");
 
         try {
-            if (!file_exists($dbPath)) {
+            if (! file_exists($dbPath)) {
                 Log::error("Serialized database file not found: {$dbPath}");
+
                 return false;
             }
 
@@ -323,6 +329,7 @@ CDEF;
             $serializedData = file_get_contents($dbPath);
             if ($serializedData === false) {
                 Log::error("Failed to read serialized database file: {$dbPath}");
+
                 return false;
             }
 
@@ -336,24 +343,24 @@ CDEF;
             // Get database info before deserializing
             $infoPtr = $this->ffi->new('char*[1]');
             $infoResult = $this->ffi->{'hs_serialized_database_info'}(
-                $tempData, 
-                $dataLength, 
+                $tempData,
+                $dataLength,
                 FFI::addr($infoPtr[0])
             );
-            
+
             if ($infoResult === self::HS_SUCCESS) {
                 $info = FFI::string($infoPtr[0]);
                 Log::info("Serialized database info: {$info}");
-                
+
                 // Use the standard C free function as per Hyperscan documentation
                 // This memory was allocated by Hyperscan's internal allocator
-                Log::debug("Freeing database info string pointer");
-                $this->ffi->free($infoPtr[0]); 
+                Log::debug('Freeing database info string pointer');
+                $this->ffi->free($infoPtr[0]);
             }
 
             // Create database pointer for deserialization result
             $dbPtr = $this->ffi->new('hs_database_t*[1]');
-            
+
             // Create new buffer for deserialization that will remain valid for the call
             // We need to ensure this buffer stays in scope during the entire deserialization
             $deserializeBuffer = $this->ffi->new("char[$dataLength]");
@@ -361,32 +368,33 @@ CDEF;
 
             Log::debug("Calling hs_deserialize_database with data length: {$dataLength}");
             $ret = $this->ffi->{'hs_deserialize_database'}(
-                $deserializeBuffer, 
-                $dataLength, 
+                $deserializeBuffer,
+                $dataLength,
                 FFI::addr($dbPtr[0])
             );
 
             if ($ret !== self::HS_SUCCESS) {
                 $errorMessage = match ($ret) {
-                    self::HS_DB_VERSION_ERROR => "Database version mismatch",
-                    self::HS_DB_PLATFORM_ERROR => "Database platform mismatch",
-                    self::HS_DB_MODE_ERROR => "Database mode mismatch",
-                    self::HS_NOMEM => "Insufficient memory",
+                    self::HS_DB_VERSION_ERROR => 'Database version mismatch',
+                    self::HS_DB_PLATFORM_ERROR => 'Database platform mismatch',
+                    self::HS_DB_MODE_ERROR => 'Database mode mismatch',
+                    self::HS_NOMEM => 'Insufficient memory',
                     default => "Error code: {$ret}",
                 };
                 Log::error("Failed to deserialize database: {$errorMessage}");
+
                 return false;
             }
 
             // Free any existing database and scratch before assigning new ones
             if (isset($this->db)) {
-                Log::debug("Freeing existing database pointer");
+                Log::debug('Freeing existing database pointer');
                 $this->ffi->{'hs_free_database'}($this->db);
                 $this->db = null;
             }
-            
+
             if (isset($this->scratch)) {
-                Log::debug("Freeing existing scratch space pointer");
+                Log::debug('Freeing existing scratch space pointer');
                 $this->ffi->{'hs_free_scratch'}($this->scratch);
                 $this->scratch = null;
             }
@@ -398,27 +406,30 @@ CDEF;
             // Re-allocate scratch space for the new database
             try {
                 $this->allocateScratch();
+
                 return true;
             } catch (\RuntimeException $e) {
                 Log::error("Failed to allocate scratch for deserialized database: {$e->getMessage()}");
-                
+
                 // Clean up the database if scratch allocation fails
                 if (isset($this->db)) {
                     $this->ffi->{'hs_free_database'}($this->db);
                     $this->db = null;
                 }
+
                 return false;
             }
         } catch (\Throwable $e) {
             Log::error("Exception during database deserialization: {$e->getMessage()}", [
                 'exception' => $e,
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
-            
+
             // Make sure to clean up any partially initialized resources
-            if (isset($dbPtr) && isset($dbPtr[0]) && !isset($this->db)) {
+            if (isset($dbPtr) && isset($dbPtr[0]) && ! isset($this->db)) {
                 $this->ffi->{'hs_free_database'}($dbPtr[0]);
             }
+
             return false;
         }
     }
@@ -509,13 +520,14 @@ CDEF;
     /**
      * Serialize and persist the database to a file.
      *
-     * @param string $filePath Path where to save the serialized database
+     * @param  string  $filePath  Path where to save the serialized database
      * @return bool True if serialization was successful, false otherwise
      */
     public function serializeDatabase(string $filePath): bool
     {
-        if (!isset($this->db)) {
+        if (! isset($this->db)) {
             Log::error('Cannot serialize database: Database not initialized');
+
             return false;
         }
 
@@ -523,119 +535,128 @@ CDEF;
             // Create pointers for serialization output
             $bytesPtr = $this->ffi->new('char*[1]');
             $lengthPtr = $this->ffi->new('size_t[1]');
-            
-            Log::debug("Calling hs_serialize_database");
+
+            Log::debug('Calling hs_serialize_database');
             $ret = $this->ffi->{'hs_serialize_database'}(
                 $this->db,
                 FFI::addr($bytesPtr[0]),
                 FFI::addr($lengthPtr[0])
             );
-            
+
             if ($ret !== self::HS_SUCCESS) {
                 Log::error("Database serialization failed with error code: {$ret}");
+
                 return false;
             }
-            
+
             // Get the serialized data
             $length = $lengthPtr[0];
             $bytes = $bytesPtr[0];
-            
+
             Log::debug("Database serialized successfully, size: {$length} bytes");
-            
+
             // Copy the serialized data to a PHP string before freeing the C memory
             $serializedData = FFI::string($bytes, $length);
-            
+
             // Free the memory allocated by hs_serialize_database using the C free function
             // As per Hyperscan documentation, this memory was allocated by Hyperscan's internal allocator
-            Log::debug("Freeing serialized database buffer pointer");
+            Log::debug('Freeing serialized database buffer pointer');
             $this->ffi->free($bytes);
-            
+
             // Ensure the output directory exists
             $directory = dirname($filePath);
-            if (!is_dir($directory)) {
+            if (! is_dir($directory)) {
                 Log::debug("Creating directory: {$directory}");
-                if (!File::makeDirectory($directory, 0755, true)) {
+                if (! File::makeDirectory($directory, 0755, true)) {
                     Log::error("Failed to create directory: {$directory}");
+
                     return false;
                 }
             }
-            
+
             // Write the serialized data to file with exclusive lock
             Log::debug("Writing serialized database to file: {$filePath}");
             $bytesWritten = file_put_contents($filePath, $serializedData, LOCK_EX);
-            
+
             if ($bytesWritten === false || $bytesWritten !== $length) {
                 Log::error("Failed to write serialized database to {$filePath}. Expected {$length} bytes, wrote {$bytesWritten}");
+
                 return false;
             }
-            
+
             Log::info("Successfully serialized database to {$filePath} ({$bytesWritten} bytes)");
+
             return true;
         } catch (\Throwable $e) {
             Log::error("Exception during database serialization: {$e->getMessage()}", [
                 'exception' => $e,
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
+
             return false;
         }
     }
 
     /**
      * Get information about a serialized database file
-     * 
-     * @param string $filePath Path to the serialized database file
+     *
+     * @param  string  $filePath  Path to the serialized database file
      * @return string|null Database information string or null on error
      */
     public function getSerializedDatabaseInfo(string $filePath): ?string
     {
-        if (!file_exists($filePath)) {
+        if (! file_exists($filePath)) {
             Log::error("Serialized database file not found: {$filePath}");
+
             return null;
         }
-        
+
         try {
             $serializedData = file_get_contents($filePath);
             if ($serializedData === false) {
                 Log::error("Failed to read serialized database file: {$filePath}");
+
                 return null;
             }
-            
+
             $dataLength = strlen($serializedData);
             Log::debug("Reading info from serialized database, size: {$dataLength} bytes");
-            
+
             // Create a buffer with the serialized data that will remain valid for the function call
             $dataBuffer = $this->ffi->new("char[$dataLength]");
             FFI::memcpy($dataBuffer, $serializedData, $dataLength);
-            
+
             // Get database info
             $infoPtr = $this->ffi->new('char*[1]');
-            Log::debug("Calling hs_serialized_database_info");
+            Log::debug('Calling hs_serialized_database_info');
             $ret = $this->ffi->{'hs_serialized_database_info'}(
                 $dataBuffer,
                 $dataLength,
                 FFI::addr($infoPtr[0])
             );
-            
+
             if ($ret !== self::HS_SUCCESS) {
                 Log::error("Failed to get database info with error code: {$ret}");
+
                 return null;
             }
-            
+
             // Copy info to PHP string before freeing the C memory
             $info = FFI::string($infoPtr[0]);
             Log::debug("Retrieved database info: {$info}");
-            
+
             // Free the memory allocated by hs_serialized_database_info using C free function
             // Per Hyperscan documentation, this memory was allocated by Hyperscan's internal allocator
-            Log::debug("Freeing database info string pointer");
+            Log::debug('Freeing database info string pointer');
             $this->ffi->free($infoPtr[0]);
-            
+
             return $info;
         } catch (\Throwable $e) {
             Log::error("Exception while getting database info: {$e->getMessage()}", [
                 'exception' => $e,
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
+
             return null;
         }
     }
@@ -649,10 +670,10 @@ CDEF;
     {
         return true;
     }
-    
+
     /**
      * Overrides the getPatterns method to return a copy of the patterns array.
-     * 
+     *
      * @return array<int, string>
      */
     public function getPatterns(): array
@@ -662,7 +683,7 @@ CDEF;
 
     /**
      * Get serialization configuration.
-     * 
+     *
      * @return array<string, mixed>
      */
     public function getSerializationConfig(): array
@@ -677,13 +698,14 @@ CDEF;
     /**
      * Calculate the hash of patterns file
      *
-     * @param string $filePath Path to the patterns file
+     * @param  string  $filePath  Path to the patterns file
      * @return string|null Hash of the file contents or null on error
      */
     public static function calculatePatternsFileHash(string $filePath): ?string
     {
-        if (!file_exists($filePath)) {
+        if (! file_exists($filePath)) {
             Log::error("Patterns file not found: {$filePath}");
+
             return null;
         }
 
@@ -691,6 +713,7 @@ CDEF;
             return hash_file('sha256', $filePath);
         } catch (\Throwable $e) {
             Log::error("Error calculating patterns file hash: {$e->getMessage()}");
+
             return null;
         }
     }
@@ -698,18 +721,20 @@ CDEF;
     /**
      * Store hash of patterns file alongside the serialized database
      *
-     * @param string $dbPath Path to the serialized database
-     * @param string $hash Hash to store
+     * @param  string  $dbPath  Path to the serialized database
+     * @param  string  $hash  Hash to store
      * @return bool True if hash was stored successfully, false otherwise
      */
     public static function storePatternHash(string $dbPath, string $hash): bool
     {
-        $hashFilePath = $dbPath . self::HASH_FILENAME_SUFFIX;
+        $hashFilePath = $dbPath.self::HASH_FILENAME_SUFFIX;
         try {
             $result = file_put_contents($hashFilePath, $hash, LOCK_EX);
+
             return $result !== false;
         } catch (\Throwable $e) {
             Log::error("Error storing patterns hash: {$e->getMessage()}");
+
             return false;
         }
     }
@@ -717,21 +742,23 @@ CDEF;
     /**
      * Read stored hash from hash file
      *
-     * @param string $dbPath Path to the serialized database
+     * @param  string  $dbPath  Path to the serialized database
      * @return string|null Hash value or null on error
      */
     public static function getStoredPatternHash(string $dbPath): ?string
     {
-        $hashFilePath = $dbPath . self::HASH_FILENAME_SUFFIX;
-        if (!file_exists($hashFilePath)) {
+        $hashFilePath = $dbPath.self::HASH_FILENAME_SUFFIX;
+        if (! file_exists($hashFilePath)) {
             return null;
         }
 
         try {
             $hash = file_get_contents($hashFilePath);
+
             return ($hash !== false) ? trim($hash) : null;
         } catch (\Throwable $e) {
             Log::error("Error reading patterns hash: {$e->getMessage()}");
+
             return null;
         }
     }
@@ -739,14 +766,14 @@ CDEF;
     /**
      * Verify if the serialized database is valid based on pattern file hash
      *
-     * @param string $dbPath Path to the serialized database
-     * @param string $patternsFilePath Path to the original patterns file
+     * @param  string  $dbPath  Path to the serialized database
+     * @param  string  $patternsFilePath  Path to the original patterns file
      * @return bool True if the database is valid, false if it needs recompiling
      */
     public static function isDatabaseValid(string $dbPath, string $patternsFilePath): bool
     {
         // Check if both files exist
-        if (!file_exists($dbPath) || !file_exists($patternsFilePath)) {
+        if (! file_exists($dbPath) || ! file_exists($patternsFilePath)) {
             return false;
         }
 
@@ -769,15 +796,15 @@ CDEF;
     /**
      * Serialize database and store hash of patterns file
      *
-     * @param string $dbPath Path where to save the database
-     * @param string $patternsFilePath Path to the patterns file
+     * @param  string  $dbPath  Path where to save the database
+     * @param  string  $patternsFilePath  Path to the patterns file
      * @return bool True if serialization and hash storage succeeded
      */
     public function serializeDatabaseWithHash(string $dbPath, string $patternsFilePath): bool
     {
         // First serialize the database
         $serialized = $this->serializeDatabase($dbPath);
-        if (!$serialized) {
+        if (! $serialized) {
             return false;
         }
 
@@ -785,14 +812,15 @@ CDEF;
         $hash = self::calculatePatternsFileHash($patternsFilePath);
         if ($hash === null) {
             // Failed to calculate hash, but database was serialized
-            Log::warning("Database serialized but failed to calculate patterns file hash");
+            Log::warning('Database serialized but failed to calculate patterns file hash');
+
             return true;
         }
 
         // Store the hash
         $hashStored = self::storePatternHash($dbPath, $hash);
-        if (!$hashStored) {
-            Log::warning("Database serialized but failed to store patterns file hash");
+        if (! $hashStored) {
+            Log::warning('Database serialized but failed to store patterns file hash');
         }
 
         return true;
@@ -811,7 +839,7 @@ CDEF;
                 $this->ffi->{'hs_free_scratch'}($this->scratch);
                 $this->scratch = null;
             }
-            
+
             if (isset($this->db)) {
                 if (defined('HYPERSCAN_DEBUG') && HYPERSCAN_DEBUG) {
                     error_log('Freeing Hyperscan database in destructor');
@@ -822,7 +850,7 @@ CDEF;
         } catch (\Throwable $e) {
             // Use native PHP error reporting instead of Laravel logging
             // during shutdown to avoid container resolution issues
-            error_log("Exception during VectorScanMultiPatternMatcher destruction: " . $e->getMessage());
+            error_log('Exception during VectorScanMultiPatternMatcher destruction: '.$e->getMessage());
         }
     }
 }

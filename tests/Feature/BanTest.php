@@ -15,10 +15,15 @@ use TheRealMkadmi\Citadel\Tests\TestCase;
 class BanTest extends TestCase
 {
     protected Citadel $citadel;
+
     protected ArrayDataStore $dataStore;
+
     protected BanMiddleware $middleware;
+
     protected const TEST_IP = '192.168.1.1';
+
     protected const TEST_FINGERPRINT = 'test-fingerprint-12345';
+
     protected const TEST_REASON = 'Suspicious activity';
 
     protected function setUp(): void
@@ -26,7 +31,7 @@ class BanTest extends TestCase
         parent::setUp();
 
         // Set up DataStore with a fresh instance for each test
-        $this->dataStore = new ArrayDataStore();
+        $this->dataStore = new ArrayDataStore;
         $this->app->instance(ArrayDataStore::class, $this->dataStore);
 
         // Create Citadel instance with the DataStore
@@ -45,10 +50,10 @@ class BanTest extends TestCase
     {
         // Ban an IP address
         $result = $this->citadel->banIp(self::TEST_IP, null, self::TEST_REASON);
-        
+
         // Verify ban was set successfully
         $this->assertTrue($result);
-        
+
         // Verify IP is banned
         $this->assertTrue($this->citadel->isBanned(self::TEST_IP, BanType::IP));
 
@@ -65,10 +70,10 @@ class BanTest extends TestCase
     {
         // Ban a fingerprint
         $result = $this->citadel->banFingerprint(self::TEST_FINGERPRINT, 3600, self::TEST_REASON);
-        
+
         // Verify ban was set successfully
         $this->assertTrue($result);
-        
+
         // Verify fingerprint is banned
         $this->assertTrue($this->citadel->isBanned(self::TEST_FINGERPRINT, BanType::FINGERPRINT));
 
@@ -85,19 +90,19 @@ class BanTest extends TestCase
     {
         // First ban an IP
         $this->citadel->banIp(self::TEST_IP);
-        
+
         // Verify IP is banned
         $this->assertTrue($this->citadel->isBanned(self::TEST_IP, BanType::IP));
-        
+
         // Now unban it
         $result = $this->citadel->unban(self::TEST_IP, BanType::IP);
-        
+
         // Verify unban was successful
         $this->assertTrue($result);
-        
+
         // Verify IP is no longer banned
         $this->assertFalse($this->citadel->isBanned(self::TEST_IP, BanType::IP));
-        
+
         // Verify ban details no longer exist
         $this->assertNull($this->citadel->getBan(self::TEST_IP, BanType::IP));
     }
@@ -107,16 +112,16 @@ class BanTest extends TestCase
     {
         // First ban a fingerprint
         $this->citadel->banFingerprint(self::TEST_FINGERPRINT);
-        
+
         // Verify fingerprint is banned
         $this->assertTrue($this->citadel->isBanned(self::TEST_FINGERPRINT, BanType::FINGERPRINT));
-        
+
         // Now unban it
         $result = $this->citadel->unban(self::TEST_FINGERPRINT, BanType::FINGERPRINT);
-        
+
         // Verify unban was successful
         $this->assertTrue($result);
-        
+
         // Verify fingerprint is no longer banned
         $this->assertFalse($this->citadel->isBanned(self::TEST_FINGERPRINT, BanType::FINGERPRINT));
     }
@@ -126,20 +131,20 @@ class BanTest extends TestCase
     {
         // Ban an IP
         $this->citadel->banIp(self::TEST_IP);
-        
+
         // Create a request with the banned IP
         $request = Request::create('https://example.com/test', 'GET', [], [], [], [
-            'REMOTE_ADDR' => self::TEST_IP
+            'REMOTE_ADDR' => self::TEST_IP,
         ]);
-        
+
         // Apply the middleware
         $response = $this->middleware->handle($request, function ($req) {
             return 'allowed';
         });
-        
+
         // Verify request is blocked (not allowed through)
         $this->assertNotEquals('allowed', $response);
-        
+
         // Verify the response is a 403 Forbidden
         $this->assertEquals(403, $response->getStatusCode());
     }
@@ -149,18 +154,18 @@ class BanTest extends TestCase
     {
         // Ban a fingerprint
         $this->citadel->banFingerprint(self::TEST_FINGERPRINT);
-        
+
         // Create a request with the banned fingerprint
         $request = $this->makeFingerprintedRequest(self::TEST_FINGERPRINT);
-        
+
         // Apply the middleware
         $response = $this->middleware->handle($request, function ($req) {
             return 'allowed';
         });
-        
+
         // Verify request is blocked (not allowed through)
         $this->assertNotEquals('allowed', $response);
-        
+
         // Verify the response is a 403 Forbidden
         $this->assertEquals(403, $response->getStatusCode());
     }
@@ -170,14 +175,14 @@ class BanTest extends TestCase
     {
         // Create a request with non-banned details
         $request = Request::create('https://example.com/test', 'GET', [], [], [], [
-            'REMOTE_ADDR' => '192.168.1.2'
+            'REMOTE_ADDR' => '192.168.1.2',
         ]);
-        
+
         // Apply the middleware
         $response = $this->middleware->handle($request, function ($req) {
             return 'allowed';
         });
-        
+
         // Verify request is allowed through
         $this->assertEquals('allowed', $response);
     }
@@ -187,13 +192,13 @@ class BanTest extends TestCase
     {
         // Create a temporary ban (1 second)
         $this->citadel->banIp(self::TEST_IP, 1, 'Temporary ban');
-        
+
         // Verify the IP is banned initially
         $this->assertTrue($this->citadel->isBanned(self::TEST_IP, BanType::IP));
-        
+
         // Wait for the ban to expire
         sleep(2);
-        
+
         // Verify the ban has expired
         $this->assertFalse($this->citadel->isBanned(self::TEST_IP, BanType::IP));
     }
@@ -203,16 +208,16 @@ class BanTest extends TestCase
     {
         // Default duration (null) is permanent
         $this->citadel->banIp(self::TEST_IP, null, 'Permanent ban');
-        
+
         // Set the ban TTL to a very short time (to test permanence)
         Config::set(CitadelConfig::KEY_BAN_DURATION, 1);
-        
+
         // Verify the IP is banned initially
         $this->assertTrue($this->citadel->isBanned(self::TEST_IP, BanType::IP));
-        
+
         // Wait longer than the configured TTL
         sleep(2);
-        
+
         // Verify the ban is still active (permanent)
         $this->assertTrue($this->citadel->isBanned(self::TEST_IP, BanType::IP));
     }
@@ -223,14 +228,14 @@ class BanTest extends TestCase
         // Use a tricky string with special characters that should be slugified
         $trickyIp = '192.168.1.1!@#$%^&*()_+';
         $this->citadel->banIp($trickyIp);
-        
+
         // Retrieve the ban through the API to verify it was stored correctly
         $this->assertTrue($this->citadel->isBanned($trickyIp, BanType::IP));
-        
+
         // Test with Unicode characters
         $unicodeFingerprint = 'öüäß❤️✓☺♤♧';
         $this->citadel->banFingerprint($unicodeFingerprint);
-        
+
         // Verify the Unicode fingerprint ban works
         $this->assertTrue($this->citadel->isBanned($unicodeFingerprint, BanType::FINGERPRINT));
     }
@@ -239,14 +244,14 @@ class BanTest extends TestCase
     public function it_handles_ban_with_special_characters()
     {
         $specialCharsIdentifier = "special~!@#$%^&*()_+{}|:\"<>?[]\;',./chars";
-        
+
         // Ban the identifier with special chars
         $this->citadel->banFingerprint($specialCharsIdentifier);
-        
+
         // Should successfully identify the ban despite the special chars
         $this->assertTrue(
             $this->citadel->isBanned($specialCharsIdentifier, BanType::FINGERPRINT),
-            "Failed to identify ban with special characters"
+            'Failed to identify ban with special characters'
         );
     }
 }
