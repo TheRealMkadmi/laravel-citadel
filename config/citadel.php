@@ -375,6 +375,8 @@ return [
     | - implementation: The pattern matcher implementation to use ('vectorscan', 'pcre', or other implementations)
     | - patterns_file: The path to the file containing regex patterns
     | - serialized_db_path: The path where the compiled and serialized pattern database will be stored
+    | - auto_serialize: Whether to automatically serialize the database after compilation
+    | - Hash Validation: Use hash-based invalidation for the serialized database
     |
     */
     'pattern_matcher' => [
@@ -418,6 +420,29 @@ return [
         |
         */
         'serialized_db_path' => env('CITADEL_SERIALIZED_DB_PATH', storage_path('app/citadel/vectorscan_patterns.db')),
+        
+        /*
+        |--------------------------------------------------------------------------
+        | Auto Serialization
+        |--------------------------------------------------------------------------
+        |
+        | When enabled, Citadel will automatically serialize the database after 
+        | compilation. This can improve startup performance on subsequent runs.
+        |
+        */
+        'auto_serialize' => env('CITADEL_PATTERN_AUTO_SERIALIZE', true),
+        
+        /*
+        |--------------------------------------------------------------------------
+        | Hash Validation
+        |--------------------------------------------------------------------------
+        |
+        | When enabled, Citadel will use the hash of the patterns file to determine
+        | if the serialized database is still valid. If the hash doesn't match,
+        | the database will be recompiled from the updated pattern file.
+        |
+        */
+        'use_hash_validation' => env('CITADEL_PATTERN_USE_HASH_VALIDATION', true),
     ],
 
     /*

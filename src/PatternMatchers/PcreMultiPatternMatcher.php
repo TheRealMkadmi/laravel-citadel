@@ -206,4 +206,14 @@ final class PcreMultiPatternMatcher extends AbstractMultiPatternMatcher
     {
         $this->options = array_merge($this->options, $options);
     }
+
+    /**
+     * PCRE implementation does not support serialized databases.
+     *
+     * @return bool Always false for PCRE
+     */
+    public function supportsSerializedDatabase(): bool
+    {
+        return false;
+    }
 }

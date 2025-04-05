@@ -63,9 +63,15 @@ final class VectorScanMultiPatternMatcher extends AbstractMultiPatternMatcher
 
     private const DEFAULT_LIBRARY_NAME_WINDOWS = 'libhs.dll';
 
+    /**
+     * Configuration key constants
+     */
     private const CONFIG_LIBRARY_PATH_KEY = 'vectorscan.library_path';
-
     private const CONFIG_DB_PATH_KEY = 'citadel.pattern_matcher.serialized_db_path';
+    private const CONFIG_USE_HASH_KEY = 'citadel.pattern_matcher.use_hash_validation';
+    private const CONFIG_PATTERNS_FILE_KEY = 'citadel.pattern_matcher.patterns_file';
+    private const CONFIG_AUTO_SERIALIZE_KEY = 'citadel.pattern_matcher.auto_serialize';
+    private const HASH_FILENAME_SUFFIX = '.hash';
 
     private const HS_CALLBACK_CONTINUE = 0;
 
@@ -634,23 +640,189 @@ CDEF;
         }
     }
 
+    /**
+     * Check if this pattern matcher implementation supports serialization.
+     *
+     * @return bool Always true for VectorScan implementation
+     */
+    public function supportsSerializedDatabase(): bool
+    {
+        return true;
+    }
+    
+    /**
+     * Overrides the getPatterns method to return a copy of the patterns array.
+     * 
+     * @return array<int, string>
+     */
+    public function getPatterns(): array
+    {
+        return $this->patterns;
+    }
+
+    /**
+     * Get serialization configuration.
+     * 
+     * @return array<string, mixed>
+     */
+    public function getSerializationConfig(): array
+    {
+        return [
+            'serialized_db_path' => config(self::CONFIG_DB_PATH_KEY),
+            'auto_serialize' => config('citadel.pattern_matcher.auto_serialize', true),
+            'serialization_ttl' => config('citadel.pattern_matcher.serialization_ttl', 86400),
+        ];
+    }
+
+    /**
+     * Calculate the hash of patterns file
+     *
+     * @param string $filePath Path to the patterns file
+     * @return string|null Hash of the file contents or null on error
+     */
+    public static function calculatePatternsFileHash(string $filePath): ?string
+    {
+        if (!file_exists($filePath)) {
+            Log::error("Patterns file not found: {$filePath}");
+            return null;
+        }
+
+        try {
+            return hash_file('sha256', $filePath);
+        } catch (\Throwable $e) {
+            Log::error("Error calculating patterns file hash: {$e->getMessage()}");
+            return null;
+        }
+    }
+
+    /**
+     * Store hash of patterns file alongside the serialized database
+     *
+     * @param string $dbPath Path to the serialized database
+     * @param string $hash Hash to store
+     * @return bool True if hash was stored successfully, false otherwise
+     */
+    public static function storePatternHash(string $dbPath, string $hash): bool
+    {
+        $hashFilePath = $dbPath . self::HASH_FILENAME_SUFFIX;
+        try {
+            $result = file_put_contents($hashFilePath, $hash, LOCK_EX);
+            return $result !== false;
+        } catch (\Throwable $e) {
+            Log::error("Error storing patterns hash: {$e->getMessage()}");
+            return false;
+        }
+    }
+
+    /**
+     * Read stored hash from hash file
+     *
+     * @param string $dbPath Path to the serialized database
+     * @return string|null Hash value or null on error
+     */
+    public static function getStoredPatternHash(string $dbPath): ?string
+    {
+        $hashFilePath = $dbPath . self::HASH_FILENAME_SUFFIX;
+        if (!file_exists($hashFilePath)) {
+            return null;
+        }
+
+        try {
+            $hash = file_get_contents($hashFilePath);
+            return ($hash !== false) ? trim($hash) : null;
+        } catch (\Throwable $e) {
+            Log::error("Error reading patterns hash: {$e->getMessage()}");
+            return null;
+        }
+    }
+
+    /**
+     * Verify if the serialized database is valid based on pattern file hash
+     *
+     * @param string $dbPath Path to the serialized database
+     * @param string $patternsFilePath Path to the original patterns file
+     * @return bool True if the database is valid, false if it needs recompiling
+     */
+    public static function isDatabaseValid(string $dbPath, string $patternsFilePath): bool
+    {
+        // Check if both files exist
+        if (!file_exists($dbPath) || !file_exists($patternsFilePath)) {
+            return false;
+        }
+
+        // Get the stored hash
+        $storedHash = self::getStoredPatternHash($dbPath);
+        if ($storedHash === null) {
+            return false;
+        }
+
+        // Calculate current hash of patterns file
+        $currentHash = self::calculatePatternsFileHash($patternsFilePath);
+        if ($currentHash === null) {
+            return false;
+        }
+
+        // Compare hashes
+        return $storedHash === $currentHash;
+    }
+
+    /**
+     * Serialize database and store hash of patterns file
+     *
+     * @param string $dbPath Path where to save the database
+     * @param string $patternsFilePath Path to the patterns file
+     * @return bool True if serialization and hash storage succeeded
+     */
+    public function serializeDatabaseWithHash(string $dbPath, string $patternsFilePath): bool
+    {
+        // First serialize the database
+        $serialized = $this->serializeDatabase($dbPath);
+        if (!$serialized) {
+            return false;
+        }
+
+        // Calculate and store the hash
+        $hash = self::calculatePatternsFileHash($patternsFilePath);
+        if ($hash === null) {
+            // Failed to calculate hash, but database was serialized
+            Log::warning("Database serialized but failed to calculate patterns file hash");
+            return true;
+        }
+
+        // Store the hash
+        $hashStored = self::storePatternHash($dbPath, $hash);
+        if (!$hashStored) {
+            Log::warning("Database serialized but failed to store patterns file hash");
+        }
+
+        return true;
+    }
+
     public function __destruct()
     {
         try {
+            // Avoid using Laravel facades in the destructor
+            // as they might not be available during shutdown
             if (isset($this->scratch)) {
-                Log::debug('Freeing scratch space pointer in destructor');
+                // Use PHP's native error logging instead of Laravel's Log facade
+                if (defined('HYPERSCAN_DEBUG') && HYPERSCAN_DEBUG) {
+                    error_log('Freeing Hyperscan scratch space in destructor');
+                }
                 $this->ffi->{'hs_free_scratch'}($this->scratch);
                 $this->scratch = null;
             }
             
             if (isset($this->db)) {
-                Log::debug('Freeing database pointer in destructor');
+                if (defined('HYPERSCAN_DEBUG') && HYPERSCAN_DEBUG) {
+                    error_log('Freeing Hyperscan database in destructor');
+                }
                 $this->ffi->{'hs_free_database'}($this->db);
                 $this->db = null;
             }
         } catch (\Throwable $e) {
-            // Just log in destructor, never throw
-            Log::error("Exception during VectorScanMultiPatternMatcher destruction: {$e->getMessage()}");
+            // Use native PHP error reporting instead of Laravel logging
+            // during shutdown to avoid container resolution issues
+            error_log("Exception during VectorScanMultiPatternMatcher destruction: " . $e->getMessage());
         }
     }
 }
