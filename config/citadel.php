@@ -374,11 +374,50 @@ return [
     | Configure the pattern matcher implementation and settings.
     | - implementation: The pattern matcher implementation to use ('vectorscan', 'pcre', or other implementations)
     | - patterns_file: The path to the file containing regex patterns
+    | - serialized_db_path: The path where the compiled and serialized pattern database will be stored
     |
     */
     'pattern_matcher' => [
-        'implementation' => env('CITADEL_PATTERN_MATCHER_IMPL', 'vectorscan'),
-        'patterns_file' => env('CITADEL_PATTERNS_FILE', __DIR__.'/../resources/payload-inspection-patterns.list'),
+        /*
+        |--------------------------------------------------------------------------
+        | Pattern Matcher Implementation
+        |--------------------------------------------------------------------------
+        |
+        | Citadel can use different pattern matching implementations for checking
+        | payloads against known malicious patterns.
+        | Options:
+        | - vectorscan: Uses Intel's Hyperscan library (fast)
+        | - pcre: Uses PHP's built-in PCRE regex engine (compatibility)
+        |
+        */
+        'implementation' => env('CITADEL_PATTERN_MATCHER', 'vectorscan'),
+
+        /*
+        |--------------------------------------------------------------------------
+        | Patterns File
+        |--------------------------------------------------------------------------
+        |
+        | The file containing the regex patterns to match against. 
+        | Each pattern should be on a separate line.
+        | Lines starting with # are treated as comments.
+        |
+        */
+        'patterns_file' => env('CITADEL_PATTERNS_FILE', null),
+
+        /*
+        |--------------------------------------------------------------------------
+        | Serialized Database Path
+        |--------------------------------------------------------------------------
+        |
+        | The path where the compiled and serialized pattern database will be stored.
+        | When this path is set and the file exists, Citadel will load the
+        | pre-compiled database instead of recompiling patterns on startup.
+        |
+        | To generate this file, use the artisan command:
+        | php artisan citadel:compile-regex
+        |
+        */
+        'serialized_db_path' => env('CITADEL_SERIALIZED_DB_PATH', storage_path('app/citadel/vectorscan_patterns.db')),
     ],
 
     /*

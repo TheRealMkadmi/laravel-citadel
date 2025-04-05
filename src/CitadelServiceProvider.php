@@ -84,6 +84,7 @@ class CitadelServiceProvider extends PackageServiceProvider
             ->hasAssets()
             ->hasCommand(CitadelBanCommand::class)
             ->hasCommand(CitadelUnbanCommand::class)
+            ->hasCommand(Commands\CitadelCompileRegexCommand::class)
             ->hasInstallCommand(function (InstallCommand $command) {
                 $command
                     ->startWith(function (InstallCommand $command) {
@@ -369,6 +370,12 @@ class CitadelServiceProvider extends PackageServiceProvider
      */
     protected function createVectorscanPatternMatcher(array $patterns): MultiPatternMatcher
     {
-        return new VectorScanMultiPatternMatcher($patterns);
+        // Check for serialized database path from config
+        $serializedDbPath = config(self::CONFIG_PATTERN_MATCHER_KEY.'.serialized_db_path');
+        
+        // Create VectorScan pattern matcher with patterns and optional serialized database path
+        // The VectorScanMultiPatternMatcher constructor will try to load from the serialized
+        // database if it exists, or compile from patterns if not
+        return new VectorScanMultiPatternMatcher($patterns, $serializedDbPath);
     }
 }
