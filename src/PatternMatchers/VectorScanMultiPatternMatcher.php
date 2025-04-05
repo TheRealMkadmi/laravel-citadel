@@ -7,6 +7,7 @@ namespace TheRealMkadmi\Citadel\PatternMatchers;
 use FFI;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\File;
 
 final class VectorScanMultiPatternMatcher extends AbstractMultiPatternMatcher
 {
@@ -75,8 +76,6 @@ final class VectorScanMultiPatternMatcher extends AbstractMultiPatternMatcher
     private $db;
 
     private $scratch;
-
-    private array $patterns;
 
     /**
      * Create a new VectorScan pattern matcher instance.
@@ -194,6 +193,9 @@ hs_error_t hs_serialize_database(const hs_database_t *db, char **bytes, size_t *
 hs_error_t hs_deserialize_database(const char *bytes, size_t length, hs_database_t **db);
 hs_error_t hs_serialized_database_size(const char *bytes, size_t length, size_t *deserialized_size);
 hs_error_t hs_serialized_database_info(const char *bytes, size_t length, char **info);
+
+// Standard C memory free function
+void free(void *ptr);
 CDEF;
 
             $this->ffi = FFI::cdef($cdef, $foundPath);
@@ -277,17 +279,22 @@ CDEF;
 
     private function allocateScratch(): void
     {
+        // Ensure database is valid before allocating scratch
+        if (!isset($this->db)) {
+            Log::error("Cannot allocate scratch space: Database is not initialized.");
+            throw new \RuntimeException("Cannot allocate scratch space: Database is not initialized.");
+        }
+
         $scratchPtr = $this->ffi->new('hs_scratch_t*[1]');
         Log::debug('Allocating vectorscan scratch space.');
         $ret = $this->ffi->{'hs_alloc_scratch'}($this->db, FFI::addr($scratchPtr[0]));
         if ($ret !== self::HS_SUCCESS) {
             Log::error("Failed to allocate libvectorscan scratch space with error code: {$ret}");
-            $this->ffi->{'hs_free_database'}($this->db);
             throw new \RuntimeException("Failed to allocate libvectorscan scratch space with error code: {$ret}");
         }
         $this->scratch = $scratchPtr[0];
         Log::info('libvectorscan scratch space allocated successfully. Scratch pointer: '.($this->scratch ? 'valid' : 'invalid'));
-        Log::debug('Finished vectorscan pattern compilation and scratch allocation.');
+        Log::debug('Finished vectorscan scratch allocation.');
     }
 
     /**
@@ -306,31 +313,50 @@ CDEF;
                 return false;
             }
 
+            // Read the file as binary data to ensure accurate byte representation
             $serializedData = file_get_contents($dbPath);
             if ($serializedData === false) {
                 Log::error("Failed to read serialized database file: {$dbPath}");
                 return false;
             }
 
-            // First get info about the database to log
+            $dataLength = strlen($serializedData);
+            Log::debug("Loaded serialized database from file, size: {$dataLength} bytes");
+
+            // First get info about the database to log - create local data buffer to avoid memory issues
+            $tempData = $this->ffi->new("char[$dataLength]");
+            FFI::memcpy($tempData, $serializedData, $dataLength);
+
+            // Get database info before deserializing
             $infoPtr = $this->ffi->new('char*[1]');
             $infoResult = $this->ffi->{'hs_serialized_database_info'}(
-                $serializedData, 
-                strlen($serializedData), 
+                $tempData, 
+                $dataLength, 
                 FFI::addr($infoPtr[0])
             );
             
             if ($infoResult === self::HS_SUCCESS) {
                 $info = FFI::string($infoPtr[0]);
                 Log::info("Serialized database info: {$info}");
-                FFI::free($infoPtr[0]);
+                
+                // Use the standard C free function as per Hyperscan documentation
+                // This memory was allocated by Hyperscan's internal allocator
+                Log::debug("Freeing database info string pointer");
+                $this->ffi->free($infoPtr[0]); 
             }
 
-            // Deserialize the database
+            // Create database pointer for deserialization result
             $dbPtr = $this->ffi->new('hs_database_t*[1]');
+            
+            // Create new buffer for deserialization that will remain valid for the call
+            // We need to ensure this buffer stays in scope during the entire deserialization
+            $deserializeBuffer = $this->ffi->new("char[$dataLength]");
+            FFI::memcpy($deserializeBuffer, $serializedData, $dataLength);
+
+            Log::debug("Calling hs_deserialize_database with data length: {$dataLength}");
             $ret = $this->ffi->{'hs_deserialize_database'}(
-                $serializedData, 
-                strlen($serializedData), 
+                $deserializeBuffer, 
+                $dataLength, 
                 FFI::addr($dbPtr[0])
             );
 
@@ -346,11 +372,47 @@ CDEF;
                 return false;
             }
 
+            // Free any existing database and scratch before assigning new ones
+            if (isset($this->db)) {
+                Log::debug("Freeing existing database pointer");
+                $this->ffi->{'hs_free_database'}($this->db);
+                $this->db = null;
+            }
+            
+            if (isset($this->scratch)) {
+                Log::debug("Freeing existing scratch space pointer");
+                $this->ffi->{'hs_free_scratch'}($this->scratch);
+                $this->scratch = null;
+            }
+
+            // Store the newly created database pointer
             $this->db = $dbPtr[0];
             Log::info("Successfully loaded serialized database from path: {$dbPath}");
-            return true;
+
+            // Re-allocate scratch space for the new database
+            try {
+                $this->allocateScratch();
+                return true;
+            } catch (\RuntimeException $e) {
+                Log::error("Failed to allocate scratch for deserialized database: {$e->getMessage()}");
+                
+                // Clean up the database if scratch allocation fails
+                if (isset($this->db)) {
+                    $this->ffi->{'hs_free_database'}($this->db);
+                    $this->db = null;
+                }
+                return false;
+            }
         } catch (\Throwable $e) {
-            Log::error("Exception during database deserialization: {$e->getMessage()}");
+            Log::error("Exception during database deserialization: {$e->getMessage()}", [
+                'exception' => $e,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            // Make sure to clean up any partially initialized resources
+            if (isset($dbPtr) && isset($dbPtr[0]) && !isset($this->db)) {
+                $this->ffi->{'hs_free_database'}($dbPtr[0]);
+            }
             return false;
         }
     }
@@ -452,11 +514,11 @@ CDEF;
         }
 
         try {
-            // Create byte pointer and length variables
+            // Create pointers for serialization output
             $bytesPtr = $this->ffi->new('char*[1]');
             $lengthPtr = $this->ffi->new('size_t[1]');
             
-            // Serialize the database
+            Log::debug("Calling hs_serialize_database");
             $ret = $this->ffi->{'hs_serialize_database'}(
                 $this->db,
                 FFI::addr($bytesPtr[0]),
@@ -468,24 +530,34 @@ CDEF;
                 return false;
             }
             
-            // Get the serialized data length and buffer
+            // Get the serialized data
             $length = $lengthPtr[0];
             $bytes = $bytesPtr[0];
             
-            // Copy the serialized data to PHP memory
+            Log::debug("Database serialized successfully, size: {$length} bytes");
+            
+            // Copy the serialized data to a PHP string before freeing the C memory
             $serializedData = FFI::string($bytes, $length);
             
-            // Free the serialized buffer allocated by hyperscan
-            FFI::free($bytes);
+            // Free the memory allocated by hs_serialize_database using the C free function
+            // As per Hyperscan documentation, this memory was allocated by Hyperscan's internal allocator
+            Log::debug("Freeing serialized database buffer pointer");
+            $this->ffi->free($bytes);
             
-            // Ensure the directory exists
+            // Ensure the output directory exists
             $directory = dirname($filePath);
             if (!is_dir($directory)) {
-                mkdir($directory, 0755, true);
+                Log::debug("Creating directory: {$directory}");
+                if (!File::makeDirectory($directory, 0755, true)) {
+                    Log::error("Failed to create directory: {$directory}");
+                    return false;
+                }
             }
             
-            // Write to file
-            $bytesWritten = file_put_contents($filePath, $serializedData);
+            // Write the serialized data to file with exclusive lock
+            Log::debug("Writing serialized database to file: {$filePath}");
+            $bytesWritten = file_put_contents($filePath, $serializedData, LOCK_EX);
+            
             if ($bytesWritten === false || $bytesWritten !== $length) {
                 Log::error("Failed to write serialized database to {$filePath}. Expected {$length} bytes, wrote {$bytesWritten}");
                 return false;
@@ -494,7 +566,10 @@ CDEF;
             Log::info("Successfully serialized database to {$filePath} ({$bytesWritten} bytes)");
             return true;
         } catch (\Throwable $e) {
-            Log::error("Exception during database serialization: {$e->getMessage()}");
+            Log::error("Exception during database serialization: {$e->getMessage()}", [
+                'exception' => $e,
+                'trace' => $e->getTraceAsString()
+            ]);
             return false;
         }
     }
@@ -513,18 +588,25 @@ CDEF;
         }
         
         try {
-            // Read serialized data
             $serializedData = file_get_contents($filePath);
             if ($serializedData === false) {
                 Log::error("Failed to read serialized database file: {$filePath}");
                 return null;
             }
             
+            $dataLength = strlen($serializedData);
+            Log::debug("Reading info from serialized database, size: {$dataLength} bytes");
+            
+            // Create a buffer with the serialized data that will remain valid for the function call
+            $dataBuffer = $this->ffi->new("char[$dataLength]");
+            FFI::memcpy($dataBuffer, $serializedData, $dataLength);
+            
             // Get database info
             $infoPtr = $this->ffi->new('char*[1]');
+            Log::debug("Calling hs_serialized_database_info");
             $ret = $this->ffi->{'hs_serialized_database_info'}(
-                $serializedData,
-                strlen($serializedData),
+                $dataBuffer,
+                $dataLength,
                 FFI::addr($infoPtr[0])
             );
             
@@ -533,26 +615,42 @@ CDEF;
                 return null;
             }
             
-            // Copy info string to PHP
+            // Copy info to PHP string before freeing the C memory
             $info = FFI::string($infoPtr[0]);
+            Log::debug("Retrieved database info: {$info}");
             
-            // Free the info string allocated by hyperscan
-            FFI::free($infoPtr[0]);
+            // Free the memory allocated by hs_serialized_database_info using C free function
+            // Per Hyperscan documentation, this memory was allocated by Hyperscan's internal allocator
+            Log::debug("Freeing database info string pointer");
+            $this->ffi->free($infoPtr[0]);
             
             return $info;
         } catch (\Throwable $e) {
-            Log::error("Exception while getting database info: {$e->getMessage()}");
+            Log::error("Exception while getting database info: {$e->getMessage()}", [
+                'exception' => $e,
+                'trace' => $e->getTraceAsString()
+            ]);
             return null;
         }
     }
 
     public function __destruct()
     {
-        if (isset($this->scratch)) {
-            $this->ffi->{'hs_free_scratch'}($this->scratch);
-        }
-        if (isset($this->db)) {
-            $this->ffi->{'hs_free_database'}($this->db);
+        try {
+            if (isset($this->scratch)) {
+                Log::debug('Freeing scratch space pointer in destructor');
+                $this->ffi->{'hs_free_scratch'}($this->scratch);
+                $this->scratch = null;
+            }
+            
+            if (isset($this->db)) {
+                Log::debug('Freeing database pointer in destructor');
+                $this->ffi->{'hs_free_database'}($this->db);
+                $this->db = null;
+            }
+        } catch (\Throwable $e) {
+            // Just log in destructor, never throw
+            Log::error("Exception during VectorScanMultiPatternMatcher destruction: {$e->getMessage()}");
         }
     }
 }
