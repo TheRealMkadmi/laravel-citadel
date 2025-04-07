@@ -82,8 +82,16 @@ final class PayloadAnalyzer extends AbstractAnalyzer
      */
     public function analyze(Request $request): float
     {
+        Log::info('Starting PayloadAnalyzer analysis.', [
+            'request_fingerprint' => $request->getFingerprint(),
+            'content_length' => strlen($request->getContent()),
+        ]);
+
         // If analyzer is disabled, return 0 score
         if (! $this->isEnabled()) {
+            Log::warning('PayloadAnalyzer is disabled. Skipping analysis.', [
+                'request_fingerprint' => $request->getFingerprint(),
+            ]);
             return 0.0;
         }
 
@@ -94,12 +102,16 @@ final class PayloadAnalyzer extends AbstractAnalyzer
         $cacheKey = $this->getIdentifier().':'.$requestFingerprint.':'.md5($content);
 
         if (($cached = $this->dataStore->getValue($cacheKey)) !== null) {
-            Log::debug("PayloadAnalyzer cache hit for key: {$cacheKey}");
-
+            Log::debug('PayloadAnalyzer cache hit.', [
+                'cache_key' => $cacheKey,
+                'cached_score' => $cached,
+            ]);
             return (float) $cached;
         }
 
-        Log::info("PayloadAnalyzer starting scan for request with key: {$cacheKey}");
+        Log::info('Scanning request content with MultiPatternMatcher.', [
+            'cache_key' => $cacheKey,
+        ]);
 
         // Perform the scan; get matches
         $matches = $this->matcher->scan($content);
@@ -109,14 +121,20 @@ final class PayloadAnalyzer extends AbstractAnalyzer
 
         // Log matches for debugging
         foreach ($matches as $match) {
-            Log::debug("PayloadAnalyzer matched pattern ID {$match->id}: '{$match->originalPattern}'");
+            Log::debug('Pattern matched in PayloadAnalyzer.', [
+                'pattern_id' => $match->id,
+                'matched_pattern' => $match->originalPattern,
+            ]);
         }
 
         // Cap the score at the configured maximum
         $maxScore = config(self::CONFIG_MAX_SCORE_KEY, 100.0);
         $score = min($score, $maxScore);
 
-        Log::info('PayloadAnalyzer completed scan: found '.count($matches)." matches, final score = {$score}");
+        Log::info('PayloadAnalyzer analysis completed.', [
+            'total_matches' => count($matches),
+            'final_score' => $score,
+        ]);
 
         // Cache the result.
         $this->dataStore->setValue($cacheKey, $score, $this->cacheTtl);

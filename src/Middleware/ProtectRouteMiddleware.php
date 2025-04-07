@@ -49,30 +49,37 @@ class ProtectRouteMiddleware
      */
     public function handle(Request $request, Closure $next): mixed
     {
+        Log::info('Handling request in ProtectRouteMiddleware.', [
+            'path' => $request->path(),
+            'method' => $request->method(),
+            'ip' => $request->ip(),
+        ]);
+
         // Skip if middleware is disabled
         if (! Config::get(CitadelConfig::KEY_MIDDLEWARE_ENABLED, true)) {
+            Log::info('Middleware is disabled. Passing request through.', ['path' => $request->path()]);
             return $next($request);
         }
 
         // Get fingerprint - skip if not available
         $fingerprint = $request->getFingerprint();
         if (empty($fingerprint)) {
-            Log::debug('Citadel: No fingerprint available for request', [
+            Log::warning('No fingerprint available for request.', [
                 'path' => $request->path(),
                 'method' => $request->method(),
             ]);
-
             return $next($request);
         }
 
+        Log::info('Fingerprint retrieved for request.', ['fingerprint' => $fingerprint]);
+
         // Check for existing ban
         if ($this->isBanned($fingerprint)) {
-            Log::info('Citadel: Banned fingerprint attempted access', [
+            Log::warning('Banned fingerprint attempted access.', [
                 'fingerprint' => $fingerprint,
                 'path' => $request->path(),
                 'ip' => $request->ip(),
             ]);
-
             return $this->blockRequest($request);
         }
 
@@ -80,23 +87,37 @@ class ProtectRouteMiddleware
         $applicableAnalyzers = $this->getApplicableAnalyzers($request);
 
         if (empty($applicableAnalyzers)) {
-            Log::debug('Citadel: No applicable analyzers for request', [
+            Log::info('No applicable analyzers for request.', [
                 'fingerprint' => $fingerprint,
                 'path' => $request->path(),
             ]);
-
             return $next($request);
         }
+
+        Log::info('Running analyzers for request.', [
+            'fingerprint' => $fingerprint,
+            'analyzer_count' => count($applicableAnalyzers),
+        ]);
 
         // Run analyzers and calculate scores
         $result = $this->runAnalyzers($request, $applicableAnalyzers);
 
         // Check if the request should be blocked
         if ($this->shouldBlockRequest($result)) {
+            Log::warning('Request blocked based on analyzer results.', [
+                'fingerprint' => $fingerprint,
+                'total_score' => $result['total_score'],
+                'max_score' => $result['max_score'],
+            ]);
             $this->processBlockedRequest($request, $result, $fingerprint);
-
             return $this->blockRequest($request);
         }
+
+        Log::info('Request passed all analyzers.', [
+            'fingerprint' => $fingerprint,
+            'total_score' => $result['total_score'],
+            'max_score' => $result['max_score'],
+        ]);
 
         // Log suspicious activity that wasn't blocked
         $this->logSuspiciousActivity($request, $result);
@@ -111,7 +132,25 @@ class ProtectRouteMiddleware
     {
         $banKey = self::BAN_KEY_PREFIX.$fingerprint;
 
-        return $this->dataStore->getValue($banKey) !== null;
+        Log::debug('Citadel: Checking ban status', [
+            'fingerprint' => $fingerprint,
+            'ban_key' => $banKey,
+        ]);
+
+        $isBanned = $this->dataStore->getValue($banKey) !== null;
+        
+        if ($isBanned) {
+            Log::info('Citadel: Found active ban', [
+                'fingerprint' => $fingerprint,
+                'data_store' => get_class($this->dataStore),
+            ]);
+        } else {
+            Log::debug('Citadel: No ban found', [
+                'fingerprint' => $fingerprint,
+            ]);
+        }
+
+        return $isBanned;
     }
 
     /**
@@ -178,6 +217,8 @@ class ProtectRouteMiddleware
             'fingerprint' => $fingerprint,
             'analyzer_count' => count($analyzers),
             'analyzers' => $analyzerNames,
+            'path' => $request->path(),
+            'method' => $request->method(),
         ]);
 
         foreach ($analyzers as $analyzer) {
@@ -186,27 +227,48 @@ class ProtectRouteMiddleware
                 $cacheKey = self::ANALYZER_CACHE_KEY_PREFIX."{$fingerprint}:{$identifier}";
                 $score = 0.0;
 
+                $startTime = microtime(true);
+                
                 // Try to get from cache first
                 $cachedScore = $this->dataStore->getValue($cacheKey);
 
                 if ($cachedScore !== null) {
                     $score = (float) $cachedScore;
-                    Log::debug('Citadel: Using cached score', [
+                    Log::debug('Citadel: Using cached analyzer score', [
                         'analyzer' => $identifier,
                         'score' => $score,
+                        'fingerprint' => $fingerprint,
+                        'cache_key' => $cacheKey,
+                        'cache_hit' => true,
                     ]);
                 } else {
                     // Calculate fresh score
+                    Log::debug('Citadel: Cache miss for analyzer, calculating new score', [
+                        'analyzer' => $identifier,
+                        'fingerprint' => $fingerprint,
+                        'cache_key' => $cacheKey,
+                    ]);
+                    
                     $score = $analyzer->analyze($request);
+                    $processingTime = microtime(true) - $startTime;
+                    
+                    Log::debug('Citadel: Analyzer completed', [
+                        'analyzer' => $identifier,
+                        'score' => $score,
+                        'processing_time_ms' => round($processingTime * 1000, 2),
+                        'uses_external_resources' => $analyzer->usesExternalResources(),
+                        'requires_body' => $analyzer->requiresRequestBody(),
+                    ]);
 
                     // Cache non-zero scores
                     if ($score > 0.0) {
                         $ttl = Config::get(CitadelConfig::KEY_MIDDLEWARE_CACHE_TTL, 3600);
                         $this->dataStore->setValue($cacheKey, $score, $ttl);
-                        Log::debug('Citadel: Calculated and cached score', [
+                        Log::debug('Citadel: Cached analyzer score', [
                             'analyzer' => $identifier,
                             'score' => $score,
                             'ttl' => $ttl,
+                            'cache_key' => $cacheKey,
                         ]);
                     }
                 }
@@ -214,24 +276,32 @@ class ProtectRouteMiddleware
                 $scores[$identifier] = $score;
             } catch (\Throwable $e) {
                 // Log error but continue with other analyzers
-                Log::error('Citadel: Analyzer error', [
+                Log::error('Citadel: Analyzer failed', [
                     'analyzer' => $analyzer->getIdentifier(),
                     'message' => $e->getMessage(),
                     'exception' => get_class($e),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                    'fingerprint' => $fingerprint,
+                    'path' => $request->path(),
                 ]);
             }
         }
 
         // Calculate aggregate results
         $totalScore = array_sum($scores);
-        $maxScore = ! empty($scores) ? max($scores) : 0.0;
+        $maxScore = !empty($scores) ? max($scores) : 0.0;
         $maxScoringAnalyzer = array_search($maxScore, $scores, true);
 
-        Log::debug('Citadel: Score evaluation complete', [
+        Log::info('Citadel: Score evaluation summary', [
             'total_score' => $totalScore,
             'max_score' => $maxScore,
             'max_scoring_analyzer' => $maxScoringAnalyzer,
+            'fingerprint' => $fingerprint,
+            'path' => $request->path(),
+            'method' => $request->method(),
             'all_scores' => $scores,
+            'analyzer_count' => count($analyzers),
         ]);
 
         return [
@@ -251,9 +321,45 @@ class ProtectRouteMiddleware
     protected function shouldBlockRequest(array $result): bool
     {
         $thresholdScore = Config::get(CitadelConfig::KEY_MIDDLEWARE_THRESHOLD_SCORE, 100);
+        
+        Log::debug('Citadel: Evaluating scores against threshold', [
+            'threshold_score' => $thresholdScore,
+            'total_score' => $result['total_score'],
+            'max_score' => $result['max_score'],
+            'max_scoring_analyzer' => $result['max_scoring_analyzer'] ?? 'none',
+        ]);
+
+        $shouldBlockTotal = $result['total_score'] >= $thresholdScore;
+        $shouldBlockMax = $result['max_score'] >= $thresholdScore;
+        $shouldBlock = $shouldBlockTotal || $shouldBlockMax;
+        
+        if ($shouldBlock) {
+            if ($shouldBlockTotal) {
+                Log::info('Citadel: Request will be blocked due to high total score', [
+                    'total_score' => $result['total_score'],
+                    'threshold' => $thresholdScore,
+                ]);
+            }
+            
+            if ($shouldBlockMax) {
+                Log::info('Citadel: Request will be blocked due to high individual analyzer score', [
+                    'max_score' => $result['max_score'],
+                    'max_analyzer' => $result['max_scoring_analyzer'] ?? 'unknown',
+                    'threshold' => $thresholdScore,
+                ]);
+            }
+        } else {
+            Log::debug('Citadel: Scores below blocking threshold', [
+                'total_score' => $result['total_score'],
+                'max_score' => $result['max_score'],
+                'threshold' => $thresholdScore,
+                'score_percentage_of_threshold' => $result['max_score'] > 0 ? 
+                    round(($result['max_score'] / $thresholdScore) * 100, 1) : 0,
+            ]);
+        }
 
         // Block if total score or any individual score exceeds threshold
-        return $result['total_score'] >= $thresholdScore || $result['max_score'] >= $thresholdScore;
+        return $shouldBlock;
     }
 
     /**
@@ -280,12 +386,63 @@ class ProtectRouteMiddleware
             'method' => $request->method(),
             'ip' => $request->ip(),
             'user_agent' => $request->userAgent(),
+            'all_scores' => $result['scores'] ?? [],
         ]);
 
         // Ban the fingerprint if configured to do so
         if (Config::get(CitadelConfig::KEY_MIDDLEWARE_BAN_ENABLED, false)) {
+            $banDuration = Config::get(CitadelConfig::KEY_MIDDLEWARE_BAN_DURATION, 3600);
+            
+            Log::info('Citadel: Auto-banning fingerprint based on analyzer results', [
+                'fingerprint' => $fingerprint,
+                'ban_duration_seconds' => $banDuration,
+                'max_score' => $result['max_score'],
+                'triggering_analyzer' => $result['max_scoring_analyzer'] ?? 'combined_score',
+                'expires_at' => now()->addSeconds($banDuration)->toDateTimeString(),
+            ]);
+            
             $this->banFingerprint($fingerprint);
+        } else {
+            Log::debug('Citadel: Auto-banning is disabled, request will only be blocked once', [
+                'fingerprint' => $fingerprint,
+                'config_path' => CitadelConfig::KEY_MIDDLEWARE_BAN_ENABLED,
+            ]);
         }
+        
+        // Check if we should also log to external systems or take additional actions
+        $shouldReportSecurity = Config::get(CitadelConfig::KEY_MIDDLEWARE_REPORT_SECURITY_EVENTS, false);
+        if ($shouldReportSecurity) {
+            $this->reportSecurityEvent($request, $result, $fingerprint);
+        }
+    }
+
+    /**
+     * Report a security event to configured channels
+     *
+     * @param  Request  $request  The HTTP request
+     * @param  array  $result  The analysis results
+     * @param  string  $fingerprint  The request fingerprint
+     */
+    protected function reportSecurityEvent(Request $request, array $result, string $fingerprint): void
+    {
+        // Log with special channel for security monitoring
+        Log::channel(Config::get(CitadelConfig::KEY_MIDDLEWARE_SECURITY_LOG_CHANNEL, 'stack'))
+            ->critical('Citadel: Security event detected', [
+                'event_type' => 'request_blocked',
+                'fingerprint' => $fingerprint,
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'path' => $request->path(),
+                'method' => $request->method(),
+                'total_score' => $result['total_score'],
+                'max_score' => $result['max_score'],
+                'detected_at' => now()->toDateTimeString(),
+                'triggering_analyzer' => $result['max_scoring_analyzer'] ?? 'combined_score',
+                'referer' => $request->header('referer'),
+                'scores' => $result['scores'] ?? [],
+                'content_type' => $request->header('Content-Type'),
+                'request_size' => strlen($request->getContent()),
+            ]);
     }
 
     /**

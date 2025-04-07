@@ -29,9 +29,16 @@ class GeofenceMiddleware
      */
     public function handle(Request $request, Closure $next): mixed
     {
+        Log::debug('GeofenceMiddleware: Processing request', [
+            'path' => $request->path(),
+            'method' => $request->method(),
+            'ip' => $request->ip(),
+        ]);
+
         // Skip geofencing if not enabled or if active middleware is disabled
         if (! Config::get(CitadelConfig::KEY_MIDDLEWARE_ACTIVE_ENABLED, true) ||
             ! Config::get(CitadelConfig::KEY_GEOFENCING_ENABLED, false)) {
+            Log::debug('GeofenceMiddleware: Geofencing disabled, skipping check');
             return $next($request);
         }
 
@@ -40,16 +47,25 @@ class GeofenceMiddleware
 
         // If country code couldn't be determined, allow the request
         if (! $countryCode) {
-            Log::info('Citadel Geofencing: Unable to determine country, allowing request');
+            Log::info('GeofenceMiddleware: Unable to determine country code, allowing request', [
+                'headers' => $this->getRelevantHeaders($request),
+                'ip' => $request->ip()
+            ]);
 
             return $next($request);
         }
+
+        Log::debug('GeofenceMiddleware: Country code detected', [
+            'country_code' => $countryCode,
+            'ip' => $request->ip()
+        ]);
 
         // Get the configured list of countries
         $countriesList = $this->getCountriesList();
 
         // No countries configured, allow all requests
         if (empty($countriesList)) {
+            Log::debug('GeofenceMiddleware: No countries configured in geofencing list, allowing request');
             return $next($request);
         }
 
@@ -60,26 +76,53 @@ class GeofenceMiddleware
         $modeString = Config::get(CitadelConfig::KEY_GEOFENCING_MODE, GeofencingMode::BLOCK->value);
         $firewallMode = GeofencingMode::fromString($modeString);
 
+        Log::info('GeofenceMiddleware: Evaluating request against geofence', [
+            'country_code' => $countryCode,
+            'mode' => $firewallMode->value,
+            'is_in_list' => $isCountryInList,
+            'countries_list_count' => count($countriesList),
+        ]);
+
         if ($firewallMode === GeofencingMode::ALLOW) {
             // Allowlist mode: Only allow listed countries
             if (! $isCountryInList) {
-                Log::info('Citadel Geofencing: Blocked request from {country} (not in allowlist)', [
+                Log::warning('GeofenceMiddleware: Blocked request from {country} (not in allowlist)', [
                     'country' => $countryCode,
+                    'ip' => $request->ip(),
+                    'path' => $request->path(),
+                    'allowed_countries' => $countriesList
                 ]);
 
                 return $this->denyAccess();
             }
+            
+            Log::info('GeofenceMiddleware: Allowed request from {country} (in allowlist)', [
+                'country' => $countryCode,
+                'ip' => $request->ip(),
+            ]);
         } elseif ($firewallMode === GeofencingMode::BLOCK) {
             // Blocklist mode: Block listed countries
             if ($isCountryInList) {
-                Log::info('Citadel Geofencing: Blocked request from {country} (in blocklist)', [
+                Log::warning('GeofenceMiddleware: Blocked request from {country} (in blocklist)', [
                     'country' => $countryCode,
+                    'ip' => $request->ip(),
+                    'path' => $request->path(),
+                    'blocked_countries' => $countriesList
                 ]);
 
                 return $this->denyAccess();
             }
+            
+            Log::info('GeofenceMiddleware: Allowed request from {country} (not in blocklist)', [
+                'country' => $countryCode,
+                'ip' => $request->ip(),
+            ]);
         } else {
-            Log::error('Invalid firewall mode: {mode}', ['mode' => $modeString]);
+            Log::error('GeofenceMiddleware: Invalid firewall mode configured', [
+                'mode' => $modeString,
+                'request_ip' => $request->ip(),
+                'country_code' => $countryCode
+            ]);
             throw new \InvalidArgumentException("Invalid citadel firewall mode: {$modeString}", 500);
         }
 
@@ -135,5 +178,16 @@ class GeofenceMiddleware
     protected function denyAccess(): Response
     {
         return response()->json(['error' => 'Access denied based on geographic location'], Response::HTTP_FORBIDDEN);
+    }
+
+    /**
+     * Get relevant headers for logging.
+     */
+    protected function getRelevantHeaders(Request $request): array
+    {
+        return collect(self::COUNTRY_HEADERS)
+            ->mapWithKeys(fn ($header) => [$header => $request->server($header)])
+            ->filter()
+            ->toArray();
     }
 }

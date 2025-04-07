@@ -334,14 +334,22 @@ class CitadelServiceProvider extends PackageServiceProvider
     protected function registerPatternMatcher(): void
     {
         $this->app->singleton(MultiPatternMatcher::class, function ($app) {
+            Log::debug('Registering pattern matcher service.');
+
             // Determine implementation based on configuration
             $implementation = config(self::CONFIG_PATTERN_MATCHER_KEY.'.implementation', 'vectorscan');
-            $patternsFile = config(self::CONFIG_PATTERN_MATCHER_KEY.'.patterns_file', __DIR__.'/../data/http-payload-regex.list');
+            $patternsFile = config(self::CONFIG_PATTERN_MATCHER_KEY.'.patterns_file', __DIR__.'/../resources/http-payload-regex.list');
 
-            // Load patterns from file
+            if (! file_exists($patternsFile)) {
+                Log::emergency("Patterns file not found: {$patternsFile}");
+                return null;
+            }
+
+            Log::info('Loading patterns from file.', ['file' => $patternsFile]);
             $patterns = file($patternsFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 
-            // Create appropriate pattern matcher instance
+            Log::debug('Determining pattern matcher implementation.', ['implementation' => $implementation]);
+
             return match ($implementation) {
                 'pcre' => $this->createPcrePatternMatcher($patterns),
                 'vectorscan' => $this->createVectorscanPatternMatcher($patterns),

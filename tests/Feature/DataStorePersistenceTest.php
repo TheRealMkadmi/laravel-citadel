@@ -27,27 +27,26 @@ class DataStorePersistenceTest extends TestCase
         Config::set(CitadelConfig::KEY_CACHE_PREFIX, 'citadel-persistence-test:');
 
         // Set up test routes
-        $this->defineTestRoutes();
+        $this->defineTestRoutes($this->app);
     }
 
-    protected function defineTestRoutes(): void
+    protected function defineTestRoutes($app): void
     {
-        Route::middleware(['citadel-protect'])
-            ->get(self::TEST_ENDPOINT, function (Request $request) {
-                // Get the DataStore from the container
-                $dataStore = app(DataStore::class);
+        $app['router']->get(self::TEST_ENDPOINT, function (Request $request) {
+            // Get the DataStore from the container
+            $dataStore = app(DataStore::class);
 
-                // Get or increment visit count for this fingerprint
-                $countKey = 'visit_count:'.$request->getFingerprint();
-                $count = $dataStore->getValue($countKey) ?? 0;
-                $dataStore->setValue($countKey, $count + 1);
+            // Get or increment visit count for this fingerprint
+            $countKey = 'visit_count:' . $request->getFingerprint();
+            $count = $dataStore->getValue($countKey) ?? 0;
+            $dataStore->setValue($countKey, $count + 1);
 
-                return response()->json([
-                    'success' => true,
-                    'fingerprint' => $request->getFingerprint(),
-                    'visit_count' => $count + 1,
-                ]);
-            });
+            return response()->json([
+                'success' => true,
+                'fingerprint' => $request->getFingerprint(),
+                'visit_count' => $count + 1,
+            ]);
+        })->middleware('citadel-protect');
     }
 
     /**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace TheRealMkadmi\Citadel\DataStore;
 
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class ArrayDataStore extends AbstractDataStore
 {
@@ -31,9 +32,11 @@ class ArrayDataStore extends AbstractDataStore
      */
     public function getValue(string $key, mixed $default = null): mixed
     {
+        Log::debug('Retrieving value from ArrayDataStore.', ['key' => $key]);
         $prefixedKey = $this->getPrefixedKey($key);
-
-        return $this->cacheStore->get($prefixedKey, $default);
+        $value = $this->cacheStore->get($prefixedKey, $default);
+        Log::debug('Value retrieved from ArrayDataStore.', ['key' => $key, 'value' => $value]);
+        return $value;
     }
 
     /**
@@ -44,6 +47,7 @@ class ArrayDataStore extends AbstractDataStore
      */
     public function setValue(string $key, mixed $value, ?int $ttl = null): bool
     {
+        Log::debug('Setting value in ArrayDataStore.', ['key' => $key, 'value' => $value, 'ttl' => $ttl]);
         $prefixedKey = $this->getPrefixedKey($key);
         $ttl = $ttl ?? $this->getDefaultTtl();
 
@@ -53,7 +57,23 @@ class ArrayDataStore extends AbstractDataStore
             $this->cacheStore->put($prefixedKey, $value, $ttl);
         }
 
+        Log::info('Value set in ArrayDataStore.', ['key' => $key]);
         return true;
+    }
+
+    /**
+     * Remove a value from the data store.
+     *
+     * @param  string  $key  The key to remove
+     * @return bool Success indicator
+     */
+    public function removeValue(string $key): bool
+    {
+        Log::debug('Removing value from ArrayDataStore.', ['key' => $key]);
+        $prefixedKey = $this->getPrefixedKey($key);
+        $result = $this->cacheStore->forget($prefixedKey);
+        Log::info('Value removed from ArrayDataStore.', ['key' => $key]);
+        return $result;
     }
 
     /**
@@ -360,19 +380,6 @@ class ArrayDataStore extends AbstractDataStore
         $prefixedKey = $this->getPrefixedKey($key);
 
         return $this->cacheStore->has($prefixedKey);
-    }
-
-    /**
-     * Remove a value from the data store.
-     *
-     * @param  string  $key  The key to remove
-     * @return bool Success indicator
-     */
-    public function removeValue(string $key): bool
-    {
-        $prefixedKey = $this->getPrefixedKey($key);
-
-        return $this->cacheStore->forget($prefixedKey);
     }
 
     /**

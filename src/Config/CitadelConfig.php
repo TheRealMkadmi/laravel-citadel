@@ -74,6 +74,9 @@ class CitadelConfig
 
     public const KEY_SPAMMINESS = 'citadel.spamminess';
 
+    private const KEY_PATTERN_MATCHER = 'citadel.pattern_matcher';
+
+
     /**
      * Ban configuration keys
      */

@@ -34,34 +34,6 @@ class RealWorldBanScenariosTest extends TestCase
         // Configure middleware to auto-ban when threshold is exceeded
         Config::set(CitadelConfig::KEY_MIDDLEWARE_THRESHOLD_SCORE, 50.0);
         Config::set(CitadelConfig::KEY_MIDDLEWARE_BAN_DURATION, 60); // 1 minute ban
-
-        // Define test routes with different middleware configurations
-        $this->defineTestRoutes();
-    }
-
-    protected function defineTestRoutes(): void
-    {
-        // API endpoint protected with full middleware stack
-        Route::middleware(['citadel-protect'])
-            ->post(self::TEST_API_ENDPOINT, function (Request $request) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'API endpoint accessed',
-                    'fingerprint' => $request->getFingerprint(),
-                    'ip' => $request->ip(),
-                ]);
-            });
-
-        // Frontend endpoint with just ban checking
-        Route::middleware(['citadel-ban'])
-            ->get(self::TEST_FRONTEND_ENDPOINT, function (Request $request) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Frontend endpoint accessed',
-                    'fingerprint' => $request->getFingerprint(),
-                    'ip' => $request->ip(),
-                ]);
-            });
     }
 
     #[Test]

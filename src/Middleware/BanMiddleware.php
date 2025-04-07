@@ -35,36 +35,61 @@ class BanMiddleware
      */
     public function handle(Request $request, Closure $next): mixed
     {
+        Log::debug('BanMiddleware: Processing request', [
+            'path' => $request->path(),
+            'method' => $request->method(),
+            'ip' => $request->ip(),
+        ]);
+
         // Skip check if middleware is disabled
         if (! Config::get(CitadelConfig::KEY_MIDDLEWARE_ACTIVE_ENABLED, true)) {
+            Log::debug('BanMiddleware: Middleware is disabled, skipping ban checks');
             return $next($request);
         }
 
         // Check if IP is banned
-        $ipBanned = $this->isBanned($request->ip(), 'ip');
+        $ip = $request->ip();
+        $ipBanned = $this->isBanned($ip, 'ip');
+        
         if ($ipBanned) {
-            Log::info('Banned IP: {ip} attempted to access {url}', [
-                'ip' => $request->ip(),
-                'url' => $request->fullUrl(),
+            Log::warning('BanMiddleware: Rejected banned IP address', [
+                'ip' => $ip,
+                'path' => $request->path(),
+                'method' => $request->method(),
+                'user_agent' => $request->userAgent(),
             ]);
 
             return $this->denyAccess();
         }
 
+        Log::debug('BanMiddleware: IP check passed', ['ip' => $ip]);
+
         // Check if fingerprint is banned
         $fingerprint = $request->getFingerprint();
         if ($fingerprint) {
             $fingerprintBanned = $this->isBanned($fingerprint, 'fingerprint');
+            
             if ($fingerprintBanned) {
-                Log::info('Banned fingerprint: {fingerprint} attempted to access {url}', [
+                Log::warning('BanMiddleware: Rejected banned fingerprint', [
                     'fingerprint' => $fingerprint,
-                    'ip' => $request->ip(),
-                    'url' => $request->fullUrl(),
+                    'ip' => $ip,
+                    'path' => $request->path(),
+                    'method' => $request->method(),
+                    'user_agent' => $request->userAgent(),
                 ]);
 
                 return $this->denyAccess();
             }
+            
+            Log::debug('BanMiddleware: Fingerprint check passed', ['fingerprint' => $fingerprint]);
+        } else {
+            Log::debug('BanMiddleware: No fingerprint available for request, skipping fingerprint check');
         }
+
+        Log::debug('BanMiddleware: All ban checks passed, allowing request', [
+            'ip' => $ip,
+            'fingerprint' => $fingerprint ?? 'not_available',
+        ]);
 
         return $next($request);
     }
