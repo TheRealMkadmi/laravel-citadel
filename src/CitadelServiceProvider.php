@@ -382,6 +382,28 @@ class CitadelServiceProvider extends PackageServiceProvider
                 default => $this->createVectorscanPatternMatcher($patterns, $patternsFile),
             };
         });
+
+        // Add explicit binding for VectorScanMultiPatternMatcher for direct resolution
+        $this->app->bind(VectorScanMultiPatternMatcher::class, function ($app) {
+            // Get patterns file path from config
+            $patternsFile = config(self::CONFIG_PATTERN_MATCHER_KEY.'.patterns_file');
+            
+            if (empty($patternsFile) || !file_exists($patternsFile)) {
+                $packagePatternsFile = __DIR__.'/../resources/payload-inspection-patterns.list';
+                if (file_exists($packagePatternsFile)) {
+                    $patternsFile = $packagePatternsFile;
+                }
+            }
+            
+            if (!file_exists($patternsFile)) {
+                Log::emergency("Patterns file not found for VectorScanMultiPatternMatcher binding");
+                throw new \RuntimeException("Patterns file not found for VectorScanMultiPatternMatcher binding");
+            }
+
+            $patterns = file($patternsFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            
+            return $this->createVectorscanPatternMatcher($patterns, $patternsFile);
+        });
     }
 
     /**

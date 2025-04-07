@@ -76,7 +76,7 @@ final class VectorScanMultiPatternMatcher extends AbstractMultiPatternMatcher
 
     private const CONFIG_AUTO_SERIALIZE_KEY = 'citadel.pattern_matcher.auto_serialize';
 
-    private const HASH_FILENAME_SUFFIX = '.hash';
+    public const HASH_FILENAME_SUFFIX = '.hash';
 
     private const HS_CALLBACK_CONTINUE = 0;
 
@@ -730,11 +730,9 @@ CDEF;
         $hashFilePath = $dbPath.self::HASH_FILENAME_SUFFIX;
         try {
             $result = file_put_contents($hashFilePath, $hash, LOCK_EX);
-
             return $result !== false;
         } catch (\Throwable $e) {
-            Log::error("Error storing patterns hash: {$e->getMessage()}");
-
+            Log::error("Failed to store pattern hash: {$e->getMessage()}");
             return false;
         }
     }
