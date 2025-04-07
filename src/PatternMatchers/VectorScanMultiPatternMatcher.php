@@ -730,9 +730,11 @@ CDEF;
         $hashFilePath = $dbPath.self::HASH_FILENAME_SUFFIX;
         try {
             $result = file_put_contents($hashFilePath, $hash, LOCK_EX);
+
             return $result !== false;
         } catch (\Throwable $e) {
             Log::error("Failed to store pattern hash: {$e->getMessage()}");
+
             return false;
         }
     }
