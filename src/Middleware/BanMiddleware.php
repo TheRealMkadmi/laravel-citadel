@@ -44,13 +44,14 @@ class BanMiddleware
         // Skip check if middleware is disabled
         if (! Config::get(CitadelConfig::KEY_MIDDLEWARE_ACTIVE_ENABLED, true)) {
             Log::debug('BanMiddleware: Middleware is disabled, skipping ban checks');
+
             return $next($request);
         }
 
         // Check if IP is banned
         $ip = $request->ip();
         $ipBanned = $this->isBanned($ip, 'ip');
-        
+
         if ($ipBanned) {
             Log::warning('BanMiddleware: Rejected banned IP address', [
                 'ip' => $ip,
@@ -68,7 +69,7 @@ class BanMiddleware
         $fingerprint = $request->getFingerprint();
         if ($fingerprint) {
             $fingerprintBanned = $this->isBanned($fingerprint, 'fingerprint');
-            
+
             if ($fingerprintBanned) {
                 Log::warning('BanMiddleware: Rejected banned fingerprint', [
                     'fingerprint' => $fingerprint,
@@ -80,7 +81,7 @@ class BanMiddleware
 
                 return $this->denyAccess();
             }
-            
+
             Log::debug('BanMiddleware: Fingerprint check passed', ['fingerprint' => $fingerprint]);
         } else {
             Log::debug('BanMiddleware: No fingerprint available for request, skipping fingerprint check');

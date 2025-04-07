@@ -57,7 +57,7 @@ class CitadelBanCommand extends Command
             'identifier' => $identifier,
             'type_option' => $typeString,
             'duration' => $duration ?? 'permanent',
-            'reason' => $reason
+            'reason' => $reason,
         ]);
 
         // Resolve ban type using our enum
@@ -69,9 +69,9 @@ class CitadelBanCommand extends Command
         if ($banType === null) {
             \Log::error('CitadelBanCommand: Invalid identifier type specified', [
                 'specified_type' => $typeString,
-                'valid_types' => BanType::getValues()
+                'valid_types' => BanType::getValues(),
             ]);
-            
+
             $this->error("Invalid identifier type: {$typeString}");
             $this->line('Valid types are: '.implode(', ', BanType::getValues()));
 
@@ -81,7 +81,7 @@ class CitadelBanCommand extends Command
         \Log::info('CitadelBanCommand: Resolved ban type', [
             'identifier' => $identifier,
             'resolved_type' => $banType->value,
-            'was_autodetected' => $typeString === 'auto'
+            'was_autodetected' => $typeString === 'auto',
         ]);
 
         // Generate ban key
@@ -110,14 +110,14 @@ class CitadelBanCommand extends Command
                 'previous_reason' => $existingBan['reason'] ?? 'unknown',
                 'new_reason' => $reason,
             ]);
-            
+
             $this->warn("Note: Overwriting existing ban for {$banType->value} '{$identifier}'");
         }
 
         // Store ban record
         if ($duration !== null) {
             $success = $this->dataStore->setValue($key, $banData, (int) $duration);
-            
+
             if ($success) {
                 \Log::info('CitadelBanCommand: Successfully banned identifier with expiry', [
                     'identifier' => $identifier,
@@ -125,32 +125,33 @@ class CitadelBanCommand extends Command
                     'duration_seconds' => (int) $duration,
                     'expires_at' => now()->addSeconds((int) $duration)->toDateTimeString(),
                 ]);
-                
+
                 $this->info("Banned {$banType->value} '{$identifier}' for {$duration} seconds");
                 $this->line("Reason: {$reason}");
-                $this->line("Expires: " . now()->addSeconds((int) $duration)->format('Y-m-d H:i:s'));
+                $this->line('Expires: '.now()->addSeconds((int) $duration)->format('Y-m-d H:i:s'));
             } else {
                 \Log::error('CitadelBanCommand: Failed to store ban record', [
                     'identifier' => $identifier,
                     'type' => $banType->value,
                     'data_store' => get_class($this->dataStore),
                 ]);
-                
+
                 $this->error("Failed to ban {$banType->value} '{$identifier}'");
+
                 return Command::FAILURE;
             }
         } else {
             // Use a very long TTL for permanent ban (10 years)
             $permanentDuration = 10 * 365 * 24 * 60 * 60;
             $success = $this->dataStore->setValue($key, $banData, $permanentDuration);
-            
+
             if ($success) {
                 \Log::info('CitadelBanCommand: Successfully applied permanent ban', [
                     'identifier' => $identifier,
                     'type' => $banType->value,
                     'ttl_years' => 10,
                 ]);
-                
+
                 $this->info("Permanently banned {$banType->value} '{$identifier}'");
                 $this->line("Reason: {$reason}");
             } else {
@@ -159,8 +160,9 @@ class CitadelBanCommand extends Command
                     'type' => $banType->value,
                     'data_store' => get_class($this->dataStore),
                 ]);
-                
+
                 $this->error("Failed to ban {$banType->value} '{$identifier}'");
+
                 return Command::FAILURE;
             }
         }

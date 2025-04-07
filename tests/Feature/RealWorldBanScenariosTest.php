@@ -4,7 +4,6 @@ namespace TheRealMkadmi\Citadel\Tests\Feature;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\Test;
 use TheRealMkadmi\Citadel\Citadel;
 use TheRealMkadmi\Citadel\Config\CitadelConfig;

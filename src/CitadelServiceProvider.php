@@ -342,6 +342,7 @@ class CitadelServiceProvider extends PackageServiceProvider
 
             if (! file_exists($patternsFile)) {
                 Log::emergency("Patterns file not found: {$patternsFile}");
+
                 return null;
             }
 

@@ -36,6 +36,7 @@ class ArrayDataStore extends AbstractDataStore
         $prefixedKey = $this->getPrefixedKey($key);
         $value = $this->cacheStore->get($prefixedKey, $default);
         Log::debug('Value retrieved from ArrayDataStore.', ['key' => $key, 'value' => $value]);
+
         return $value;
     }
 
@@ -58,6 +59,7 @@ class ArrayDataStore extends AbstractDataStore
         }
 
         Log::info('Value set in ArrayDataStore.', ['key' => $key]);
+
         return true;
     }
 
@@ -73,6 +75,7 @@ class ArrayDataStore extends AbstractDataStore
         $prefixedKey = $this->getPrefixedKey($key);
         $result = $this->cacheStore->forget($prefixedKey);
         Log::info('Value removed from ArrayDataStore.', ['key' => $key]);
+
         return $result;
     }
 

@@ -55,8 +55,9 @@ class Citadel
                 'header_name' => $headerName,
                 'fingerprint_length' => strlen($fingerprint),
                 'path' => $request->path(),
-                'ip' => $request->ip()
+                'ip' => $request->ip(),
             ]);
+
             return $fingerprint;
         }
 
@@ -68,31 +69,32 @@ class Citadel
                 'cookie_name' => $cookieName,
                 'fingerprint_length' => strlen($fingerprint),
                 'path' => $request->path(),
-                'ip' => $request->ip()
+                'ip' => $request->ip(),
             ]);
+
             return $fingerprint;
         }
 
         Log::debug('Citadel: No fingerprint found in header or cookie, attempting to generate one');
-        
+
         // No fingerprint available from headers or cookies,
         // Generate one from available request attributes
         $generatedFingerprint = $this->generateFingerprint($request);
-        
+
         if ($generatedFingerprint) {
             Log::info('Citadel: Generated new fingerprint', [
                 'fingerprint_length' => strlen($generatedFingerprint),
                 'path' => $request->path(),
-                'ip' => $request->ip()
+                'ip' => $request->ip(),
             ]);
         } else {
             Log::warning('Citadel: Failed to generate fingerprint - insufficient data', [
                 'path' => $request->path(),
                 'ip' => $request->ip(),
-                'user_agent_present' => $request->userAgent() ? true : false
+                'user_agent_present' => $request->userAgent() ? true : false,
             ]);
         }
-        
+
         return $generatedFingerprint;
     }
 
@@ -125,15 +127,16 @@ class Citadel
             Log::warning('Citadel: Insufficient data to generate fingerprint', [
                 'available_attributes' => $collectedAttributes,
                 'ip_present' => isset($attributes['ip']) && $attributes['ip'] !== 'unknown',
-                'user_agent_present' => isset($attributes['user_agent']) && $attributes['user_agent'] !== 'unknown'
+                'user_agent_present' => isset($attributes['user_agent']) && $attributes['user_agent'] !== 'unknown',
             ]);
+
             return null;
         }
 
         Log::debug('Citadel: Generating fingerprint from attributes', [
             'attributes_used' => $collectedAttributes,
             'ip_included' => isset($attributes['ip']),
-            'user_agent_included' => isset($attributes['user_agent'])
+            'user_agent_included' => isset($attributes['user_agent']),
         ]);
 
         // Generate a consistent hash of collected attributes
@@ -155,8 +158,9 @@ class Citadel
         Log::info('Citadel: Banning IP address', [
             'ip' => $ip,
             'duration' => $duration ?? 'permanent',
-            'reason' => $reason
+            'reason' => $reason,
         ]);
+
         return $this->ban($ip, BanType::IP, $duration, $reason);
     }
 
@@ -174,8 +178,9 @@ class Citadel
             'fingerprint' => $fingerprint,
             'fingerprint_length' => strlen($fingerprint),
             'duration' => $duration ?? 'permanent',
-            'reason' => $reason
+            'reason' => $reason,
         ]);
+
         return $this->ban($fingerprint, BanType::FINGERPRINT, $duration, $reason);
     }
 
@@ -198,7 +203,7 @@ class Citadel
             'type' => $type->value,
             'key' => $key,
             'duration' => $duration ?? 'permanent',
-            'reason' => $reason
+            'reason' => $reason,
         ]);
 
         // Create ban record
@@ -213,30 +218,30 @@ class Citadel
             // Default to configuration or very long TTL for permanent bans
             $duration = Config::get(CitadelConfig::KEY_BAN.'.ban_ttl') ??
                        (10 * 365 * 24 * 60 * 60); // 10 years
-            
+
             Log::debug('Citadel: Using permanent ban duration', [
                 'configured_duration' => $duration,
-                'identifier_type' => $type->value
+                'identifier_type' => $type->value,
             ]);
         }
 
         // Store the ban
         $result = $this->dataStore->setValue($key, $banData, $duration);
-        
+
         if ($result) {
             Log::info('Citadel: Successfully created ban record', [
                 'identifier' => $identifier,
                 'type' => $type->value,
-                'expires_at' => now()->addSeconds($duration)->toDateTimeString()
+                'expires_at' => now()->addSeconds($duration)->toDateTimeString(),
             ]);
         } else {
             Log::error('Citadel: Failed to create ban record', [
                 'identifier' => $identifier,
                 'type' => $type->value,
-                'data_store' => get_class($this->dataStore)
+                'data_store' => get_class($this->dataStore),
             ]);
         }
-        
+
         return $result;
     }
 
@@ -251,40 +256,41 @@ class Citadel
     {
         // Generate ban key
         $key = $this->generateBanKey($identifier, $type->value);
-        
+
         Log::info('Citadel: Attempting to unban identifier', [
             'identifier' => $identifier,
             'type' => $type->value,
-            'key' => $key
+            'key' => $key,
         ]);
 
         // Check if ban exists first
         $banExists = $this->dataStore->getValue($key) !== null;
-        
-        if (!$banExists) {
+
+        if (! $banExists) {
             Log::info('Citadel: No existing ban found to remove', [
                 'identifier' => $identifier,
-                'type' => $type->value
+                'type' => $type->value,
             ]);
+
             return false;
         }
 
         // Remove the ban
         $result = $this->dataStore->removeValue($key);
-        
+
         if ($result) {
             Log::info('Citadel: Successfully removed ban', [
                 'identifier' => $identifier,
-                'type' => $type->value
+                'type' => $type->value,
             ]);
         } else {
             Log::error('Citadel: Failed to remove ban', [
                 'identifier' => $identifier,
                 'type' => $type->value,
-                'data_store' => get_class($this->dataStore)
+                'data_store' => get_class($this->dataStore),
             ]);
         }
-        
+
         return $result;
     }
 
@@ -303,24 +309,24 @@ class Citadel
         Log::debug('Citadel: Checking if identifier is banned', [
             'identifier' => $identifier,
             'type' => $type->value,
-            'key' => $key
+            'key' => $key,
         ]);
 
         // Check if ban exists
         $banned = $this->dataStore->getValue($key) !== null;
-        
+
         if ($banned) {
             Log::debug('Citadel: Identifier is banned', [
                 'identifier' => $identifier,
-                'type' => $type->value
+                'type' => $type->value,
             ]);
         } else {
             Log::debug('Citadel: Identifier is not banned', [
                 'identifier' => $identifier,
-                'type' => $type->value
+                'type' => $type->value,
             ]);
         }
-        
+
         return $banned;
     }
 
