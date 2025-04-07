@@ -76,7 +76,6 @@ class CitadelConfig
 
     private const KEY_PATTERN_MATCHER = 'citadel.pattern_matcher';
 
-
     /**
      * Ban configuration keys
      */

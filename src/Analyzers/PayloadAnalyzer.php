@@ -92,6 +92,7 @@ final class PayloadAnalyzer extends AbstractAnalyzer
             Log::warning('PayloadAnalyzer is disabled. Skipping analysis.', [
                 'request_fingerprint' => $request->getFingerprint(),
             ]);
+
             return 0.0;
         }
 
@@ -106,6 +107,7 @@ final class PayloadAnalyzer extends AbstractAnalyzer
                 'cache_key' => $cacheKey,
                 'cached_score' => $cached,
             ]);
+
             return (float) $cached;
         }
 

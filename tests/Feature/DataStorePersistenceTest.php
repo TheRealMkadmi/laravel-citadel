@@ -5,7 +5,6 @@ namespace TheRealMkadmi\Citadel\Tests\Feature;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\Test;
 use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\ArrayDataStore;
@@ -37,7 +36,7 @@ class DataStorePersistenceTest extends TestCase
             $dataStore = app(DataStore::class);
 
             // Get or increment visit count for this fingerprint
-            $countKey = 'visit_count:' . $request->getFingerprint();
+            $countKey = 'visit_count:'.$request->getFingerprint();
             $count = $dataStore->getValue($countKey) ?? 0;
             $dataStore->setValue($countKey, $count + 1);
 

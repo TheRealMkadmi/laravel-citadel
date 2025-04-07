@@ -63,9 +63,9 @@ class CitadelUnbanCommand extends Command
         if ($banType === null) {
             \Log::error('CitadelUnbanCommand: Invalid identifier type specified', [
                 'specified_type' => $typeString,
-                'valid_types' => BanType::getValues()
+                'valid_types' => BanType::getValues(),
             ]);
-            
+
             $this->error("Invalid identifier type: {$typeString}");
             $this->line('Valid types are: '.implode(', ', BanType::getValues()));
 
@@ -75,16 +75,16 @@ class CitadelUnbanCommand extends Command
         \Log::info('CitadelUnbanCommand: Resolved ban type', [
             'identifier' => $identifier,
             'resolved_type' => $banType->value,
-            'was_autodetected' => $typeString === 'auto'
+            'was_autodetected' => $typeString === 'auto',
         ]);
 
         // Generate ban key
         $key = $this->generateBanKey($identifier, $banType->value);
-        
+
         \Log::debug('CitadelUnbanCommand: Generated ban key', [
             'identifier' => $identifier,
             'type' => $banType->value,
-            'key' => $key
+            'key' => $key,
         ]);
 
         // Check if the ban exists
@@ -93,9 +93,9 @@ class CitadelUnbanCommand extends Command
         if ($banData === null) {
             \Log::info('CitadelUnbanCommand: No active ban found', [
                 'identifier' => $identifier,
-                'type' => $banType->value
+                'type' => $banType->value,
             ]);
-            
+
             $this->warn("No active ban found for {$banType->value} '{$identifier}'");
 
             return Command::FAILURE;
@@ -105,7 +105,7 @@ class CitadelUnbanCommand extends Command
             'identifier' => $identifier,
             'type' => $banType->value,
             'banned_at' => isset($banData['timestamp']) ? date('Y-m-d H:i:s', $banData['timestamp']) : 'unknown',
-            'reason' => $banData['reason'] ?? 'unknown'
+            'reason' => $banData['reason'] ?? 'unknown',
         ]);
 
         // Remove the ban
@@ -114,9 +114,9 @@ class CitadelUnbanCommand extends Command
         if ($success) {
             \Log::info('CitadelUnbanCommand: Successfully removed ban record', [
                 'identifier' => $identifier,
-                'type' => $banType->value
+                'type' => $banType->value,
             ]);
-            
+
             $this->info("Successfully unbanned {$banType->value} '{$identifier}'");
 
             return Command::SUCCESS;
@@ -124,9 +124,9 @@ class CitadelUnbanCommand extends Command
             \Log::error('CitadelUnbanCommand: Failed to remove ban record', [
                 'identifier' => $identifier,
                 'type' => $banType->value,
-                'data_store' => get_class($this->dataStore)
+                'data_store' => get_class($this->dataStore),
             ]);
-            
+
             $this->error("Failed to unban {$banType->value} '{$identifier}'");
 
             return Command::FAILURE;

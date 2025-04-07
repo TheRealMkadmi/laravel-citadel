@@ -29,18 +29,20 @@ class ApiAuthMiddleware
         // Check if token is configured
         if (empty($configuredToken)) {
             Log::error('ApiAuthMiddleware: API authentication not configured, missing token in config');
+
             return response()->json(['error' => 'API authentication not configured'], 500);
         }
 
         // Get token from request
         $requestToken = $this->getTokenFromRequest($request);
-        
+
         if (empty($requestToken)) {
             Log::warning('ApiAuthMiddleware: Authentication failed - no token provided', [
                 'ip' => $request->ip(),
                 'path' => $request->path(),
                 'user_agent' => $request->userAgent(),
             ]);
+
             return response()->json(['error' => 'Unauthorized - no token provided'], 401);
         }
 
@@ -51,6 +53,7 @@ class ApiAuthMiddleware
                 'path' => $request->path(),
                 'token_length' => strlen($requestToken),
             ]);
+
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -72,6 +75,7 @@ class ApiAuthMiddleware
         $bearerToken = $request->bearerToken();
         if ($bearerToken) {
             Log::debug('ApiAuthMiddleware: Found token in Authorization header');
+
             return $bearerToken;
         }
 
@@ -79,6 +83,7 @@ class ApiAuthMiddleware
         $headerToken = $request->header('X-API-Token');
         if ($headerToken) {
             Log::debug('ApiAuthMiddleware: Found token in X-API-Token header');
+
             return $headerToken;
         }
 
@@ -86,10 +91,12 @@ class ApiAuthMiddleware
         $queryToken = $request->input('api_token');
         if ($queryToken) {
             Log::debug('ApiAuthMiddleware: Found token in query string or form data');
+
             return $queryToken;
         }
 
         Log::debug('ApiAuthMiddleware: No token found in request');
+
         return null;
     }
 }
