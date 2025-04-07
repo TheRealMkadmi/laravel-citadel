@@ -404,7 +404,7 @@ return [
         | Lines starting with # are treated as comments.
         |
         */
-        'patterns_file' => env('CITADEL_PATTERNS_FILE', null),
+        'patterns_file' => env('CITADEL_PATTERNS_FILE', resource_path('vendor/citadel/payload-inspection-patterns.list')),
 
         /*
         |--------------------------------------------------------------------------

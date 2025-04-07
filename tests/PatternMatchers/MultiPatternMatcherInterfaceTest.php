@@ -2,6 +2,7 @@
 
 namespace TheRealMkadmi\Citadel\Tests\PatternMatchers;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatcher;
 use TheRealMkadmi\Citadel\PatternMatchers\PcreMultiPatternMatcher;
 use TheRealMkadmi\Citadel\PatternMatchers\VectorScanMultiPatternMatcher;
@@ -9,9 +10,7 @@ use TheRealMkadmi\Citadel\Tests\TestCase;
 
 class MultiPatternMatcherInterfaceTest extends TestCase
 {
-    /**
-     * @dataProvider provideMatcherImplementations
-     */
+    #[DataProvider('provideMatcherImplementations')]
     public function test_all_implementations_handle_serialization_correctly($implementationClass): void
     {
         try {
@@ -65,7 +64,7 @@ class MultiPatternMatcherInterfaceTest extends TestCase
         }
     }
 
-    public function provideMatcherImplementations(): array
+    public static function provideMatcherImplementations(): array
     {
         return [
             'PCRE Implementation' => [PcreMultiPatternMatcher::class],

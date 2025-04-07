@@ -96,6 +96,9 @@ class CitadelServiceProvider extends PackageServiceProvider
                     ->publishAssets()
                     ->askToStarRepoOnGitHub('therealmkadmi/laravel-citadel')
                     ->endWith(function (InstallCommand $command) {
+                        $command->line('Publishing patterns file...');
+                        $this->callSilent('vendor:publish', ['--tag' => 'citadel-patterns']);
+                        
                         $command->info('Laravel Citadel has been installed successfully!');
                         $command->info('You can now use the Citadel fingerprinting in your application.');
                         $command->info('Add the fingerprint script to your layout using either:');
@@ -103,6 +106,11 @@ class CitadelServiceProvider extends PackageServiceProvider
                         $command->info('  2. <x-citadel::fingerprint /> component');
                     });
             });
+            
+        // Publish the pattern files
+        $this->publishes([
+            __DIR__.'/../resources/payload-inspection-patterns.list' => resource_path('vendor/citadel/payload-inspection-patterns.list'),
+        ], 'citadel-patterns');
     }
 
     /**
@@ -338,22 +346,39 @@ class CitadelServiceProvider extends PackageServiceProvider
 
             // Determine implementation based on configuration
             $implementation = config(self::CONFIG_PATTERN_MATCHER_KEY.'.implementation', 'vectorscan');
-            $patternsFile = config(self::CONFIG_PATTERN_MATCHER_KEY.'.patterns_file', __DIR__.'/../resources/http-payload-regex.list');
-
-            if (! file_exists($patternsFile)) {
+            
+            // Get patterns file path from config or use package default if not set
+            $patternsFile = config(self::CONFIG_PATTERN_MATCHER_KEY.'.patterns_file');
+            
+            // If the config value doesn't exist or the file doesn't exist at the specified path,
+            // fall back to the package's resource file
+            if (empty($patternsFile) || !file_exists($patternsFile)) {
+                $packagePatternsFile = __DIR__.'/../resources/payload-inspection-patterns.list';
+                
+                if (file_exists($packagePatternsFile)) {
+                    $patternsFile = $packagePatternsFile;
+                    Log::info('Using package default patterns file.', ['file' => $patternsFile]);
+                } else {
+                    Log::emergency("Default patterns file not found: {$packagePatternsFile}");
+                    return null;
+                }
+            } else {
+                Log::info('Using configured patterns file.', ['file' => $patternsFile]);
+            }
+            
+            if (!file_exists($patternsFile)) {
                 Log::emergency("Patterns file not found: {$patternsFile}");
                 return null;
             }
 
-            Log::info('Loading patterns from file.', ['file' => $patternsFile]);
             $patterns = file($patternsFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 
             Log::debug('Determining pattern matcher implementation.', ['implementation' => $implementation]);
 
             return match ($implementation) {
                 'pcre' => $this->createPcrePatternMatcher($patterns),
-                'vectorscan' => $this->createVectorscanPatternMatcher($patterns),
-                default => $this->createVectorscanPatternMatcher($patterns),
+                'vectorscan' => $this->createVectorscanPatternMatcher($patterns, $patternsFile),
+                default => $this->createVectorscanPatternMatcher($patterns, $patternsFile),
             };
         });
     }
@@ -376,12 +401,12 @@ class CitadelServiceProvider extends PackageServiceProvider
      * Create a Vectorscan-based pattern matcher.
      *
      * @param  array<int, string>  $patterns  Array of pattern strings
+     * @param  string  $patternsFilePath  Path to the pattern file
      */
-    protected function createVectorscanPatternMatcher(array $patterns): MultiPatternMatcher
+    protected function createVectorscanPatternMatcher(array $patterns, string $patternsFilePath): MultiPatternMatcher
     {
         // Get configuration options
         $serializedDbPath = config(self::CONFIG_PATTERN_MATCHER_KEY.'.serialized_db_path');
-        $patternsFilePath = config(self::CONFIG_PATTERN_MATCHER_KEY.'.patterns_file', __DIR__.'/../data/http-payload-regex.list');
         $autoSerialize = config(self::CONFIG_PATTERN_MATCHER_KEY.'.auto_serialize', true);
         $useHashValidation = config(self::CONFIG_PATTERN_MATCHER_KEY.'.use_hash_validation', true);
 
