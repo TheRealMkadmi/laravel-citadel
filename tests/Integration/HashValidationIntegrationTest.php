@@ -73,19 +73,18 @@ class HashValidationIntegrationTest extends TestCase
 
     /**
      * Test that the service provider correctly handles hash validation when enabled
-     */
-    public function test_service_provider_uses_hash_validation_when_enabled(): void
+     */    public function test_service_provider_uses_hash_validation_when_enabled(): void
     {
         if (! $this->isVectorscanAvailable()) {
             $this->markTestSkipped('Vectorscan library is not available');
         }
 
         // Configure for hash validation
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.implementation', 'vectorscan');
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.patterns_file', $this->testPatternsFilePath);
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.serialized_db_path', $this->testDbPath);
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.auto_serialize', true);
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.use_hash_validation', true);
+        Config::set('citadel.pattern_matcher.implementation', 'vectorscan');
+        Config::set('citadel.pattern_matcher.patterns_file', $this->testPatternsFilePath);
+        Config::set('citadel.pattern_matcher.serialized_db_path', $this->testDbPath);
+        Config::set('citadel.pattern_matcher.auto_serialize', true);
+        Config::set('citadel.pattern_matcher.use_hash_validation', true);
 
         // Create a fresh service provider instance
         $serviceProvider = new CitadelServiceProvider($this->app);
@@ -114,19 +113,18 @@ class HashValidationIntegrationTest extends TestCase
 
     /**
      * Test that hash validation can be disabled
-     */
-    public function test_hash_validation_can_be_disabled(): void
+     */    public function test_hash_validation_can_be_disabled(): void
     {
         if (! $this->isVectorscanAvailable()) {
             $this->markTestSkipped('Vectorscan library is not available');
         }
 
         // Configure without hash validation
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.implementation', 'vectorscan');
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.patterns_file', $this->testPatternsFilePath);
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.serialized_db_path', $this->testDbPath);
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.auto_serialize', true);
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.use_hash_validation', false);
+        Config::set('citadel.pattern_matcher.implementation', 'vectorscan');
+        Config::set('citadel.pattern_matcher.patterns_file', $this->testPatternsFilePath);
+        Config::set('citadel.pattern_matcher.serialized_db_path', $this->testDbPath);
+        Config::set('citadel.pattern_matcher.auto_serialize', true);
+        Config::set('citadel.pattern_matcher.use_hash_validation', false);
 
         // Create a fresh service provider instance
         $serviceProvider = new CitadelServiceProvider($this->app);
@@ -154,19 +152,18 @@ class HashValidationIntegrationTest extends TestCase
 
     /**
      * Test that auto-serialization can be disabled
-     */
-    public function test_auto_serialization_can_be_disabled(): void
+     */    public function test_auto_serialization_can_be_disabled(): void
     {
         if (! $this->isVectorscanAvailable()) {
             $this->markTestSkipped('Vectorscan library is not available');
         }
 
         // Configure with hash validation but without auto-serialization
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.implementation', 'vectorscan');
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.patterns_file', $this->testPatternsFilePath);
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.serialized_db_path', $this->testDbPath);
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.auto_serialize', false);
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.use_hash_validation', true);
+        Config::set('citadel.pattern_matcher.implementation', 'vectorscan');
+        Config::set('citadel.pattern_matcher.patterns_file', $this->testPatternsFilePath);
+        Config::set('citadel.pattern_matcher.serialized_db_path', $this->testDbPath);
+        Config::set('citadel.pattern_matcher.auto_serialize', false);
+        Config::set('citadel.pattern_matcher.use_hash_validation', true);
 
         // Create a fresh service provider instance
         $serviceProvider = new CitadelServiceProvider($this->app);
@@ -176,7 +173,7 @@ class HashValidationIntegrationTest extends TestCase
         $method = $reflection->getMethod('createVectorscanPatternMatcher');
         $method->setAccessible(true);
 
-        Log::debug("Creating matcher with auto-serialization, path: this->testDbPath");        // Create the matcher through the service provider
+        Log::debug("Creating matcher with auto-serialization, path: {$this->testDbPath}");        // Create the matcher through the service provider
         $matcher = $method->invoke($serviceProvider, $this->testPatterns, $this->testPatternsFilePath);
 
         // Verify the database was NOT created since auto-serialization is disabled
@@ -185,19 +182,18 @@ class HashValidationIntegrationTest extends TestCase
 
     /**
      * Test that the MultiPatternMatcher container binding works with hash validation
-     */
-    public function test_container_binding_works_with_hash_validation(): void
+     */    public function test_container_binding_works_with_hash_validation(): void
     {
         if (! $this->isVectorscanAvailable()) {
             $this->markTestSkipped('Vectorscan library is not available');
         }
 
         // Configure for hash validation
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.implementation', 'vectorscan');
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.patterns_file', $this->testPatternsFilePath);
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.serialized_db_path', $this->testDbPath);
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.auto_serialize', true);
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.use_hash_validation', true);
+        Config::set('citadel.pattern_matcher.implementation', 'vectorscan');
+        Config::set('citadel.pattern_matcher.patterns_file', $this->testPatternsFilePath);
+        Config::set('citadel.pattern_matcher.serialized_db_path', $this->testDbPath);
+        Config::set('citadel.pattern_matcher.auto_serialize', true);
+        Config::set('citadel.pattern_matcher.use_hash_validation', true);
 
         // Get a MultiPatternMatcher from the container
         $matcher = $this->app->make(MultiPatternMatcher::class);

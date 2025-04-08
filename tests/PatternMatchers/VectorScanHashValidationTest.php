@@ -197,11 +197,16 @@ class VectorScanHashValidationTest extends TestCase
 
         // Verify the database was not recompiled
         $secondModTime = File::lastModified($this->testDbPath);
-        $this->assertEquals($firstModTime, $secondModTime, 'Database should not be recompiled when patterns are unchanged');
-
-        // Now modify the patterns file
+        $this->assertEquals($firstModTime, $secondModTime, 'Database should not be recompiled when patterns are unchanged');        // Now modify the patterns file
         File::put($this->testPatternsFilePath, 'new_pattern\d+'.PHP_EOL.'modified_pattern\w+');
-
+        
+        // Add a short delay to ensure file modification times will be different
+        // This prevents timestamp resolution issues in fast test execution
+        usleep(1000000); // 1 second sleep
+        
+        // Explicitly update modification time on the patterns file
+        touch($this->testPatternsFilePath);
+        
         // Force reload the matcher
         $this->app->forgetInstance(VectorScanMultiPatternMatcher::class);
         $matcher3 = $this->app->make(VectorScanMultiPatternMatcher::class);
