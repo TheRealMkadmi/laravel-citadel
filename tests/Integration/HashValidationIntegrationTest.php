@@ -6,7 +6,6 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use TheRealMkadmi\Citadel\CitadelServiceProvider;
-use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatcher;
 use TheRealMkadmi\Citadel\PatternMatchers\VectorScanMultiPatternMatcher;
 use TheRealMkadmi\Citadel\Tests\TestCase;
@@ -73,7 +72,8 @@ class HashValidationIntegrationTest extends TestCase
 
     /**
      * Test that the service provider correctly handles hash validation when enabled
-     */    public function test_service_provider_uses_hash_validation_when_enabled(): void
+     */
+    public function test_service_provider_uses_hash_validation_when_enabled(): void
     {
         if (! $this->isVectorscanAvailable()) {
             $this->markTestSkipped('Vectorscan library is not available');
@@ -113,7 +113,8 @@ class HashValidationIntegrationTest extends TestCase
 
     /**
      * Test that hash validation can be disabled
-     */    public function test_hash_validation_can_be_disabled(): void
+     */
+    public function test_hash_validation_can_be_disabled(): void
     {
         if (! $this->isVectorscanAvailable()) {
             $this->markTestSkipped('Vectorscan library is not available');
@@ -152,7 +153,8 @@ class HashValidationIntegrationTest extends TestCase
 
     /**
      * Test that auto-serialization can be disabled
-     */    public function test_auto_serialization_can_be_disabled(): void
+     */
+    public function test_auto_serialization_can_be_disabled(): void
     {
         if (! $this->isVectorscanAvailable()) {
             $this->markTestSkipped('Vectorscan library is not available');
@@ -182,7 +184,8 @@ class HashValidationIntegrationTest extends TestCase
 
     /**
      * Test that the MultiPatternMatcher container binding works with hash validation
-     */    public function test_container_binding_works_with_hash_validation(): void
+     */
+    public function test_container_binding_works_with_hash_validation(): void
     {
         if (! $this->isVectorscanAvailable()) {
             $this->markTestSkipped('Vectorscan library is not available');

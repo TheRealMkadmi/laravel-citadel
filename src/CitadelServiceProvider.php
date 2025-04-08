@@ -109,7 +109,7 @@ class CitadelServiceProvider extends PackageServiceProvider
 
         // Publish the pattern files
         $this->publishes([
-            __DIR__ . '/../resources/payload-inspection-patterns.list' => resource_path('vendor/citadel/payload-inspection-patterns.list'),
+            __DIR__.'/../resources/payload-inspection-patterns.list' => resource_path('vendor/citadel/payload-inspection-patterns.list'),
         ], 'citadel-patterns');
     }
 
@@ -121,7 +121,7 @@ class CitadelServiceProvider extends PackageServiceProvider
     public function packageBooted()
     {
         // Register the getFingerprint macro on the Request class
-        Request::macro('getFingerprint', fn() => app(Citadel::class)->getFingerprint($this));
+        Request::macro('getFingerprint', fn () => app(Citadel::class)->getFingerprint($this));
 
         // Register middleware
         $router = $this->app->make(Router::class);
@@ -145,7 +145,7 @@ class CitadelServiceProvider extends PackageServiceProvider
      */
     public function register(): void
     {
-        $this->mergeConfigFrom(__DIR__ . '/../config/citadel.php', 'citadel');
+        $this->mergeConfigFrom(__DIR__.'/../config/citadel.php', 'citadel');
 
         // Register the DeviceDetector service
         $this->app->singleton(DeviceDetector::class, function ($app) {
@@ -159,20 +159,20 @@ class CitadelServiceProvider extends PackageServiceProvider
         $this->registerPatternMatcher();
 
         // Register the main Citadel service
-        $this->app->singleton(Citadel::class, fn($app) => new Citadel($app->make(DataStore::class)));
+        $this->app->singleton(Citadel::class, fn ($app) => new Citadel($app->make(DataStore::class)));
 
         // Register analyzers and middleware
         $this->registerAnalyzers();
         $this->registerMiddleware();
 
         // Register API controller
-        $this->app->singleton(CitadelApiController::class, fn($app) => new CitadelApiController($app->make(DataStore::class)));
+        $this->app->singleton(CitadelApiController::class, fn ($app) => new CitadelApiController($app->make(DataStore::class)));
     }
 
     protected function registerDataStore()
     {
         $this->app->singleton(DataStore::class, function ($app) {
-            $driver = config(self::CONFIG_CACHE_KEY . '.driver', 'auto');
+            $driver = config(self::CONFIG_CACHE_KEY.'.driver', 'auto');
 
             // If a specific driver is configured, use it directly
             if ($driver !== 'auto') {
@@ -187,8 +187,8 @@ class CitadelServiceProvider extends PackageServiceProvider
     protected function resolveAutoDataStore($app): DataStore
     {
         // Get preference configuration
-        $preferOctane = config(self::CONFIG_CACHE_KEY . '.prefer_octane', true);
-        $preferRedis = config(self::CONFIG_CACHE_KEY . '.prefer_redis', true);
+        $preferOctane = config(self::CONFIG_CACHE_KEY.'.prefer_octane', true);
+        $preferRedis = config(self::CONFIG_CACHE_KEY.'.prefer_redis', true);
 
         // If Octane is available and preferred, use Octane store
         if ($preferOctane && $app->bound(Server::class)) {
@@ -217,7 +217,7 @@ class CitadelServiceProvider extends PackageServiceProvider
     {
         return class_exists('Redis') &&
             config('database.redis.client', null) !== null &&
-            !empty(config('database.redis.default', []));
+            ! empty(config('database.redis.default', []));
     }
 
     protected function registerAnalyzers()
@@ -279,7 +279,7 @@ class CitadelServiceProvider extends PackageServiceProvider
             /** @var IRequestAnalyzer $analyzer */
             $analyzer = $this->app->make($class);
 
-            if (!$analyzer->isEnabled()) {
+            if (! $analyzer->isEnabled()) {
                 continue;
             }
 
@@ -308,7 +308,7 @@ class CitadelServiceProvider extends PackageServiceProvider
      */
     protected function discoverAnalyzers(): Collection
     {
-        $analyzersPath = __DIR__ . '/Analyzers';
+        $analyzersPath = __DIR__.'/Analyzers';
         $namespace = 'TheRealMkadmi\\Citadel\\Analyzers\\';
 
         $finder = new Finder;
@@ -316,11 +316,11 @@ class CitadelServiceProvider extends PackageServiceProvider
 
         return collect($finder)
             ->map(function ($file) use ($namespace): string|null {
-                $class = $namespace . $file->getBasename('.php');
+                $class = $namespace.$file->getBasename('.php');
 
                 // Skip the interface itself and abstract classes
                 if (
-                    !class_exists($class) ||
+                    ! class_exists($class) ||
                     (new \ReflectionClass($class))->isInterface() ||
                     (new \ReflectionClass($class))->isAbstract()
                 ) {
@@ -347,15 +347,15 @@ class CitadelServiceProvider extends PackageServiceProvider
             Log::debug('Registering pattern matcher service.');
 
             // Determine implementation based on configuration
-            $implementation = config(self::CONFIG_PATTERN_MATCHER_KEY . '.implementation', 'vectorscan');
+            $implementation = config(self::CONFIG_PATTERN_MATCHER_KEY.'.implementation', 'vectorscan');
 
             // Get patterns file path from config or use package default if not set
-            $patternsFile = config(self::CONFIG_PATTERN_MATCHER_KEY . '.patterns_file');
+            $patternsFile = config(self::CONFIG_PATTERN_MATCHER_KEY.'.patterns_file');
 
             // If the config value doesn't exist or the file doesn't exist at the specified path,
             // fall back to the package's resource file
-            if (empty($patternsFile) || !file_exists($patternsFile)) {
-                $packagePatternsFile = __DIR__ . '/../resources/payload-inspection-patterns.list';
+            if (empty($patternsFile) || ! file_exists($patternsFile)) {
+                $packagePatternsFile = __DIR__.'/../resources/payload-inspection-patterns.list';
 
                 if (file_exists($packagePatternsFile)) {
                     $patternsFile = $packagePatternsFile;
@@ -369,13 +369,15 @@ class CitadelServiceProvider extends PackageServiceProvider
                 Log::info('Using configured patterns file.', ['file' => $patternsFile]);
             }
 
-            if (!file_exists($patternsFile)) {
+            if (! file_exists($patternsFile)) {
                 Log::emergency("Patterns file not found: {$patternsFile}");
 
                 return null;
             }
 
-            $patterns = file($patternsFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);            Log::debug('Determining pattern matcher implementation.', ['implementation' => $implementation]);
+            $patterns = file($patternsFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            Log::debug('Determining pattern matcher implementation.', ['implementation' => $implementation]);
+
             return match ($implementation) {
                 'pcre' => $this->createPcrePatternMatcher($patterns),
                 'vectorscan' => $this->createVectorscanPatternMatcher($patterns, $patternsFile),
@@ -386,16 +388,16 @@ class CitadelServiceProvider extends PackageServiceProvider
         // Add explicit binding for VectorScanMultiPatternMatcher for direct resolution
         $this->app->bind(VectorScanMultiPatternMatcher::class, function ($app) {
             // Get patterns file path from config
-            $patternsFile = config(self::CONFIG_PATTERN_MATCHER_KEY . '.patterns_file');
+            $patternsFile = config(self::CONFIG_PATTERN_MATCHER_KEY.'.patterns_file');
 
-            if (empty($patternsFile) || !file_exists($patternsFile)) {
-                $packagePatternsFile = __DIR__ . '/../resources/payload-inspection-patterns.list';
+            if (empty($patternsFile) || ! file_exists($patternsFile)) {
+                $packagePatternsFile = __DIR__.'/../resources/payload-inspection-patterns.list';
                 if (file_exists($packagePatternsFile)) {
                     $patternsFile = $packagePatternsFile;
                 }
             }
 
-            if (!file_exists($patternsFile)) {
+            if (! file_exists($patternsFile)) {
                 Log::emergency('Patterns file not found for VectorScanMultiPatternMatcher binding');
                 throw new \RuntimeException('Patterns file not found for VectorScanMultiPatternMatcher binding');
             }
@@ -418,7 +420,9 @@ class CitadelServiceProvider extends PackageServiceProvider
 
         // Create and return the PCRE pattern matcher
         return new PcreMultiPatternMatcher($patterns, $pcreConfig);
-    }    /**
+    }
+
+    /**
      * Create a Vectorscan-based pattern matcher.
      *
      * @param  array<int, string>  $patterns  Array of pattern strings
@@ -427,9 +431,9 @@ class CitadelServiceProvider extends PackageServiceProvider
     protected function createVectorscanPatternMatcher(array $patterns, string $patternsFilePath): MultiPatternMatcher
     {
         // Get configuration options
-        $serializedDbPath = config(self::CONFIG_PATTERN_MATCHER_KEY . '.serialized_db_path');
-        $autoSerialize = config(self::CONFIG_PATTERN_MATCHER_KEY . '.auto_serialize', true);
-        $useHashValidation = config(self::CONFIG_PATTERN_MATCHER_KEY . '.use_hash_validation', true);
+        $serializedDbPath = config(self::CONFIG_PATTERN_MATCHER_KEY.'.serialized_db_path');
+        $autoSerialize = config(self::CONFIG_PATTERN_MATCHER_KEY.'.auto_serialize', true);
+        $useHashValidation = config(self::CONFIG_PATTERN_MATCHER_KEY.'.use_hash_validation', true);
 
         // Check if serialized file exists and is valid
         $databaseIsValid = false;
@@ -438,7 +442,7 @@ class CitadelServiceProvider extends PackageServiceProvider
             if ($useHashValidation) {
                 $databaseIsValid = VectorScanMultiPatternMatcher::isDatabaseValid($serializedDbPath, $patternsFilePath);
 
-                if (!$databaseIsValid) {
+                if (! $databaseIsValid) {
                     Log::info("Serialized pattern database exists but the pattern file hash doesn't match. Recompiling.");
                 }
             } else {
@@ -451,12 +455,12 @@ class CitadelServiceProvider extends PackageServiceProvider
         $matcher = new VectorScanMultiPatternMatcher($patterns, $databaseIsValid ? $serializedDbPath : null);
 
         // Auto-serialize if enabled and database doesn't exist or is invalid
-        if ($autoSerialize && $serializedDbPath && !$databaseIsValid) {
+        if ($autoSerialize && $serializedDbPath && ! $databaseIsValid) {
             $directory = dirname($serializedDbPath);
 
             // Ensure directory exists
-            if (!is_dir($directory)) {
-                if (!mkdir($directory, 0755, true)) {
+            if (! is_dir($directory)) {
+                if (! mkdir($directory, 0755, true)) {
                     Log::error("Failed to create directory for serialized pattern database: {$directory}");
                 }
             }

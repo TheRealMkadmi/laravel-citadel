@@ -3,8 +3,8 @@
 namespace TheRealMkadmi\Citadel\Tests\Integration;
 
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Process;
 use TheRealMkadmi\Citadel\PatternMatchers\VectorScanMultiPatternMatcher;
 use TheRealMkadmi\Citadel\Tests\TestCase;
 
@@ -35,9 +35,9 @@ class HashValidationConcurrencyTest extends TestCase
 
         // Create a test patterns file
         File::put($this->testPatternsFilePath, implode(PHP_EOL, $this->testPatterns));
-        
+
         // Verify the test patterns file was created
-        Log::info("Patterns file exists after setup: " . (File::exists($this->testPatternsFilePath) ? 'Yes' : 'No'));
+        Log::info('Patterns file exists after setup: '.(File::exists($this->testPatternsFilePath) ? 'Yes' : 'No'));
 
         // Clean up any existing test database files
         $this->cleanupFiles();
@@ -59,10 +59,10 @@ class HashValidationConcurrencyTest extends TestCase
         if (File::exists($this->testDbPath.'.hash')) {
             File::delete($this->testDbPath.'.hash');
         }
-        
+
         // Log cleanup results
-        Log::info("After cleanup - DB file exists: " . (File::exists($this->testDbPath) ? 'Yes' : 'No'));
-        Log::info("After cleanup - Hash file exists: " . (File::exists($this->testDbPath.'.hash') ? 'Yes' : 'No'));
+        Log::info('After cleanup - DB file exists: '.(File::exists($this->testDbPath) ? 'Yes' : 'No'));
+        Log::info('After cleanup - Hash file exists: '.(File::exists($this->testDbPath.'.hash') ? 'Yes' : 'No'));
     }
 
     /**
@@ -76,9 +76,12 @@ class HashValidationConcurrencyTest extends TestCase
             return true;
         } catch (\Throwable $e) {
             Log::warning("Vectorscan not available: {$e->getMessage()}");
+
             return false;
         }
-    }    /**
+    }
+
+    /**
      * Test that file locking prevents race conditions when multiple processes try to
      * update the serialized database simultaneously
      */
@@ -94,14 +97,14 @@ class HashValidationConcurrencyTest extends TestCase
         }
 
         // Log the current working directory and absolute paths
-        Log::info("Current working directory: " . getcwd());
+        Log::info('Current working directory: '.getcwd());
         Log::info("Absolute pattern file path: {$this->testPatternsFilePath}");
         Log::info("Absolute database path: {$this->testDbPath}");
-        
+
         // Verify patterns file exists before proceeding
-        Log::info("Pattern file exists before test: " . (File::exists($this->testPatternsFilePath) ? 'Yes' : 'No'));        // Instead of relying on Laravel in the subprocess, we'll use a direct file writing approach
+        Log::info('Pattern file exists before test: '.(File::exists($this->testPatternsFilePath) ? 'Yes' : 'No'));        // Instead of relying on Laravel in the subprocess, we'll use a direct file writing approach
         // that doesn't depend on the Laravel app context
-        
+
         // Create a test PHP script that will directly write to the DB file with locking
         $scriptPath = storage_path('app/test/serialize_test.php');
         $scriptContent = <<<PHP
@@ -221,16 +224,16 @@ PHP;
             Log::info("Starting process {$i}");
             $processes[$i] = Process::run('php '.$scriptPath);
             $outputs[$i] = $processes[$i]->output();
-            Log::info("Process {$i} exit code: " . $processes[$i]->exitCode());
-            Log::info("Process {$i} output: " . $outputs[$i]);
+            Log::info("Process {$i} exit code: ".$processes[$i]->exitCode());
+            Log::info("Process {$i} output: ".$outputs[$i]);
         }
 
         // Clean up the test script
         File::delete($scriptPath);
 
         // Check if files actually exist after the processes ran
-        Log::info("After processes - DB file exists: " . (File::exists($this->testDbPath) ? 'Yes' : 'No'));
-        Log::info("After processes - Hash file exists: " . (File::exists($this->testDbPath.'.hash') ? 'Yes' : 'No'));
+        Log::info('After processes - DB file exists: '.(File::exists($this->testDbPath) ? 'Yes' : 'No'));
+        Log::info('After processes - Hash file exists: '.(File::exists($this->testDbPath.'.hash') ? 'Yes' : 'No'));
 
         // Verify results - we should have a valid database and hash file
         $this->assertTrue(File::exists($this->testDbPath), 'Database file should exist after concurrent operations');
@@ -245,7 +248,7 @@ PHP;
             $this->addToAssertionCount(1); // Count checking the output as an assertion
         }
     }
-    
+
     /**
      * Test that simultaneous reads from multiple processes don't interfere with each other
      */
@@ -262,8 +265,8 @@ PHP;
 
         Log::info("Created database file for read test: {$this->testDbPath}");
         Log::info("Created hash file for read test: {$this->testDbPath}.hash");
-        Log::info("Database exists: " . (File::exists($this->testDbPath) ? 'Yes' : 'No'));
-        Log::info("Hash exists: " . (File::exists($this->testDbPath.'.hash') ? 'Yes' : 'No'));
+        Log::info('Database exists: '.(File::exists($this->testDbPath) ? 'Yes' : 'No'));
+        Log::info('Hash exists: '.(File::exists($this->testDbPath.'.hash') ? 'Yes' : 'No'));
 
         // Create a test PHP script that will read and validate the hash file directly
         // without relying on Laravel facades
@@ -341,8 +344,8 @@ PHP;
             Log::info("Starting read process {$i}");
             $processes[$i] = Process::run('php '.$scriptPath);
             $outputs[$i] = $processes[$i]->output();
-            Log::info("Read process {$i} exit code: " . $processes[$i]->exitCode());
-            Log::info("Read process {$i} output: " . $outputs[$i]);
+            Log::info("Read process {$i} exit code: ".$processes[$i]->exitCode());
+            Log::info("Read process {$i} output: ".$outputs[$i]);
         }
 
         // Clean up the test script
@@ -542,17 +545,17 @@ PHP;
         usleep(100000);
 
         // Run the writer process
-        Log::info("Starting writer process");
+        Log::info('Starting writer process');
         $writerProcess = Process::run('php '.$writerScriptPath);
         $writerOutput = $writerProcess->output();
-        Log::info("Writer process exit code: " . $writerProcess->exitCode());
-        Log::info("Writer process output: " . $writerOutput);
+        Log::info('Writer process exit code: '.$writerProcess->exitCode());
+        Log::info('Writer process output: '.$writerOutput);
 
         // Wait for readers to complete
         $readerOutputs = [];
         foreach ($readerProcesses as $i => $process) {
             $readerOutputs[$i] = $process->wait()->output();
-            Log::info("Reader process {$i} output: " . $readerOutputs[$i]);
+            Log::info("Reader process {$i} output: ".$readerOutputs[$i]);
         }
 
         // Clean up test scripts
@@ -566,7 +569,7 @@ PHP;
         // but they should complete without errors
         foreach ($readerOutputs as $i => $output) {
             $this->assertStringContainsString('Read #9:', $output, "Reader $i should complete all 10 iterations");
-            $this->assertStringContainsString('Reader ' . str_contains($output, 'Reader ') ? explode(' ', trim(explode("\n", $output)[0]))[1] : '?' . ' completed all iterations', $output, "Reader $i should complete successfully");
+            $this->assertStringContainsString('Reader '.str_contains($output, 'Reader ') ? explode(' ', trim(explode("\n", $output)[0]))[1] : '?'.' completed all iterations', $output, "Reader $i should complete successfully");
         }
 
         // Verify final state is valid
