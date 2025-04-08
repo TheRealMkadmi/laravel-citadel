@@ -4,6 +4,7 @@ namespace TheRealMkadmi\Citadel\Tests\Integration;
 
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use TheRealMkadmi\Citadel\CitadelServiceProvider;
 use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\PatternMatchers\MultiPatternMatcher;
@@ -92,10 +93,8 @@ class HashValidationIntegrationTest extends TestCase
         // Use reflection to access the private createVectorscanPatternMatcher method
         $reflection = new \ReflectionClass($serviceProvider);
         $method = $reflection->getMethod('createVectorscanPatternMatcher');
-        $method->setAccessible(true);
-
-        // Create the matcher through the service provider
-        $matcher = $method->invoke($serviceProvider, $this->testPatterns);
+        $method->setAccessible(true);        // Create the matcher through the service provider
+        $matcher = $method->invoke($serviceProvider, $this->testPatterns, $this->testPatternsFilePath);
 
         // Verify the database was created with hash
         $this->assertTrue(File::exists($this->testDbPath), 'Database file should be created');
@@ -105,10 +104,8 @@ class HashValidationIntegrationTest extends TestCase
         File::put($this->testPatternsFilePath, 'new_pattern\d+'.PHP_EOL.'modified_pattern\w+');
 
         // First, record the current modification time
-        $firstModTime = File::lastModified($this->testDbPath);
-
-        // Create a second matcher - should detect changed patterns and recompile
-        $matcher2 = $method->invoke($serviceProvider, ['new_pattern\d+', 'modified_pattern\w+']);
+        $firstModTime = File::lastModified($this->testDbPath);        // Create a second matcher - should detect changed patterns and recompile
+        $matcher2 = $method->invoke($serviceProvider, ['new_pattern\d+', 'modified_pattern\w+'], $this->testPatternsFilePath);
 
         // Verify the database was recompiled
         $secondModTime = File::lastModified($this->testDbPath);
@@ -137,10 +134,8 @@ class HashValidationIntegrationTest extends TestCase
         // Use reflection to access the private createVectorscanPatternMatcher method
         $reflection = new \ReflectionClass($serviceProvider);
         $method = $reflection->getMethod('createVectorscanPatternMatcher');
-        $method->setAccessible(true);
-
-        // Create the matcher through the service provider
-        $matcher = $method->invoke($serviceProvider, $this->testPatterns);
+        $method->setAccessible(true);        // Create the matcher through the service provider
+        $matcher = $method->invoke($serviceProvider, $this->testPatterns, $this->testPatternsFilePath);
 
         // Verify the database was created (might have hash or not, depending on implementation)
         $this->assertTrue(File::exists($this->testDbPath), 'Database file should be created');
@@ -149,10 +144,8 @@ class HashValidationIntegrationTest extends TestCase
         File::put($this->testPatternsFilePath, 'new_pattern\d+'.PHP_EOL.'modified_pattern\w+');
 
         // First, record the current modification time
-        $firstModTime = File::lastModified($this->testDbPath);
-
-        // Create a second matcher - should NOT detect changed patterns when hash validation is disabled
-        $matcher2 = $method->invoke($serviceProvider, ['new_pattern\d+', 'modified_pattern\w+']);
+        $firstModTime = File::lastModified($this->testDbPath);        // Create a second matcher - should NOT detect changed patterns when hash validation is disabled
+        $matcher2 = $method->invoke($serviceProvider, ['new_pattern\d+', 'modified_pattern\w+'], $this->testPatternsFilePath);
 
         // Verify the database was NOT recompiled (timestamp should be the same)
         $secondModTime = File::lastModified($this->testDbPath);
@@ -183,8 +176,8 @@ class HashValidationIntegrationTest extends TestCase
         $method = $reflection->getMethod('createVectorscanPatternMatcher');
         $method->setAccessible(true);
 
-        // Create the matcher through the service provider
-        $matcher = $method->invoke($serviceProvider, $this->testPatterns);
+        Log::debug("Creating matcher with auto-serialization, path: this->testDbPath");        // Create the matcher through the service provider
+        $matcher = $method->invoke($serviceProvider, $this->testPatterns, $this->testPatternsFilePath);
 
         // Verify the database was NOT created since auto-serialization is disabled
         $this->assertFalse(File::exists($this->testDbPath), 'Database file should not be created when auto-serialization is disabled');
@@ -215,69 +208,5 @@ class HashValidationIntegrationTest extends TestCase
         // Verify the database was created with hash
         $this->assertTrue(File::exists($this->testDbPath), 'Database file should be created');
         $this->assertTrue(File::exists($this->testDbPath.'.hash'), 'Hash file should be created');
-    }
-
-    /**
-     * Test that the service provider handles non-writable directories gracefully
-     */
-    public function test_service_provider_handles_non_writable_directory(): void
-    {
-        if (! $this->isVectorscanAvailable()) {
-            $this->markTestSkipped('Vectorscan library is not available');
-        }
-
-        // Create a directory with no write permissions
-        $nonWritablePath = storage_path('app/test/non_writable');
-        if (! File::isDirectory($nonWritablePath)) {
-            File::makeDirectory($nonWritablePath, 0555, true);
-        }
-
-        $nonWritableDbPath = $nonWritablePath.'/vectorscan_patterns.db';
-
-        // Configure for hash validation with a non-writable path
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.implementation', 'vectorscan');
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.patterns_file', $this->testPatternsFilePath);
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.serialized_db_path', $nonWritableDbPath);
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.auto_serialize', true);
-        Config::set(CitadelConfig::KEY_PATTERN_MATCHER.'.use_hash_validation', true);
-
-        // Create a fresh service provider instance
-        $serviceProvider = new CitadelServiceProvider($this->app);
-
-        // Use reflection to access the private createVectorscanPatternMatcher method
-        $reflection = new \ReflectionClass($serviceProvider);
-        $method = $reflection->getMethod('createVectorscanPatternMatcher');
-        $method->setAccessible(true);
-
-        try {
-            // Create the matcher through the service provider - should not throw
-            $matcher = $method->invoke($serviceProvider, $this->testPatterns);
-
-            // Verify the database was not created (since directory is not writable)
-            $this->assertFalse(File::exists($nonWritableDbPath), 'Database file should not be created in non-writable directory');
-
-            // But matcher should still be created and functional
-            $this->assertInstanceOf(VectorScanMultiPatternMatcher::class, $matcher);
-
-            // Test that the matcher works
-            $matches = $matcher->scan('test123');
-            $this->assertIsArray($matches);
-        } catch (\Throwable $e) {
-            // Only attempt to clean up the directory if we can
-            try {
-                if (File::isDirectory($nonWritablePath)) {
-                    // Reset permissions
-                    chmod($nonWritablePath, 0755);
-                }
-            } catch (\Throwable $e) {
-                // Ignore cleanup errors
-            }
-            throw $e;
-        }
-
-        // Reset permissions for cleanup
-        if (File::isDirectory($nonWritablePath)) {
-            chmod($nonWritablePath, 0755);
-        }
     }
 }

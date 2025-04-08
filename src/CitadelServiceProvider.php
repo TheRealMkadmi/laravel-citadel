@@ -375,10 +375,7 @@ class CitadelServiceProvider extends PackageServiceProvider
                 return null;
             }
 
-            $patterns = file($patternsFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-
-            Log::debug('Determining pattern matcher implementation.', ['implementation' => $implementation]);
-
+            $patterns = file($patternsFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);            Log::debug('Determining pattern matcher implementation.', ['implementation' => $implementation]);
             return match ($implementation) {
                 'pcre' => $this->createPcrePatternMatcher($patterns),
                 'vectorscan' => $this->createVectorscanPatternMatcher($patterns, $patternsFile),
@@ -421,26 +418,18 @@ class CitadelServiceProvider extends PackageServiceProvider
 
         // Create and return the PCRE pattern matcher
         return new PcreMultiPatternMatcher($patterns, $pcreConfig);
-    }
-
-    /**
+    }    /**
      * Create a Vectorscan-based pattern matcher.
      *
      * @param  array<int, string>  $patterns  Array of pattern strings
      * @param  string  $patternsFilePath  Path to the pattern file
      */
-    protected function createVectorscanPatternMatcher(array $patterns, string $patternsFilePath = null): MultiPatternMatcher
+    protected function createVectorscanPatternMatcher(array $patterns, string $patternsFilePath): MultiPatternMatcher
     {
         // Get configuration options
         $serializedDbPath = config(self::CONFIG_PATTERN_MATCHER_KEY . '.serialized_db_path');
         $autoSerialize = config(self::CONFIG_PATTERN_MATCHER_KEY . '.auto_serialize', true);
         $useHashValidation = config(self::CONFIG_PATTERN_MATCHER_KEY . '.use_hash_validation', true);
-
-
-        if ($useHashValidation && !$patternsFilePath) { // this is suboptimal but I really want to move forward. 
-            Log::emergency('Vectorscan library not found. Please install it to use the Vectorscan pattern matcher.');
-            throw new \RuntimeException('Vectorscan library not found. Please install it to use the Vectorscan pattern matcher.');
-        }
 
         // Check if serialized file exists and is valid
         $databaseIsValid = false;
