@@ -84,11 +84,6 @@ class CitadelServiceProvider extends PackageServiceProvider
             ->hasViews()
             ->hasViewComponents('citadel', Fingerprint::class)
             ->hasAssets()
-            ->hasCommands([
-                CitadelBanCommand::class,
-                CitadelUnbanCommand::class,
-                CitadelCompileRegexCommand::class,
-            ])
             ->hasInstallCommand(function (InstallCommand $command) {
                 $command
                     ->startWith(function (InstallCommand $command) {
@@ -138,6 +133,14 @@ class CitadelServiceProvider extends PackageServiceProvider
         ]);
 
         $router->aliasMiddleware(self::MIDDLEWARE_ALIAS_API_AUTH, ApiAuthMiddleware::class);
+
+        $this->loadRoutesFrom(__DIR__.'/../routes/api.php');
+        $this->commands([
+            CitadelBanCommand::class,
+            CitadelUnbanCommand::class,
+            CitadelCompileRegexCommand::class,
+        ]);
+
     }
 
     /**
@@ -315,26 +318,13 @@ class CitadelServiceProvider extends PackageServiceProvider
         $finder->files()->in($analyzersPath)->name('*.php');
 
         return collect($finder)
-            ->map(function ($file) use ($namespace): string|null {
-                $class = $namespace.$file->getBasename('.php');
-
-                // Skip the interface itself and abstract classes
-                if (
-                    ! class_exists($class) ||
-                    (new \ReflectionClass($class))->isInterface() ||
-                    (new \ReflectionClass($class))->isAbstract()
-                ) {
-                    return null;
-                }
-
-                // Check if class implements IRequestAnalyzer
-                if (in_array(IRequestAnalyzer::class, class_implements($class) ?: [])) {
-                    return $class;
-                }
-
-                return null;
+            ->map(fn($file) => $namespace . $file->getBasename('.php'))
+            ->filter(fn($className) => class_exists($className))
+            ->filter(function ($className) {
+                $reflection = new \ReflectionClass($className);
+                return !$reflection->isInterface() && !$reflection->isAbstract();
             })
-            ->filter()
+            ->filter(fn($className) => in_array(IRequestAnalyzer::class, class_implements($className) ?: []))
             ->values();
     }
 
