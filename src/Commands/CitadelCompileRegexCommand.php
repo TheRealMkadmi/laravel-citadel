@@ -36,6 +36,7 @@ class CitadelCompileRegexCommand extends Command
         // Get output path
         $outputPath = $this->option('path') ?? config('citadel.pattern_matcher.serialized_db_path');
 
+        
         if (! $outputPath) {
             $outputPath = storage_path('app/citadel/vectorscan_patterns.db');
             $this->info("No output path specified, using default: {$outputPath}");

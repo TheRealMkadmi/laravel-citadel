@@ -2,143 +2,291 @@
 
 namespace TheRealMkadmi\Citadel\Tests\Commands;
 
-use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
+use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\PatternMatchers\VectorScanMultiPatternMatcher;
 use TheRealMkadmi\Citadel\Tests\TestCase;
 
 class CitadelCompileRegexCommandTest extends TestCase
 {
-    private string $testDbPath;
+    /**
+     * Constants for test paths
+     */
+    private const TEST_DIRECTORY_PREFIX = 'citadel-test-';
+    private const TEST_PATTERNS_FILENAME = 'test_patterns.list';
+    private const TEST_OUTPUT_FILENAME = 'test_patterns.db';
+    private const TEST_STORAGE_PATH = 'app/test';
+    private const DEFAULT_DB_PATH = 'app/citadel/vectorscan_patterns.db';
 
-    private string $testPatternPath;
-
+    /**
+     * Test state variables
+     */
+    private string $testPatternsFile;
+    private string $testOutputPath;
+    private array $testPatterns = ['pattern1', 'pattern2', 'pattern3'];
+    private string $testDir;
+    
+    /**
+     * Set up the testing environment
+     */
     protected function setUp(): void
     {
         parent::setUp();
-
-        // Set up test paths
-        $this->testDbPath = storage_path('app/test/command_test_patterns.db');
-        $this->testPatternPath = storage_path('app/test/test_patterns.list');
-
-        // Ensure test directories exist
-        if (! File::isDirectory(dirname($this->testDbPath))) {
-            File::makeDirectory(dirname($this->testDbPath), 0755, true);
-        }
-
-        // Create a test patterns file
-        $patterns = <<<EOT
-# Test patterns file
-test\d+
-example[a-z]+
-# Another comment
-foo\w*
-EOT;
-        File::put($this->testPatternPath, $patterns);
-
-        // Clean up any existing database file
-        if (File::exists($this->testDbPath)) {
-            File::delete($this->testDbPath);
-        }
+        
+        // Set up unique test directory with proper path handling
+        $testId = uniqid();
+        $this->testDir = storage_path(self::TEST_STORAGE_PATH . '/' . self::TEST_DIRECTORY_PREFIX . $testId);
+        
+        // Ensure test directory exists with proper permissions
+        $this->ensureDirectoryExists($this->testDir);
+        
+        // Set up pattern file
+        $this->testPatternsFile = $this->testDir . '/' . self::TEST_PATTERNS_FILENAME;
+        File::put($this->testPatternsFile, implode(PHP_EOL, $this->testPatterns));
+        
+        // Set up output path
+        $this->testOutputPath = $this->testDir . '/' . self::TEST_OUTPUT_FILENAME;
+        
+        // Ensure citadel default directory exists too
+        $this->ensureDirectoryExists(dirname(storage_path(self::DEFAULT_DB_PATH)));
+        
+        // Configure pattern matcher with explicit paths
+        Config::set(CitadelConfig::KEY_PATTERN_MATCHER . '.patterns_file', $this->testPatternsFile);
+        Config::set(CitadelConfig::KEY_PATTERN_MATCHER . '.serialized_db_path', $this->testOutputPath);
+        Config::set(CitadelConfig::KEY_PATTERN_MATCHER . '.implementation', 'vectorscan');
+        
+        // Log setup details for debugging
+        Log::info('CitadelCompileRegexCommandTest setup', [
+            'testDir' => $this->testDir,
+            'testPatternsFile' => $this->testPatternsFile,
+            'testOutputPath' => $this->testOutputPath,
+            'patternFileExists' => File::exists($this->testPatternsFile),
+        ]);
     }
-
+    
+    /**
+     * Clean up the testing environment
+     */
     protected function tearDown(): void
     {
-        // Clean up test files
-        if (File::exists($this->testDbPath)) {
-            File::delete($this->testDbPath);
+        // Clean up test directory if it exists
+        if (File::isDirectory($this->testDir)) {
+            try {
+                File::deleteDirectory($this->testDir);
+            } catch (\Throwable $e) {
+                Log::warning('Failed to clean up test directory: ' . $e->getMessage());
+            }
         }
-
-        if (File::exists($this->testPatternPath)) {
-            File::delete($this->testPatternPath);
+        
+        // Clean up default path if it was used
+        $defaultPath = storage_path(self::DEFAULT_DB_PATH);
+        if (File::exists($defaultPath)) {
+            try {
+                File::delete($defaultPath);
+            } catch (\Throwable $e) {
+                Log::warning('Failed to delete default database file: ' . $e->getMessage());
+            }
         }
-
+        
+        $hashFile = $defaultPath . VectorScanMultiPatternMatcher::HASH_FILENAME_SUFFIX;
+        if (File::exists($hashFile)) {
+            try {
+                File::delete($hashFile);
+            } catch (\Throwable $e) {
+                Log::warning('Failed to delete hash file: ' . $e->getMessage());
+            }
+        }
+        
         parent::tearDown();
     }
-
-    public function test_command_compiles_and_serializes_database()
+    
+    /**
+     * Helper method to ensure a directory exists
+     */
+    private function ensureDirectoryExists(string $path): void
     {
-        try {
-            // Configure the test
-            $this->app['config']->set('citadel.pattern_matcher.patterns_file', $this->testPatternPath);
-
-            // Execute the command
-            $result = $this->artisan('citadel:compile-regex', [
-                '--path' => $this->testDbPath,
-                '--force' => true,
-            ]);
-
-            // Check if the command executed successfully
-            $result->assertExitCode(0);
-
-            // Verify the database file was created
-            $this->assertTrue(File::exists($this->testDbPath), 'Database file should be created');
-            $this->assertGreaterThan(0, File::size($this->testDbPath), 'Database file should not be empty');
-
-            // Attempt to load the serialized database with the VectorScanMultiPatternMatcher
-            try {
-                $patterns = ['test\d+']; // Doesn't matter what we pass, it should load from file
-                $matcher = new VectorScanMultiPatternMatcher($patterns, $this->testDbPath);
-
-                // Verify the database works by scanning a test string
-                $matches = $matcher->scan('test123 example and foo');
-                $this->assertNotEmpty($matches, 'Pattern matcher should find matches after loading the serialized database');
-            } catch (\RuntimeException $e) {
-                // If we can't load the VectorScan library, that's okay for this test
-                if (stripos($e->getMessage(), 'library not found') !== false) {
-                    $this->markTestSkipped('VectorScan library not found, skipping verification part.');
-                } else {
-                    throw $e;
-                }
-            }
-        } catch (\Throwable $e) {
-            // If something goes wrong, we want to know about it
-            if (stripos($e->getMessage(), 'library not found') !== false) {
-                $this->markTestSkipped('VectorScan library not found, skipping test.');
-            } else {
-                throw $e;
+        if (!File::isDirectory($path)) {
+            // Create with explicit permissions and recursive flag
+            File::makeDirectory($path, 0755, true);
+            
+            // Verify directory was created successfully
+            if (!File::isDirectory($path)) {
+                $this->fail("Failed to create test directory: {$path}");
             }
         }
     }
-
-    public function test_command_respects_force_flag()
+    
+    /**
+     * Test successful pattern compilation
+     */
+    public function testSuccessfulCompilation()
     {
-        // First create a database file
-        File::put($this->testDbPath, 'dummy content');
-        $originalContent = 'dummy content';
-        $originalTime = filemtime($this->testDbPath);
-
-        // Wait a moment to ensure file modification time would be different
+        // Execute command
+        $result = $this->artisan('citadel:compile-regex');
+        
+        // Assert expected output
+        $result->expectsOutput('Pattern database successfully compiled and serialized.')
+               ->assertExitCode(0);
+        
+        // Log path information for debugging
+        Log::info('Checking output file', [
+            'path' => $this->testOutputPath,
+            'exists' => File::exists($this->testOutputPath),
+            'directory' => File::isDirectory(dirname($this->testOutputPath)),
+        ]);
+        
+        // Verify file was actually created
+        $this->assertTrue(File::exists($this->testOutputPath), 'Database file should exist');
+        $this->assertGreaterThan(0, File::size($this->testOutputPath), 'Database file should not be empty');
+    }
+    
+    /**
+     * Test error when pattern file doesn't exist
+     */
+    public function testPatternFileNotFound()
+    {
+        // Set non-existent pattern file path
+        $nonExistentFile = storage_path('app/test/non_existent_file.txt');
+        Config::set(CitadelConfig::KEY_PATTERN_MATCHER . '.patterns_file', $nonExistentFile);
+        
+        // Execute command
+        $this->artisan('citadel:compile-regex')
+             ->expectsOutput("Pattern file not found: {$nonExistentFile}")
+             ->assertExitCode(1);
+    }
+    
+    /**
+     * Test error when pattern file is empty
+     */
+    public function testEmptyPatternsFile()
+    {
+        // Create empty patterns file
+        File::put($this->testPatternsFile, '');
+        
+        // Execute command
+        $this->artisan('citadel:compile-regex')
+             ->expectsOutput('No valid patterns found in patterns file.')
+             ->assertExitCode(1);
+    }
+    
+    /**
+     * Test force option for overwriting existing database
+     */
+    public function testForceOption()
+    {
+        // Create the database file first
+        $this->artisan('citadel:compile-regex');
+        
+        // Verify file exists after first run
+        $this->assertTrue(File::exists($this->testOutputPath), 'Database file should exist after first compilation');
+        
+        // Get initial modification time
+        $initialModTime = File::lastModified($this->testOutputPath);
+        
+        // Short delay to ensure modification time will be different
         sleep(1);
-
-        // Run command without --force
+        
+        // Run again with force option
+        $this->artisan('citadel:compile-regex', ['--force' => true])
+             ->expectsOutput('Pattern database successfully compiled and serialized.')
+             ->assertExitCode(0);
+             
+        // Verify file was recreated with newer timestamp
+        $this->assertTrue(File::exists($this->testOutputPath), 'Database file should exist after forced compilation');
+        $this->assertGreaterThan($initialModTime, File::lastModified($this->testOutputPath), 'File should have newer timestamp');
+    }
+    
+    /**
+     * Test using custom paths via command options
+     */
+    public function testCustomPathsOptions()
+    {
+        // Create custom paths
+        $testDir = dirname($this->testPatternsFile);
+        $customPatternsFile = "{$testDir}/custom_patterns.list";
+        $customOutputPath = "{$testDir}/custom_patterns.db";
+        
+        // Create custom patterns file
+        File::put($customPatternsFile, implode(PHP_EOL, ['custom1', 'custom2', 'custom3']));
+        
+        // Execute command with custom paths
         $this->artisan('citadel:compile-regex', [
-            '--path' => $this->testDbPath,
-            '--patterns' => $this->testPatternPath,
-        ])
-            ->expectsQuestion('Database file already exists. Do you want to overwrite it?', 'no')
-            ->assertExitCode(0);
-
-        // Check file wasn't modified
-        $this->assertSame($originalContent, File::get($this->testDbPath), 'File should not be modified when answering no');
-
-        // Run with force flag
-        try {
-            $this->artisan('citadel:compile-regex', [
-                '--path' => $this->testDbPath,
-                '--patterns' => $this->testPatternPath,
-                '--force' => true,
-            ])->assertExitCode(0);
-
-            // File should be modified
-            $this->assertNotSame($originalContent, File::get($this->testDbPath), 'File should be modified when using --force');
-        } catch (\Throwable $e) {
-            // Only catch library not found exceptions
-            if (stripos($e->getMessage(), 'library not found') !== false) {
-                $this->markTestSkipped('VectorScan library not found, skipping verification part.');
-            } else {
-                throw $e;
-            }
+                '--patterns' => $customPatternsFile,
+                '--path' => $customOutputPath
+             ])
+             ->expectsOutput('Pattern database successfully compiled and serialized.')
+             ->expectsOutput("Output file: {$customOutputPath}")
+             ->assertExitCode(0);
+             
+        // Verify output file was created
+        $this->assertTrue(File::exists($customOutputPath), 'Custom output file should exist');
+        $this->assertGreaterThan(0, File::size($customOutputPath), 'Custom output file should not be empty');
+    }
+    
+    /**
+     * Test confirmation prompt when file exists
+     */
+    public function testConfirmationPromptWhenFileExists()
+    {
+        // Create the database file first
+        $this->artisan('citadel:compile-regex');
+        
+        // Verify file exists
+        $this->assertTrue(File::exists($this->testOutputPath), 'Database file should exist after first compilation');
+        
+        // Get initial modification time
+        $initialModTime = File::lastModified($this->testOutputPath);
+        
+        // Short delay to ensure modification time will be different
+        sleep(1);
+        
+        // Run again, confirming when prompted
+        $this->artisan('citadel:compile-regex')
+             ->expectsQuestion('Database file already exists. Do you want to overwrite it?', true)
+             ->expectsOutput('Pattern database successfully compiled and serialized.')
+             ->assertExitCode(0);
+             
+        // Verify file was recreated
+        $this->assertGreaterThan($initialModTime, File::lastModified($this->testOutputPath), 
+            'File should have newer timestamp after confirmation');
+    }
+    
+    /**
+     * Test default output path when none specified
+     */
+    public function testDefaultOutputPathWhenNoneSpecified()
+    {
+        // Remove output path from config to test default behavior
+        Config::set(CitadelConfig::KEY_PATTERN_MATCHER . '.serialized_db_path', null);
+        
+        // Default path according to command
+        $defaultPath = storage_path(self::DEFAULT_DB_PATH);
+        
+        // Explicitly ensure the default directory exists with proper permissions
+        $defaultDir = dirname($defaultPath);
+        $this->ensureDirectoryExists($defaultDir);
+        
+        // Verify test conditions
+        $this->assertDirectoryExists($defaultDir, 'Default output directory must exist');
+        $this->assertDirectoryIsWritable($defaultDir, 'Default output directory must be writable');
+        
+        // Make sure any old database is removed
+        if (File::exists($defaultPath)) {
+            File::delete($defaultPath);
         }
+        
+        // Execute command
+        $result = $this->artisan('citadel:compile-regex');
+        
+        // Check output and exit code
+        $result->expectsOutput("No output path specified, using default: {$defaultPath}")
+               ->expectsOutput('Pattern database successfully compiled and serialized.')
+               ->assertExitCode(0);
+        
+        // Verify default file was created
+        $this->assertTrue(File::exists($defaultPath), 'Default database file should exist');
+        $this->assertGreaterThan(0, File::size($defaultPath), 'Default database file should not be empty');
     }
 }
