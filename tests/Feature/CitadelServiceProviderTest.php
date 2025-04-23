@@ -2,15 +2,15 @@
 
 namespace TheRealMkadmi\Citadel\Tests\Feature;
 
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Artisan;
 use PHPUnit\Framework\Attributes\Test;
 use TheRealMkadmi\Citadel\CitadelServiceProvider;
 use TheRealMkadmi\Citadel\Commands\CitadelBanCommand;
-use TheRealMkadmi\Citadel\Commands\CitadelUnbanCommand;
 use TheRealMkadmi\Citadel\Commands\CitadelCompileRegexCommand;
+use TheRealMkadmi\Citadel\Commands\CitadelUnbanCommand;
 use TheRealMkadmi\Citadel\PatternMatchers\VectorScanMultiPatternMatcher;
 use TheRealMkadmi\Citadel\Tests\TestCase;
 
@@ -67,7 +67,7 @@ class CitadelServiceProviderTest extends TestCase
             // Get the patterns through reflection
             $patterns = ['test\d+'];
 
-            // write the patterns to the test pattern file 
+            // write the patterns to the test pattern file
             File::put($patternsFile, implode("\n", $patterns));
 
             // Try to resolve the pattern matcher and verify it attempts to use the serialized database
@@ -100,14 +100,14 @@ class CitadelServiceProviderTest extends TestCase
     {
         // Get all registered routes
         $routes = Route::getRoutes();
-        
+
         // Expected route names from the CitadelServiceProvider
         $expectedRouteNames = [
             CitadelServiceProvider::ROUTE_NAME_BAN,    // 'citadel.api.ban'
             CitadelServiceProvider::ROUTE_NAME_UNBAN,  // 'citadel.api.unban'
             CitadelServiceProvider::ROUTE_NAME_STATUS, // 'citadel.api.status'
         ];
-        
+
         // Check if the routes are registered
         $foundRoutes = [];
         foreach ($routes as $route) {
@@ -115,12 +115,12 @@ class CitadelServiceProviderTest extends TestCase
                 $foundRoutes[] = $route->getName();
             }
         }
-        
+
         // Verify all expected routes are found
         foreach ($expectedRouteNames as $routeName) {
             $this->assertContains(
-                $routeName, 
-                $foundRoutes, 
+                $routeName,
+                $foundRoutes,
                 "Expected route '{$routeName}' was not registered."
             );
         }
@@ -131,36 +131,36 @@ class CitadelServiceProviderTest extends TestCase
     {
         // Get all registered commands
         $commands = array_keys(Artisan::all());
-        
+
         // Expected command signatures
         $expectedCommands = [
             'citadel:ban',         // CitadelBanCommand
             'citadel:unban',       // CitadelUnbanCommand
-            'citadel:compile-regex' // CitadelCompileRegexCommand
+            'citadel:compile-regex', // CitadelCompileRegexCommand
         ];
-        
+
         // Verify all expected commands are registered
         foreach ($expectedCommands as $command) {
             $this->assertContains(
-                $command, 
-                $commands, 
+                $command,
+                $commands,
                 "Expected command '{$command}' was not registered."
             );
         }
-        
+
         // Verify command classes
         $this->assertInstanceOf(
-            CitadelBanCommand::class, 
+            CitadelBanCommand::class,
             app()->make(CitadelBanCommand::class)
         );
-        
+
         $this->assertInstanceOf(
-            CitadelUnbanCommand::class, 
+            CitadelUnbanCommand::class,
             app()->make(CitadelUnbanCommand::class)
         );
-        
+
         $this->assertInstanceOf(
-            CitadelCompileRegexCommand::class, 
+            CitadelCompileRegexCommand::class,
             app()->make(CitadelCompileRegexCommand::class)
         );
     }

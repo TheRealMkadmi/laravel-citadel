@@ -8,37 +8,40 @@ use Illuminate\Support\Str;
 class RedisPatriciaTrieEmulator implements IpTree
 {
     protected string $indexKey;
+
     protected string $dataKey;
+
     protected string $lockKey;
-    protected int    $lockTtl;
-    protected array  $cidrList;
+
+    protected int $lockTtl;
+
+    protected array $cidrList;
 
     /**
-     * @param string $indexKey  Redis sorted set key for CIDR end addresses
-     * @param string $dataKey   Redis hash key for CIDR metadata (start, expires_at, meta)
-     * @param string $lockKey   Redis key for initialization lock
-     * @param int    $lockTtl   Lock TTL (seconds)
-     * @param array  $cidrList  Initial CIDR list (cidr => metadata)
+     * @param  string  $indexKey  Redis sorted set key for CIDR end addresses
+     * @param  string  $dataKey  Redis hash key for CIDR metadata (start, expires_at, meta)
+     * @param  string  $lockKey  Redis key for initialization lock
+     * @param  int  $lockTtl  Lock TTL (seconds)
+     * @param  array  $cidrList  Initial CIDR list (cidr => metadata)
      */
     public function __construct(
         string $indexKey,
         string $dataKey,
         string $lockKey,
-        int    $lockTtl,
-        array  $cidrList
+        int $lockTtl,
+        array $cidrList
     ) {
         $this->indexKey = $indexKey;
-        $this->dataKey  = $dataKey;
-        $this->lockKey  = $lockKey;
-        $this->lockTtl  = $lockTtl;
+        $this->dataKey = $dataKey;
+        $this->lockKey = $lockKey;
+        $this->lockTtl = $lockTtl;
         $this->cidrList = $cidrList;
     }
 
     /**
      * Check whether an IP is contained in the tree.
      *
-     * @param string $ip IPv4 address
-     * @return bool
+     * @param  string  $ip  IPv4 address
      */
     public function containsIp(string $ip): bool
     {
@@ -66,7 +69,7 @@ class RedisPatriciaTrieEmulator implements IpTree
         }
 
         // Check expiration if exists
-        if (!empty($metadata['expires_at']) && $now >= $metadata['expires_at']) {
+        if (! empty($metadata['expires_at']) && $now >= $metadata['expires_at']) {
             return false;
         }
 
@@ -78,7 +81,7 @@ class RedisPatriciaTrieEmulator implements IpTree
     /**
      * Insert a CIDR block or single IP (/32) into the tree.
      *
-     * @param string $cidrOrIp CIDR (e.g. "1.2.3.0/24") or IP ("1.2.3.4")
+     * @param  string  $cidrOrIp  CIDR (e.g. "1.2.3.0/24") or IP ("1.2.3.4")
      */
     public function insertIp(string $cidrOrIp): void
     {
@@ -90,9 +93,9 @@ class RedisPatriciaTrieEmulator implements IpTree
                 $this->dataKey,
                 $cidr,
                 json_encode([
-                    'start'      => $start,
+                    'start' => $start,
                     'expires_at' => null,
-                    'meta'       => []
+                    'meta' => [],
                 ])
             );
         });
@@ -120,9 +123,9 @@ class RedisPatriciaTrieEmulator implements IpTree
                         $this->dataKey,
                         $key,
                         json_encode([
-                            'start'      => $start,
+                            'start' => $start,
                             'expires_at' => null,
-                            'meta'       => $meta
+                            'meta' => $meta,
                         ])
                     );
                 }
@@ -148,7 +151,6 @@ LUA;
     /**
      * Parse a CIDR or IP string into canonical CIDR and range.
      *
-     * @param string $cidrOrIp
      * @return array [cidr, startInt, endInt]
      */
     private function parseCidr(string $cidrOrIp): array
@@ -158,8 +160,9 @@ LUA;
         }
         [$net, $bits] = explode('/', $cidrOrIp, 2);
         $start = $this->ipToInt($net);
-        $mask  = (int) $bits;
-        $end   = $start + ((1 << (32 - $mask)) - 1);
+        $mask = (int) $bits;
+        $end = $start + ((1 << (32 - $mask)) - 1);
+
         return [$cidrOrIp, $start, $end];
     }
 

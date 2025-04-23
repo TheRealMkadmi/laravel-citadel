@@ -171,8 +171,8 @@ class CitadelServiceProvider extends PackageServiceProvider
 
         // Register the main Citadel service
         $this->app->singleton(Citadel::class, fn ($app) => new Citadel($app->make(DataStore::class), $app->make(\TheRealMkadmi\Citadel\IpTree\IpTree::class),
-                $app['events'],
-                config('ip-tree.broadcast_channel', 'citadel-blacklist')));
+            $app['events'],
+            config('ip-tree.broadcast_channel', 'citadel-blacklist')));
 
         // Register IpTree based on config
         $this->app->singleton(\TheRealMkadmi\Citadel\IpTree\IpTree::class, function ($app) {
@@ -180,11 +180,13 @@ class CitadelServiceProvider extends PackageServiceProvider
             $channel = config('ip-tree.broadcast_channel', 'citadel-blacklist');
             if ($driver === 'ffi') {
                 $libPath = config_path('citadel/libpatricia.so');
+
                 return new \TheRealMkadmi\Citadel\IpTree\FfiIpTree($libPath, $channel);
             }
             // Default: redis
             $redis = $app['redis']->connection();
             $setKey = 'citadel:ips';
+
             return new \TheRealMkadmi\Citadel\IpTree\RedisIpTree($redis, $setKey, $channel);
         });
 
@@ -344,13 +346,14 @@ class CitadelServiceProvider extends PackageServiceProvider
         $finder->files()->in($analyzersPath)->name('*.php');
 
         return collect($finder)
-            ->map(fn($file) => $namespace . $file->getBasename('.php'))
-            ->filter(fn($className) => class_exists($className))
+            ->map(fn ($file) => $namespace.$file->getBasename('.php'))
+            ->filter(fn ($className) => class_exists($className))
             ->filter(function ($className) {
                 $reflection = new \ReflectionClass($className);
-                return !$reflection->isInterface() && !$reflection->isAbstract();
+
+                return ! $reflection->isInterface() && ! $reflection->isAbstract();
             })
-            ->filter(fn($className) => in_array(IRequestAnalyzer::class, class_implements($className) ?: []))
+            ->filter(fn ($className) => in_array(IRequestAnalyzer::class, class_implements($className) ?: []))
             ->values();
     }
 

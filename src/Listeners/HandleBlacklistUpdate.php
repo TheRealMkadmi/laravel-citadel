@@ -2,9 +2,9 @@
 
 namespace TheRealMkadmi\Citadel\Listeners;
 
+use TheRealMkadmi\Citadel\DataStore\DataStore;
 use TheRealMkadmi\Citadel\Events\BlacklistUpdated;
 use TheRealMkadmi\Citadel\IpTree\IpTree;
-use TheRealMkadmi\Citadel\DataStore\DataStore;
 
 class HandleBlacklistUpdate
 {

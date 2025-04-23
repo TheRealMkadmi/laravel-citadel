@@ -12,6 +12,7 @@ class BlacklistUpdated implements ShouldBroadcastNow
     use InteractsWithSockets, SerializesModels;
 
     public string $type;
+
     public string $value;
 
     public function __construct(string $type, string $value)
