@@ -11,6 +11,9 @@ use Illuminate\Support\Str;
 use TheRealMkadmi\Citadel\Config\CitadelConfig;
 use TheRealMkadmi\Citadel\DataStore\DataStore;
 use TheRealMkadmi\Citadel\Enums\BanType;
+use TheRealMkadmi\Citadel\Events\BlacklistUpdated;
+use TheRealMkadmi\Citadel\IpTree\IpTree;
+use Illuminate\Events\Dispatcher;
 
 class Citadel
 {
@@ -24,11 +27,19 @@ class Citadel
      */
     protected DataStore $dataStore;
 
+
+    protected IpTree $tree;
+    protected Dispatcher $events;
+    protected string $channel;
+
     /**
      * Create a new Citadel instance.
      */
-    public function __construct(DataStore $dataStore)
+    public function __construct(DataStore $dataStore, IpTree $tree, Dispatcher $events, string $channel)
     {
+        $this->tree = $tree;
+        $this->events = $events;
+        $this->channel = $channel;
         $this->dataStore = $dataStore;
     }
 
@@ -46,7 +57,7 @@ class Citadel
     public function getFingerprint(Request $request): ?string
     {
         // Get header name from config
-        $headerName = Config::get(CitadelConfig::KEY_HEADER.'.name', 'X-Fingerprint');
+        $headerName = Config::get(CitadelConfig::KEY_HEADER . '.name', 'X-Fingerprint');
 
         // Check if the custom header is present
         $fingerprint = $request->header($headerName);
@@ -62,7 +73,7 @@ class Citadel
         }
 
         // Check if the fingerprint cookie is present
-        $cookieName = Config::get(CitadelConfig::KEY_COOKIE.'.name', 'persistentFingerprint_visitor_id');
+        $cookieName = Config::get(CitadelConfig::KEY_COOKIE . '.name', 'persistentFingerprint_visitor_id');
         $fingerprint = $request->cookie($cookieName);
         if ($fingerprint) {
             Log::debug('Citadel: Retrieved fingerprint from cookie', [
@@ -110,13 +121,13 @@ class Citadel
         $collectedAttributes = [];
 
         // Collect from IP if enabled
-        if (Config::get(CitadelConfig::KEY_FEATURES.'.collect_ip', true)) {
+        if (Config::get(CitadelConfig::KEY_FEATURES . '.collect_ip', true)) {
             $ip = $request->ip() ?? 'unknown';
             $attributes['ip'] = $ip;
             $collectedAttributes[] = 'ip';
         }
 
-        if (Config::get(CitadelConfig::KEY_FEATURES.'.collect_user_agent', true)) {
+        if (Config::get(CitadelConfig::KEY_FEATURES . '.collect_user_agent', true)) {
             $userAgent = $request->userAgent() ?? 'unknown';
             $attributes['user_agent'] = $userAgent;
             $collectedAttributes[] = 'user_agent';
@@ -216,8 +227,8 @@ class Citadel
         // Determine TTL
         if ($duration === null) {
             // Default to configuration or very long TTL for permanent bans
-            $duration = Config::get(CitadelConfig::KEY_BAN.'.ban_ttl') ??
-                       (10 * 365 * 24 * 60 * 60); // 10 years
+            $duration = Config::get(CitadelConfig::KEY_BAN . '.ban_ttl') ??
+                (10 * 365 * 24 * 60 * 60); // 10 years
 
             Log::debug('Citadel: Using permanent ban duration', [
                 'configured_duration' => $duration,
@@ -266,7 +277,7 @@ class Citadel
         // Check if ban exists first
         $banExists = $this->dataStore->getValue($key) !== null;
 
-        if (! $banExists) {
+        if (!$banExists) {
             Log::info('Citadel: No existing ban found to remove', [
                 'identifier' => $identifier,
                 'type' => $type->value,
@@ -357,7 +368,7 @@ class Citadel
     {
         $safeIdentifier = Str::slug($identifier);
 
-        return self::BAN_KEY_PREFIX."{$type}:{$safeIdentifier}";
+        return self::BAN_KEY_PREFIX . "{$type}:{$safeIdentifier}";
     }
 
     /**
@@ -368,5 +379,16 @@ class Citadel
     public function getDataStore(): DataStore
     {
         return $this->dataStore;
+    }
+
+    public function addIp(string $ip): void
+    {
+        $this->tree->insertIp($ip);
+        $this->events->dispatch(new BlacklistUpdated('ip', $ip), $this->channel);
+    }
+
+    public function addFingerprint(string $fp): void
+    {
+        $this->events->dispatch(new BlacklistUpdated('fingerprint', $fp), $this->channel);
     }
 }

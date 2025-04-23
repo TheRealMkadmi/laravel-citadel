@@ -81,6 +81,7 @@ class CitadelServiceProvider extends PackageServiceProvider
             ->name('laravel-citadel')
             ->hasRoute('api')
             ->hasConfigFile()
+            ->hasConfigFile('ip-tree')
             ->hasViews()
             ->hasViewComponents('citadel', Fingerprint::class)
             ->hasAssets()
@@ -134,6 +135,12 @@ class CitadelServiceProvider extends PackageServiceProvider
 
         $router->aliasMiddleware(self::MIDDLEWARE_ALIAS_API_AUTH, ApiAuthMiddleware::class);
 
+        // Register event listener for BlacklistUpdated
+        \Illuminate\Support\Facades\Event::listen(
+            \TheRealMkadmi\Citadel\Events\BlacklistUpdated::class,
+            \TheRealMkadmi\Citadel\Listeners\HandleBlacklistUpdate::class
+        );
+
         $this->loadRoutesFrom(__DIR__.'/../routes/api.php');
         $this->commands([
             CitadelBanCommand::class,
@@ -149,6 +156,7 @@ class CitadelServiceProvider extends PackageServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/citadel.php', 'citadel');
+        $this->mergeConfigFrom(__DIR__.'/../config/ip-tree.php', 'ip-tree');
 
         // Register the DeviceDetector service
         $this->app->singleton(DeviceDetector::class, function ($app) {
@@ -162,7 +170,25 @@ class CitadelServiceProvider extends PackageServiceProvider
         $this->registerPatternMatcher();
 
         // Register the main Citadel service
-        $this->app->singleton(Citadel::class, fn ($app) => new Citadel($app->make(DataStore::class)));
+        $this->app->singleton(Citadel::class, fn ($app) => new Citadel($app->make(DataStore::class), $app->make(\TheRealMkadmi\Citadel\IpTree\IpTree::class),
+                $app['events'],
+                config('ip-tree.broadcast_channel', 'citadel-blacklist')));
+
+        // Register IpTree based on config
+        $this->app->singleton(\TheRealMkadmi\Citadel\IpTree\IpTree::class, function ($app) {
+            $driver = config('ip-tree.driver', 'redis');
+            $channel = config('ip-tree.broadcast_channel', 'citadel-blacklist');
+            if ($driver === 'ffi') {
+                $libPath = config_path('citadel/libpatricia.so');
+                return new \TheRealMkadmi\Citadel\IpTree\FfiIpTree($libPath, $channel);
+            }
+            // Default: redis
+            $redis = $app['redis']->connection();
+            $setKey = 'citadel:ips';
+            return new \TheRealMkadmi\Citadel\IpTree\RedisIpTree($redis, $setKey, $channel);
+        });
+
+        $this->app->alias(\TheRealMkadmi\Citadel\Citadel::class, 'citadel');
 
         // Register analyzers and middleware
         $this->registerAnalyzers();
