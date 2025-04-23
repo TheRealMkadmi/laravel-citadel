@@ -8,40 +8,45 @@ use Illuminate\Support\Str;
 class RedisPatriciaTrieEmulator implements IpTree
 {
     protected string $streamKey;
+
     protected string $childMapKey;
+
     protected string $metaMapKey;
+
     protected string $lockKey;
-    protected int    $lockTtl;
-    protected array  $cidrList;
+
+    protected int $lockTtl;
+
+    protected array $cidrList;
 
     /**
-     * @param string $streamKey    Redis Stream key for trie nodes
-     * @param string $childMapKey  Redis hash key mapping "parentId:bit" => childId
-     * @param string $metaMapKey   Redis hash key mapping nodeId => JSON metadata
-     * @param string $lockKey      Redis key for initialization lock
-     * @param int    $lockTtl      Lock TTL in seconds
-     * @param array  $cidrList     Initial CIDR list (cidr => metadata)
+     * @param  string  $streamKey  Redis Stream key for trie nodes
+     * @param  string  $childMapKey  Redis hash key mapping "parentId:bit" => childId
+     * @param  string  $metaMapKey  Redis hash key mapping nodeId => JSON metadata
+     * @param  string  $lockKey  Redis key for initialization lock
+     * @param  int  $lockTtl  Lock TTL in seconds
+     * @param  array  $cidrList  Initial CIDR list (cidr => metadata)
      */
     public function __construct(
         string $streamKey,
         string $childMapKey,
         string $metaMapKey,
         string $lockKey,
-        int    $lockTtl,
-        array  $cidrList
+        int $lockTtl,
+        array $cidrList
     ) {
-        $this->streamKey    = $streamKey;
-        $this->childMapKey  = $childMapKey;
-        $this->metaMapKey   = $metaMapKey;
-        $this->lockKey      = $lockKey;
-        $this->lockTtl      = $lockTtl;
-        $this->cidrList     = $cidrList;
+        $this->streamKey = $streamKey;
+        $this->childMapKey = $childMapKey;
+        $this->metaMapKey = $metaMapKey;
+        $this->lockKey = $lockKey;
+        $this->lockTtl = $lockTtl;
+        $this->cidrList = $cidrList;
     }
 
     /**
      * Insert a CIDR block or single IP (/32) into the trie.
      *
-     * @param string $cidrOrIp CIDR (e.g., "1.2.3.0/24") or IP ("1.2.3.4")
+     * @param  string  $cidrOrIp  CIDR (e.g., "1.2.3.0/24") or IP ("1.2.3.4")
      */
     public function insertIp(string $cidrOrIp): void
     {
@@ -49,15 +54,15 @@ class RedisPatriciaTrieEmulator implements IpTree
         $parentId = '0-0';
 
         for ($depth = 1; $depth <= $mask; $depth++) {
-            $bit    = ($start >> (32 - $depth)) & 1;
-            $mapKey = $parentId . ':' . $bit;
+            $bit = ($start >> (32 - $depth)) & 1;
+            $mapKey = $parentId.':'.$bit;
             $childId = Redis::hget($this->childMapKey, $mapKey);
 
             if (! $childId) {
                 $childId = Redis::xadd(
                     $this->streamKey,
                     '*',
-                    ['bit'    => (string)$bit, 'parent' => $parentId]
+                    ['bit' => (string) $bit, 'parent' => $parentId]
                 );
                 Redis::hset($this->childMapKey, $mapKey, $childId);
             }
@@ -65,11 +70,11 @@ class RedisPatriciaTrieEmulator implements IpTree
         }
 
         $meta = json_encode([
-            'cidr'       => $cidr,
-            'start'      => $start,
-            'end'        => $end,
+            'cidr' => $cidr,
+            'start' => $start,
+            'end' => $end,
             'expires_at' => null,
-            'meta'       => []
+            'meta' => [],
         ]);
         Redis::hset($this->metaMapKey, $parentId, $meta);
     }
@@ -77,16 +82,15 @@ class RedisPatriciaTrieEmulator implements IpTree
     /**
      * Check whether an IP is contained in the trie via single Redis roundtrip.
      *
-     * @param string $ip IPv4 address
-     * @return bool
+     * @param  string  $ip  IPv4 address
      */
     public function containsIp(string $ip): bool
     {
         $ipInt = $this->ipToInt($ip);
-        $now   = time();
+        $now = time();
 
         // Ensure initialization
-        if (! Redis::exists($this->streamKey . ':initialized')) {
+        if (! Redis::exists($this->streamKey.':initialized')) {
             $this->initialize();
         }
 
@@ -132,24 +136,24 @@ LUA;
     protected function initialize(): void
     {
         $token = (string) Str::uuid();
-        $got   = Redis::set($this->lockKey, $token, 'NX', 'EX', $this->lockTtl);
+        $got = Redis::set($this->lockKey, $token, 'NX', 'EX', $this->lockTtl);
 
         if ($got) {
             foreach ($this->cidrList as $cidr => $meta) {
                 $this->insertIp($cidr);
                 if (isset($meta['expires_at'])) {
-                    list($_cidr, $start, $end, $mask) = $this->parseCidr($cidr);
+                    [$_cidr, $start, $end, $mask] = $this->parseCidr($cidr);
                     $parentId = '0-0';
                     for ($i = 1; $i <= $mask; $i++) {
-                        $bit      = ($start >> (32 - $i)) & 1;
-                        $parentId = Redis::hget($this->childMapKey, $parentId . ':' . $bit);
+                        $bit = ($start >> (32 - $i)) & 1;
+                        $parentId = Redis::hget($this->childMapKey, $parentId.':'.$bit);
                     }
                     $entry = json_decode(Redis::hget($this->metaMapKey, $parentId), true);
                     $entry['expires_at'] = $meta['expires_at'];
                     Redis::hset($this->metaMapKey, $parentId, json_encode($entry));
                 }
             }
-            Redis::set($this->streamKey . ':initialized', 1);
+            Redis::set($this->streamKey.':initialized', 1);
 
             $unlockLua = <<<'LUA'
 if redis.call("get", KEYS[1]) == ARGV[1] then
@@ -178,8 +182,9 @@ LUA;
         }
         [$net, $bits] = explode('/', $cidrOrIp, 2);
         $start = $this->ipToInt($net);
-        $mask  = (int)$bits;
-        $end   = $start + ((1 << (32 - $mask)) - 1);
+        $mask = (int) $bits;
+        $end = $start + ((1 << (32 - $mask)) - 1);
+
         return [$cidrOrIp, $start, $end, $mask];
     }
 
