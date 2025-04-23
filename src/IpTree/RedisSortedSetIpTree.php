@@ -7,22 +7,23 @@ use Illuminate\Support\Facades\Redis;
 class RedisSortedSetIpTree implements IpTree
 {
     protected string $indexKey;
+
     protected string $dataKey;
 
     /**
-     * @param string $indexKey Redis sorted set key for end-of-range scores
-     * @param string $dataKey  Redis hash key for CIDR metadata
+     * @param  string  $indexKey  Redis sorted set key for end-of-range scores
+     * @param  string  $dataKey  Redis hash key for CIDR metadata
      */
     public function __construct(string $indexKey, string $dataKey)
     {
         $this->indexKey = $indexKey;
-        $this->dataKey  = $dataKey;
+        $this->dataKey = $dataKey;
     }
 
     /**
      * Insert a CIDR block or single IP (/32) into the tree.
      *
-     * @param string $cidrOrIp CIDR (e.g. "1.2.3.0/24") or IP ("1.2.3.4")
+     * @param  string  $cidrOrIp  CIDR (e.g. "1.2.3.0/24") or IP ("1.2.3.4")
      */
     public function insertIp(string $cidrOrIp): void
     {
@@ -32,7 +33,7 @@ class RedisSortedSetIpTree implements IpTree
         [$net, $bits] = explode('/', $cidrOrIp, 2);
         $mask = (int) $bits;
         $start = $this->ipToInt($net);
-        $end   = $start + ((1 << (32 - $mask)) - 1);
+        $end = $start + ((1 << (32 - $mask)) - 1);
 
         Redis::pipeline(function ($pipe) use ($cidrOrIp, $start, $end) {
             $pipe->zadd($this->indexKey, [$cidrOrIp => $end]);
@@ -47,13 +48,12 @@ class RedisSortedSetIpTree implements IpTree
     /**
      * Check whether an IP is contained in the tree.
      *
-     * @param string $ip IPv4 address
-     * @return bool
+     * @param  string  $ip  IPv4 address
      */
     public function containsIp(string $ip): bool
     {
         $score = $this->ipToInt($ip);
-        $now   = time();
+        $now = time();
 
         // Single pipeline: find top CIDR, fetch its metadata
         [$candidates, $raw] = Redis::pipeline(function ($pipe) use ($score) {
